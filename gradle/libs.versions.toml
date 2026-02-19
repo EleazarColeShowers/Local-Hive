@@ -10,6 +10,8 @@ kotlin = "2.0.21"
 ksp = "2.0.21-1.0.27"
 composeBom = "2025.01.00"
 hilt = "2.56.1"
+navigationCompose = "2.9.7"
+coreSplashscreen = "1.2.0"
 
 
 [libraries]
@@ -28,6 +30,8 @@ androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 firebase-auth-ktx = { group = "com.google.firebase", name = "firebase-auth-ktx" }
+androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
+androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "coreSplashscreen" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -45,6 +45,7 @@ android {
 }
 
 dependencies {
+    implementation(libs.androidx.core.splashscreen)
     // Room
     val roomVersion = "2.6.1"
     implementation("androidx.room:room-runtime:$roomVersion")
@@ -58,6 +59,7 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-storage-ktx")
     implementation("com.google.firebase:firebase-messaging-ktx")
+
 
     // Core
     implementation(libs.androidx.core.ktx)
@@ -83,4 +85,8 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+    //navigation
+    implementation("androidx.navigation:navigation-compose:2.9.7")
+    implementation("androidx.hilt:hilt-navigation-compose:1.3.0")
 }
