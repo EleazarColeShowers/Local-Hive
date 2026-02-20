@@ -29,23 +29,22 @@ fun LocalHiveNavGraph(
         // Splash Screen
         composable(Screen.Splash.route) {
             com.eleazar.localhive.ui.auth.SplashScreen(
-//                onNavigateToOnboarding = {
-//                    navController.navigate(Screen.Onboarding.route) {
-//                        popUpTo(Screen.Splash.route) { inclusive = true }
-//                    }
-//                },
-//                onNavigateToMain = {
-//                    navController.navigate(Screen.Main.route) {
-//                        popUpTo(Screen.Splash.route) { inclusive = true }
-//                    }
-//                }
+                onNavigateNext = {
+                    navController.navigate(Screen.Onboarding.route) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
+                }
             )
         }
 
         // Onboarding
         composable(Screen.Onboarding.route) {
             OnboardingScreen(
-
+                onNavigateNext = {
+                    navController.navigate(Screen.SignUp.route) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
+                }
             )
         }
 

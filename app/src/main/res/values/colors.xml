@@ -7,4 +7,11 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="honeygold">#F4B400</color>
+    <color name="deephoney">#E09E00</color>
+    <color name="hivegreen">#1E7D3A</color>
+    <color name="softleaf">#4CAF50</color>
+    <color name="darkgray">#2C2C2C</color>
+    <color name="lightgray">#F5F5F5</color>
+    <color name="backgroundgold">#F6E7B2</color>
 </resources>
