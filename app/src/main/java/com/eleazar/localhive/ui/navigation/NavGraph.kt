@@ -10,7 +10,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.eleazar.localhive.ui.auth.LoginScreen
 import com.eleazar.localhive.ui.auth.OnboardingScreen
-import com.eleazar.localhive.ui.auth.SignUpScreen
+import com.eleazar.localhive.ui.auth.SignupScreen
 import com.eleazar.localhive.ui.directory.UserProfileScreen
 import com.eleazar.localhive.ui.estate.EstateSelectionScreen
 import com.eleazar.localhive.ui.feed.PostDetailScreen
@@ -49,15 +49,24 @@ fun LocalHiveNavGraph(
         }
 
         composable(Screen.SignUp.route) {
-            SignUpScreen(
-
+            SignupScreen(
+                onNavigateToLogin = {
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(Screen.SignUp.route) { inclusive = true }
+                    }
+                },
+                onSignupSuccess = {}
             )
         }
 
-        // OTP Verification
         composable( Screen.Login.route){
             LoginScreen(
-
+                onNavigateToSignup = {
+                    navController.navigate(Screen.SignUp.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                },
+                onLoginSuccess = {}
             )
         }
 
