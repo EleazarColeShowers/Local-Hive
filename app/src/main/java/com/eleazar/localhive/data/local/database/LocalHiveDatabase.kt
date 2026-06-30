@@ -5,11 +5,7 @@ import androidx.room.RoomDatabase
 import com.eleazar.localhive.data.local.dao.UserDao
 import com.eleazar.localhive.data.local.entity.UserEntity
 
-@Database(
-    entities = [UserEntity::class],
-    version = 1
-)
+@Database(entities = [UserEntity::class], version = 3, exportSchema = false)
 abstract class LocalHiveDatabase : RoomDatabase() {
-
     abstract fun userDao(): UserDao
 }

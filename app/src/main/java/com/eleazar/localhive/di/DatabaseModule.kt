@@ -9,25 +9,20 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
-import jakarta.inject.Singleton
+import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
+
     @Provides
     @Singleton
-    fun provideDatabase(
-        @ApplicationContext context: Context
-    ): LocalHiveDatabase {
-        return Room.databaseBuilder(
-            context,
-            LocalHiveDatabase::class.java,
-            "localhive_db"
-        ).build()
+    fun provideDatabase(@ApplicationContext context: Context): LocalHiveDatabase {
+        return Room.databaseBuilder(context, LocalHiveDatabase::class.java, "localhive_db")
+            .fallbackToDestructiveMigration()
+            .build()
     }
 
     @Provides
-    fun provideUserDao(db: LocalHiveDatabase): UserDao {
-        return db.userDao()
-    }
+    fun provideUserDao(db: LocalHiveDatabase): UserDao = db.userDao()
 }
