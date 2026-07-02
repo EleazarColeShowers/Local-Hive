@@ -7,6 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.navigation.navDeepLink
 import com.eleazar.localhive.ui.auth.DetailsSetUpScreen
 import com.eleazar.localhive.ui.auth.LoginScreen
 import com.eleazar.localhive.ui.auth.OnboardingScreen
@@ -15,6 +16,7 @@ import com.eleazar.localhive.ui.auth.SignupScreen
 import com.eleazar.localhive.ui.auth.SplashScreen
 import com.eleazar.localhive.ui.directory.UserProfileScreen
 import com.eleazar.localhive.ui.estate.EstateSelectionScreen
+import com.eleazar.localhive.ui.estate.JoinEstateScreen
 import com.eleazar.localhive.ui.feed.CreatePostScreen
 import com.eleazar.localhive.ui.feed.PostDetailScreen
 import com.eleazar.localhive.ui.main.MainScreen
@@ -135,6 +137,24 @@ fun LocalHiveNavGraph(navController: NavHostController = rememberNavController()
         ) { backStackEntry ->
             val chatId = backStackEntry.arguments?.getString("chatId") ?: ""
             ChatDetailScreen(chatId = chatId, onNavigateBack = { navController.navigateUp() })
+        }
+
+        composable(
+            route = Screen.JoinEstate.route,
+            arguments = listOf(navArgument("inviteCode") {
+                type = NavType.StringType
+                defaultValue = ""
+            }),
+            deepLinks = listOf(navDeepLink { uriPattern = "localhive://join/{inviteCode}" })
+        ) { backStackEntry ->
+            val code = backStackEntry.arguments?.getString("inviteCode") ?: ""
+            JoinEstateScreen(
+                initialCode = code,
+                onSuccess = {
+                    navController.navigate(Screen.Main.route) { popUpTo(0) { inclusive = true } }
+                },
+                onBack = { navController.navigateUp() }
+            )
         }
 
         composable(

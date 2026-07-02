@@ -2,6 +2,7 @@ package com.eleazar.localhive.data.repository
 
 import com.eleazar.localhive.domain.EstateRepository
 import com.eleazar.localhive.domain.model.Estate
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.tasks.await
@@ -58,6 +59,21 @@ class EstateRepositoryImpl @Inject constructor(
             val estate = doc.toObject(Estate::class.java)?.copy(id = doc.id)
                 ?: throw Exception("Estate not found")
             Result.success(estate)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun leaveEstate(estateId: String, userId: String): Result<Unit> {
+        return try {
+            firestore.collection("users").document(userId)
+                .update("estateId", FieldValue.delete()).await()
+            val estateRef = firestore.collection("estates").document(estateId)
+            val currentCount = estateRef.get().await().getLong("memberCount")?.toInt() ?: 1
+            if (currentCount > 1) {
+                estateRef.update("memberCount", currentCount - 1).await()
+            }
+            Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }

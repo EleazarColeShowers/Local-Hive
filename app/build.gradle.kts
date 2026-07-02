@@ -91,4 +91,5 @@ dependencies {
     //navigation
     implementation("androidx.navigation:navigation-compose:2.9.7")
     implementation("androidx.hilt:hilt-navigation-compose:1.3.0")
+
 }

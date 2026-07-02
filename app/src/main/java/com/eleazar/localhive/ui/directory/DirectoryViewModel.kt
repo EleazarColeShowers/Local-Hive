@@ -19,6 +19,7 @@ data class DirectoryUiState(
     val selectedUser: User? = null,
     val searchQuery: String = "",
     val currentUserId: String? = null,
+    val isLoading: Boolean = false,
     val error: String? = null
 )
 
@@ -39,19 +40,29 @@ class DirectoryViewModel @Inject constructor(
 
     private fun loadMembers(userId: String) {
         viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
             userRepository.getUser(userId).onSuccess { user ->
                 user.estateId?.let { estateId ->
                     userRepository.getEstateMembers(estateId)
-                        .catch { e -> _uiState.update { it.copy(error = e.message) } }
+                        .catch { e -> _uiState.update { it.copy(error = e.message, isLoading = false) } }
                         .collect { members ->
                             _uiState.update { state ->
-                                state.copy(
-                                    members = members,
-                                    filteredMembers = members.filter { it.id != userId }
-                                )
+                                val query = state.searchQuery
+                                val filtered = if (query.isBlank()) {
+                                    members.filter { it.id != userId }
+                                } else {
+                                    members.filter { u ->
+                                        u.id != userId &&
+                                        (u.displayName?.contains(query, ignoreCase = true) == true ||
+                                         u.username?.contains(query, ignoreCase = true) == true)
+                                    }
+                                }
+                                state.copy(members = members, filteredMembers = filtered, isLoading = false)
                             }
                         }
                 }
+            }.onFailure {
+                _uiState.update { state -> state.copy(isLoading = false, error = it.message) }
             }
         }
     }

@@ -71,6 +71,11 @@ fun MainScreen(navController: NavHostController) {
                         navController.navigate(Screen.Splash.route) {
                             popUpTo(0) { inclusive = true }
                         }
+                    },
+                    onLeaveEstate = {
+                        navController.navigate(Screen.EstateSelection.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
                     }
                 )
             }

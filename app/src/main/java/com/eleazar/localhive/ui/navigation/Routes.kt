@@ -24,4 +24,8 @@ sealed class Screen(val route: String) {
     object UserProfile : Screen("user_profile/{userId}") {
         fun createRoute(userId: String) = "user_profile/$userId"
     }
+
+    object JoinEstate : Screen("join_estate?inviteCode={inviteCode}") {
+        fun createRoute(inviteCode: String = "") = "join_estate?inviteCode=$inviteCode"
+    }
 }

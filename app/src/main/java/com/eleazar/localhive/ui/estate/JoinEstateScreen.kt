@@ -20,11 +20,12 @@ import com.eleazar.localhive.R
 
 @Composable
 fun JoinEstateScreen(
+    initialCode: String = "",
     onSuccess: () -> Unit,
     onBack: () -> Unit,
     viewModel: EstateViewModel = hiltViewModel()
 ) {
-    var inviteCode by remember { mutableStateOf("") }
+    var inviteCode by remember { mutableStateOf(initialCode.uppercase().take(6)) }
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(uiState.success) {
