@@ -75,6 +75,9 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
 
+    // Coil
+    implementation(libs.coil.compose)
+
     // Hilt
     implementation("com.google.dagger:hilt-android:2.56.1")
     ksp("com.google.dagger:hilt-compiler:2.56.1")

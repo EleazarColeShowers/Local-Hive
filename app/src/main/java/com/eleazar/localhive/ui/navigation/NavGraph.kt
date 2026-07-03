@@ -15,6 +15,7 @@ import com.eleazar.localhive.ui.auth.ProfileSetUpScreen
 import com.eleazar.localhive.ui.auth.SignupScreen
 import com.eleazar.localhive.ui.auth.SplashScreen
 import com.eleazar.localhive.ui.directory.UserProfileScreen
+import com.eleazar.localhive.ui.estate.EstateAdminScreen
 import com.eleazar.localhive.ui.estate.EstateSelectionScreen
 import com.eleazar.localhive.ui.estate.JoinEstateScreen
 import com.eleazar.localhive.ui.feed.CreatePostScreen
@@ -168,6 +169,17 @@ fun LocalHiveNavGraph(navController: NavHostController = rememberNavController()
                 onMessageUser = { uid ->
                     navController.navigate(Screen.ChatDetail.createRoute(uid))
                 }
+            )
+        }
+
+        composable(
+            route = Screen.EstateAdmin.route,
+            arguments = listOf(navArgument("estateId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val estateId = backStackEntry.arguments?.getString("estateId") ?: ""
+            EstateAdminScreen(
+                estateId = estateId,
+                onBack = { navController.navigateUp() }
             )
         }
     }

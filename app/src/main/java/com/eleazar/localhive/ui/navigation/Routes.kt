@@ -28,4 +28,8 @@ sealed class Screen(val route: String) {
     object JoinEstate : Screen("join_estate?inviteCode={inviteCode}") {
         fun createRoute(inviteCode: String = "") = "join_estate?inviteCode=$inviteCode"
     }
+
+    object EstateAdmin : Screen("estate_admin/{estateId}") {
+        fun createRoute(estateId: String) = "estate_admin/$estateId"
+    }
 }

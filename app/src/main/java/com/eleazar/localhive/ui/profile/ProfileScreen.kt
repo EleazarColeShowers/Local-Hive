@@ -42,6 +42,7 @@ import com.eleazar.localhive.R
 fun ProfileScreen(
     onLogout: () -> Unit = {},
     onLeaveEstate: () -> Unit = {},
+    onAdminPanel: (estateId: String) -> Unit = {},
     viewModel: ProfileViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -71,7 +72,7 @@ fun ProfileScreen(
 
     val user = uiState.user
     val estate = uiState.estate
-    val isAdmin = estate != null && user != null && estate.adminId == user.id
+    val isAdmin = estate != null && user != null && user.id in estate.adminIds
     val letter = (user?.displayName ?: user?.username ?: "?").firstOrNull()?.uppercase() ?: "?"
 
     if (showCodeDialog && estate != null) {
@@ -310,6 +311,21 @@ fun ProfileScreen(
                                     Icon(Icons.Default.Star, contentDescription = null, tint = hiveGreen, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(8.dp))
                                     Text("Share Invite Code", fontWeight = FontWeight.SemiBold, color = hiveGreen, fontSize = 14.sp)
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable { estate?.id?.let { onAdminPanel(it) } }
+                                        .background(hiveGreen.copy(alpha = 0.08f))
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(Icons.Default.Person, contentDescription = null, tint = hiveGreen, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Admin Panel", fontWeight = FontWeight.SemiBold, color = hiveGreen, fontSize = 14.sp)
                                 }
                             } else {
                                 Row(

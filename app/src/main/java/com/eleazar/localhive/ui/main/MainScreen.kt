@@ -76,6 +76,9 @@ fun MainScreen(navController: NavHostController) {
                         navController.navigate(Screen.EstateSelection.route) {
                             popUpTo(0) { inclusive = true }
                         }
+                    },
+                    onAdminPanel = { estateId ->
+                        navController.navigate(Screen.EstateAdmin.createRoute(estateId))
                     }
                 )
             }
