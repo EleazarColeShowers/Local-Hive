@@ -21,11 +21,14 @@ fun CreatePostScreen(
     onNavigateBack: () -> Unit,
     viewModel: FeedViewModel = hiltViewModel()
 ) {
+    val uiState by viewModel.uiState.collectAsState()
     var content by remember { mutableStateOf("") }
-    var posted by remember { mutableStateOf(false) }
 
-    LaunchedEffect(posted) {
-        if (posted) onNavigateBack()
+    LaunchedEffect(uiState.postCreated) {
+        if (uiState.postCreated) {
+            viewModel.consumePostCreated()
+            onNavigateBack()
+        }
     }
 
     Scaffold(
@@ -42,14 +45,13 @@ fun CreatePostScreen(
                         onClick = {
                             if (content.isNotBlank()) {
                                 viewModel.createPost(content)
-                                posted = true
                             }
                         },
-                        enabled = content.isNotBlank()
+                        enabled = content.isNotBlank() && !uiState.isPosting
                     ) {
                         Text(
-                            "Post",
-                            color = if (content.isNotBlank()) colorResource(id = R.color.hivegreen) else Color.Gray,
+                            if (uiState.isPosting) "Posting…" else "Post",
+                            color = if (content.isNotBlank() && !uiState.isPosting) colorResource(id = R.color.hivegreen) else Color.Gray,
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp
                         )
@@ -73,6 +75,10 @@ fun CreatePostScreen(
                     cursorColor = colorResource(id = R.color.hivegreen)
                 )
             )
+            if (uiState.error != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(uiState.error ?: "", color = Color(0xFFE53935), fontSize = 13.sp)
+            }
         }
     }
 }

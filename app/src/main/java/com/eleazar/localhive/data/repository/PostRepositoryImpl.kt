@@ -16,10 +16,11 @@ class PostRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore
 ) : PostRepository {
 
-    override fun getPostsForEstate(estateId: String): Flow<List<Post>> = callbackFlow {
+    override fun getPostsForEstate(estateId: String, limit: Long): Flow<List<Post>> = callbackFlow {
         val listener = firestore.collection("posts")
             .whereEqualTo("estateId", estateId)
             .orderBy("createdAt", Query.Direction.DESCENDING)
+            .limit(limit)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) { close(error); return@addSnapshotListener }
                 val posts = snapshot?.documents?.mapNotNull { doc ->
@@ -28,6 +29,23 @@ class PostRepositoryImpl @Inject constructor(
                 trySend(posts)
             }
         awaitClose { listener.remove() }
+    }
+
+    override suspend fun getMorePostsForEstate(estateId: String, before: Long, limit: Long): Result<List<Post>> {
+        return try {
+            val snapshot = firestore.collection("posts")
+                .whereEqualTo("estateId", estateId)
+                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .startAfter(before)
+                .limit(limit)
+                .get().await()
+            val posts = snapshot.documents.mapNotNull { doc ->
+                doc.toObject(Post::class.java)?.copy(id = doc.id)
+            }
+            Result.success(posts)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     override suspend fun createPost(post: Post): Result<Unit> {

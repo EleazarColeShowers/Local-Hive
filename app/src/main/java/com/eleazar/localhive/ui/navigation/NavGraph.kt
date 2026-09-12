@@ -22,6 +22,8 @@ import com.eleazar.localhive.ui.feed.CreatePostScreen
 import com.eleazar.localhive.ui.feed.PostDetailScreen
 import com.eleazar.localhive.ui.main.MainScreen
 import com.eleazar.localhive.ui.messages.ChatDetailScreen
+import com.eleazar.localhive.ui.notifications.NotificationsScreen
+import com.eleazar.localhive.ui.settings.SettingsScreen
 
 @Composable
 fun LocalHiveNavGraph(navController: NavHostController = rememberNavController()) {
@@ -180,6 +182,34 @@ fun LocalHiveNavGraph(navController: NavHostController = rememberNavController()
             EstateAdminScreen(
                 estateId = estateId,
                 onBack = { navController.navigateUp() }
+            )
+        }
+
+        composable(
+            route = Screen.Notifications.route,
+            deepLinks = listOf(navDeepLink { uriPattern = "localhive://notifications" })
+        ) {
+            NotificationsScreen(
+                onBack = { navController.navigateUp() },
+                onNavigateToEstateAdmin = { estateId ->
+                    navController.navigate(Screen.EstateAdmin.createRoute(estateId))
+                }
+            )
+        }
+
+        composable(Screen.Settings.route) {
+            SettingsScreen(
+                onBack = { navController.navigateUp() },
+                onLoggedOut = {
+                    navController.navigate(Screen.Splash.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+                onLeftEstate = {
+                    navController.navigate(Screen.EstateSelection.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
             )
         }
     }

@@ -1,8 +1,11 @@
 package com.eleazar.localhive.data.repository
 
 import com.eleazar.localhive.domain.EstateRepository
+import com.eleazar.localhive.domain.NotificationRepository
+import com.eleazar.localhive.domain.model.AppNotification
 import com.eleazar.localhive.domain.model.Estate
 import com.eleazar.localhive.domain.model.JoinRequest
+import com.eleazar.localhive.domain.model.NotificationType
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -14,7 +17,8 @@ import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 class EstateRepositoryImpl @Inject constructor(
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val notificationRepository: NotificationRepository
 ) : EstateRepository {
 
     override suspend fun createEstate(name: String, address: String, adminId: String): Result<Estate> {
@@ -60,6 +64,7 @@ class EstateRepositoryImpl @Inject constructor(
     override suspend fun getEstate(estateId: String): Result<Estate> {
         return try {
             val doc = firestore.collection("estates").document(estateId).get().await()
+            if (!doc.exists()) throw Exception("Estate not found")
             val estate = mapDocToEstate(doc) ?: throw Exception("Estate not found")
             Result.success(estate)
         } catch (e: Exception) {
@@ -119,6 +124,18 @@ class EstateRepositoryImpl @Inject constructor(
                 "status" to "pending"
             )
             firestore.collection("joinRequests").document(docId).set(data).await()
+            estate.adminIds.forEach { adminId ->
+                notificationRepository.createNotification(
+                    AppNotification(
+                        recipientId = adminId,
+                        type = NotificationType.JOIN_REQUEST,
+                        title = "New join request",
+                        message = "${userName.ifBlank { "Someone" }} wants to join ${estate.name}",
+                        estateId = estateId,
+                        relatedUserId = userId
+                    )
+                )
+            }
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -162,12 +179,22 @@ class EstateRepositoryImpl @Inject constructor(
     override suspend fun approveRequest(estateId: String, userId: String): Result<Unit> {
         return try {
             val docId = "${estateId}_${userId}"
+            firestore.collection("users").document(userId)
+                .update("estateId", estateId).await()
             firestore.collection("joinRequests").document(docId)
                 .update("status", "approved").await()
             firestore.collection("estates").document(estateId)
                 .update("memberCount", FieldValue.increment(1)).await()
-            firestore.collection("users").document(userId)
-                .set(mapOf("estateId" to estateId), SetOptions.merge()).await()
+            val estate = getEstate(estateId).getOrNull()
+            notificationRepository.createNotification(
+                AppNotification(
+                    recipientId = userId,
+                    type = NotificationType.REQUEST_APPROVED,
+                    title = "Request approved",
+                    message = "Your request to join ${estate?.name ?: "the estate"} has been approved",
+                    estateId = estateId
+                )
+            )
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -178,6 +205,16 @@ class EstateRepositoryImpl @Inject constructor(
         return try {
             firestore.collection("joinRequests").document("${estateId}_${userId}")
                 .update("status", "denied").await()
+            val estate = getEstate(estateId).getOrNull()
+            notificationRepository.createNotification(
+                AppNotification(
+                    recipientId = userId,
+                    type = NotificationType.REQUEST_DENIED,
+                    title = "Request denied",
+                    message = "Your request to join ${estate?.name ?: "the estate"} was denied",
+                    estateId = estateId
+                )
+            )
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

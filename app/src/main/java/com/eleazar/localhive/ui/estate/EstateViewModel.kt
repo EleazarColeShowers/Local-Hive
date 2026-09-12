@@ -52,6 +52,13 @@ class EstateViewModel @Inject constructor(
                     _uiState.update { it.copy(pendingRequest = request) }
                 }
             }
+            viewModelScope.launch {
+                userRepository.observeUser(userId).collect { user ->
+                    if (user?.estateId != null) {
+                        _uiState.update { it.copy(isApproved = true, success = true, pendingRequest = null) }
+                    }
+                }
+            }
         }
         viewModelScope.launch {
             _searchQuery.debounce(300).collect { query ->
@@ -158,7 +165,7 @@ class EstateViewModel @Inject constructor(
     fun approveRequest(estateId: String, userId: String) {
         viewModelScope.launch {
             estateRepository.approveRequest(estateId, userId).fold(
-                onSuccess = {},
+                onSuccess = { _uiState.update { it.copy(error = null) } },
                 onFailure = { e -> _uiState.update { it.copy(error = e.message) } }
             )
         }
@@ -167,7 +174,7 @@ class EstateViewModel @Inject constructor(
     fun denyRequest(estateId: String, userId: String) {
         viewModelScope.launch {
             estateRepository.denyRequest(estateId, userId).fold(
-                onSuccess = {},
+                onSuccess = { _uiState.update { it.copy(error = null) } },
                 onFailure = { e -> _uiState.update { it.copy(error = e.message) } }
             )
         }
@@ -176,7 +183,7 @@ class EstateViewModel @Inject constructor(
     fun promoteToAdmin(estateId: String, userId: String) {
         viewModelScope.launch {
             estateRepository.promoteToAdmin(estateId, userId).fold(
-                onSuccess = {},
+                onSuccess = { _uiState.update { it.copy(error = null) } },
                 onFailure = { e -> _uiState.update { it.copy(error = e.message) } }
             )
         }

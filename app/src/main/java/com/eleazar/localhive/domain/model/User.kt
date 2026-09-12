@@ -10,5 +10,6 @@ data class User(
     val estateId: String? = null,
     val address: String? = null,
     val occupation: String? = null,
-    val phone: String? = null
+    val phone: String? = null,
+    val fcmToken: String? = null
 )

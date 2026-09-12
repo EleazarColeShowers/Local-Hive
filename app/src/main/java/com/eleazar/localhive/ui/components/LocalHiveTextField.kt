@@ -22,6 +22,7 @@ fun LocalHiveTextField(
     supportingText: String? = null,
     singleLine: Boolean = true,
     maxLines: Int = 1,
+    leadingIcon: @Composable (() -> Unit)? = null,
     trailingIcon: @Composable (() -> Unit)? = null,
     visualTransformation: androidx.compose.ui.text.input.VisualTransformation = androidx.compose.ui.text.input.VisualTransformation.None,
     keyboardOptions: androidx.compose.foundation.text.KeyboardOptions = androidx.compose.foundation.text.KeyboardOptions.Default
@@ -35,6 +36,7 @@ fun LocalHiveTextField(
         isError = isError,
         singleLine = singleLine,
         maxLines = maxLines,
+        leadingIcon = leadingIcon,
         trailingIcon = trailingIcon,
         visualTransformation = visualTransformation,
         keyboardOptions = keyboardOptions,

@@ -3,6 +3,7 @@ package com.eleazar.localhive.ui.feed
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,6 +22,16 @@ fun FeedScreen(
     viewModel: FeedViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
+            .collect { lastVisible ->
+                if (uiState.posts.isNotEmpty() && lastVisible >= uiState.posts.size - 3) {
+                    viewModel.loadMorePosts()
+                }
+            }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         when {
@@ -41,6 +52,7 @@ fun FeedScreen(
             }
             else -> {
                 LazyColumn(
+                    state = listState,
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -52,6 +64,16 @@ fun FeedScreen(
                             onCommentClick = { onPostClick(post.id) },
                             onClick = { onPostClick(post.id) }
                         )
+                    }
+                    if (uiState.isLoadingMore) {
+                        item {
+                            Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    color = colorResource(id = R.color.hivegreen)
+                                )
+                            }
+                        }
                     }
                 }
             }

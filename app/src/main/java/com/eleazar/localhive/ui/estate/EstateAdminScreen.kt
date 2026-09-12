@@ -85,7 +85,7 @@ fun EstateAdminScreen(
         ) {
             Tab(
                 selected = selectedTab == 0,
-                onClick = { selectedTab = 0 },
+                onClick = { selectedTab = 0; viewModel.clearError() },
                 text = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -115,7 +115,7 @@ fun EstateAdminScreen(
             )
             Tab(
                 selected = selectedTab == 1,
-                onClick = { selectedTab = 1 },
+                onClick = { selectedTab = 1; viewModel.clearError() },
                 text = {
                     Text(
                         "Members",
@@ -127,6 +127,15 @@ fun EstateAdminScreen(
         }
 
         HorizontalDivider(color = dark.copy(alpha = 0.08f))
+
+        uiState.error?.let {
+            Text(
+                text = it,
+                color = MaterialTheme.colorScheme.error,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+            )
+        }
 
         when (selectedTab) {
             0 -> RequestsTab(

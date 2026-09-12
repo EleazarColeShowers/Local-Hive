@@ -18,13 +18,19 @@ import javax.inject.Inject
 data class FeedUiState(
     val posts: List<Post> = emptyList(),
     val isLoading: Boolean = false,
+    val isLoadingMore: Boolean = false,
+    val hasMorePosts: Boolean = true,
     val error: String? = null,
     val currentUserId: String? = null,
     val currentUserName: String? = null,
     val estateId: String? = null,
     val selectedPost: Post? = null,
-    val comments: List<Comment> = emptyList()
+    val comments: List<Comment> = emptyList(),
+    val isPosting: Boolean = false,
+    val postCreated: Boolean = false
 )
+
+private const val POST_PAGE_SIZE = 20L
 
 @HiltViewModel
 class FeedViewModel @Inject constructor(
@@ -35,6 +41,9 @@ class FeedViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(FeedUiState())
     val uiState = _uiState.asStateFlow()
+
+    private var livePosts: List<Post> = emptyList()
+    private var olderPosts: List<Post> = emptyList()
 
     init {
         loadCurrentUser()
@@ -54,10 +63,44 @@ class FeedViewModel @Inject constructor(
     private fun loadPosts(estateId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            postRepository.getPostsForEstate(estateId)
+            postRepository.getPostsForEstate(estateId, POST_PAGE_SIZE)
                 .catch { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
-                .collect { posts -> _uiState.update { it.copy(posts = posts, isLoading = false) } }
+                .collect { posts ->
+                    livePosts = posts
+                    _uiState.update { it.copy(posts = mergePosts(), isLoading = false) }
+                }
         }
+    }
+
+    fun loadMorePosts() {
+        val state = _uiState.value
+        val estateId = state.estateId ?: return
+        if (state.isLoadingMore || !state.hasMorePosts) return
+        val oldest = mergePosts().lastOrNull()?.createdAt ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingMore = true) }
+            postRepository.getMorePostsForEstate(estateId, oldest, POST_PAGE_SIZE)
+                .onSuccess { more ->
+                    olderPosts = olderPosts + more
+                    _uiState.update {
+                        it.copy(
+                            posts = mergePosts(),
+                            isLoadingMore = false,
+                            hasMorePosts = more.size.toLong() == POST_PAGE_SIZE
+                        )
+                    }
+                }
+                .onFailure { e ->
+                    _uiState.update { it.copy(isLoadingMore = false, error = e.message) }
+                }
+        }
+    }
+
+    private fun mergePosts(): List<Post> {
+        val merged = LinkedHashMap<String, Post>()
+        livePosts.forEach { merged[it.id] = it }
+        olderPosts.forEach { merged.putIfAbsent(it.id, it) }
+        return merged.values.sortedByDescending { it.createdAt }
     }
 
     fun createPost(content: String) {
@@ -65,6 +108,7 @@ class FeedViewModel @Inject constructor(
         val estateId = state.estateId ?: return
         val userId = state.currentUserId ?: return
         viewModelScope.launch {
+            _uiState.update { it.copy(isPosting = true, error = null) }
             val post = Post(
                 authorId = userId,
                 authorName = state.currentUserName ?: "Neighbor",
@@ -73,7 +117,17 @@ class FeedViewModel @Inject constructor(
                 createdAt = System.currentTimeMillis()
             )
             postRepository.createPost(post)
+                .onSuccess {
+                    _uiState.update { it.copy(isPosting = false, postCreated = true) }
+                }
+                .onFailure { e ->
+                    _uiState.update { it.copy(isPosting = false, error = e.message ?: "Failed to create post") }
+                }
         }
+    }
+
+    fun consumePostCreated() {
+        _uiState.update { it.copy(postCreated = false) }
     }
 
     fun loadPostDetail(postId: String) {

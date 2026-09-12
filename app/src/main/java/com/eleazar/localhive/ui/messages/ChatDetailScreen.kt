@@ -35,10 +35,20 @@ fun ChatDetailScreen(
         viewModel.loadMessages(chatId)
     }
 
-    LaunchedEffect(uiState.messages.size) {
-        if (uiState.messages.isNotEmpty()) {
-            listState.animateScrollToItem(uiState.messages.lastIndex)
+    // Messages are newest-first with a reversed LazyColumn, so index 0 is the visual bottom.
+    LaunchedEffect(uiState.messages.firstOrNull()?.id) {
+        if (uiState.messages.isNotEmpty() && listState.firstVisibleItemIndex <= 1) {
+            listState.animateScrollToItem(0)
         }
+    }
+
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
+            .collect { lastVisible ->
+                if (uiState.messages.isNotEmpty() && lastVisible >= uiState.messages.size - 3) {
+                    viewModel.loadOlderMessages(chatId)
+                }
+            }
     }
 
     val chat = uiState.chats.find { it.id == chatId }
@@ -96,6 +106,7 @@ fun ChatDetailScreen(
     ) { padding ->
         LazyColumn(
             state = listState,
+            reverseLayout = true,
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -122,6 +133,16 @@ fun ChatDetailScreen(
                             fontSize = 14.sp,
                             color = if (isOwn) androidx.compose.ui.graphics.Color.White
                                     else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            if (uiState.isLoadingMoreMessages) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = colorResource(id = R.color.hivegreen)
                         )
                     }
                 }

@@ -29,6 +29,16 @@ class UserRepositoryImpl @Inject constructor(
         }
     }
 
+    override fun observeUser(userId: String): Flow<User?> = callbackFlow {
+        val listener = firestore.collection("users").document(userId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { trySend(null); return@addSnapshotListener }
+                val user = snapshot?.toObject(User::class.java)?.copy(id = snapshot.id)
+                trySend(user)
+            }
+        awaitClose { listener.remove() }
+    }
+
     override fun getEstateMembers(estateId: String): Flow<List<User>> = callbackFlow {
         val listener = firestore.collection("users")
             .whereEqualTo("estateId", estateId)
@@ -46,6 +56,16 @@ class UserRepositoryImpl @Inject constructor(
         return try {
             firestore.collection("users").document(user.id)
                 .set(user.toNonNullMap(), SetOptions.merge()).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun updateFcmToken(userId: String, token: String): Result<Unit> {
+        return try {
+            firestore.collection("users").document(userId)
+                .set(mapOf("fcmToken" to token), SetOptions.merge()).await()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

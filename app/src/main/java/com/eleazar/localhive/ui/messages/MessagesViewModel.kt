@@ -16,13 +16,18 @@ import javax.inject.Inject
 
 data class MessagesUiState(
     val chats: List<Chat> = emptyList(),
+    // Newest-first, matching the reversed chat LazyColumn.
     val messages: List<Message> = emptyList(),
     val isLoading: Boolean = false,
+    val isLoadingMoreMessages: Boolean = false,
+    val hasMoreMessages: Boolean = true,
     val currentUserId: String? = null,
     val currentUserName: String? = null,
     val newChatId: String? = null,
     val error: String? = null
 )
+
+private const val MESSAGE_PAGE_SIZE = 30L
 
 @HiltViewModel
 class MessagesViewModel @Inject constructor(
@@ -33,6 +38,10 @@ class MessagesViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(MessagesUiState())
     val uiState = _uiState.asStateFlow()
+
+    private var liveMessages: List<Message> = emptyList()
+    private var olderMessages: List<Message> = emptyList()
+    private var messagesJob: kotlinx.coroutines.Job? = null
 
     init {
         val userId = authRepository.getCurrentUserId()
@@ -60,11 +69,48 @@ class MessagesViewModel @Inject constructor(
     }
 
     fun loadMessages(chatId: String) {
-        viewModelScope.launch {
-            messageRepository.getMessages(chatId)
+        liveMessages = emptyList()
+        olderMessages = emptyList()
+        _uiState.update { it.copy(messages = emptyList(), hasMoreMessages = true) }
+        messagesJob?.cancel()
+        messagesJob = viewModelScope.launch {
+            messageRepository.getMessages(chatId, MESSAGE_PAGE_SIZE)
                 .catch { e -> _uiState.update { it.copy(error = e.message) } }
-                .collect { messages -> _uiState.update { it.copy(messages = messages) } }
+                .collect { messages ->
+                    liveMessages = messages
+                    _uiState.update { it.copy(messages = mergeMessages()) }
+                }
         }
+    }
+
+    fun loadOlderMessages(chatId: String) {
+        val state = _uiState.value
+        if (state.isLoadingMoreMessages || !state.hasMoreMessages) return
+        val oldest = mergeMessages().lastOrNull()?.timestamp ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingMoreMessages = true) }
+            messageRepository.getOlderMessages(chatId, oldest, MESSAGE_PAGE_SIZE)
+                .onSuccess { more ->
+                    olderMessages = olderMessages + more
+                    _uiState.update {
+                        it.copy(
+                            messages = mergeMessages(),
+                            isLoadingMoreMessages = false,
+                            hasMoreMessages = more.size.toLong() == MESSAGE_PAGE_SIZE
+                        )
+                    }
+                }
+                .onFailure { e ->
+                    _uiState.update { it.copy(isLoadingMoreMessages = false, error = e.message) }
+                }
+        }
+    }
+
+    private fun mergeMessages(): List<Message> {
+        val merged = LinkedHashMap<String, Message>()
+        liveMessages.forEach { merged[it.id] = it }
+        olderMessages.forEach { merged.putIfAbsent(it.id, it) }
+        return merged.values.sortedByDescending { it.timestamp }
     }
 
     fun sendMessage(chatId: String, content: String) {

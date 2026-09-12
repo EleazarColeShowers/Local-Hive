@@ -18,9 +18,7 @@ data class ProfileUiState(
     val user: User? = null,
     val estate: Estate? = null,
     val isLoading: Boolean = false,
-    val error: String? = null,
-    val isLoggedOut: Boolean = false,
-    val hasLeftEstate: Boolean = false
+    val error: String? = null
 )
 
 @HiltViewModel
@@ -72,22 +70,4 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
-    fun leaveEstate() {
-        val user = _uiState.value.user ?: return
-        val estateId = user.estateId ?: return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            estateRepository.leaveEstate(estateId, user.id).fold(
-                onSuccess = { _uiState.update { it.copy(isLoading = false, hasLeftEstate = true, estate = null) } },
-                onFailure = { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
-            )
-        }
-    }
-
-    fun logout() {
-        viewModelScope.launch {
-            authRepository.logout()
-            _uiState.update { it.copy(isLoggedOut = true) }
-        }
-    }
 }

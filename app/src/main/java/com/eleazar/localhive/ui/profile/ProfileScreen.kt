@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -40,8 +41,7 @@ import com.eleazar.localhive.R
 
 @Composable
 fun ProfileScreen(
-    onLogout: () -> Unit = {},
-    onLeaveEstate: () -> Unit = {},
+    onSettings: () -> Unit = {},
     onAdminPanel: (estateId: String) -> Unit = {},
     viewModel: ProfileViewModel = hiltViewModel()
 ) {
@@ -49,13 +49,10 @@ fun ProfileScreen(
     val context = LocalContext.current
     var showEdit by remember { mutableStateOf(false) }
     var showCodeDialog by remember { mutableStateOf(false) }
-    var showLeaveConfirm by remember { mutableStateOf(false) }
     var editName by remember { mutableStateOf("") }
     var editUsername by remember { mutableStateOf("") }
     var editBio by remember { mutableStateOf("") }
 
-    LaunchedEffect(uiState.isLoggedOut) { if (uiState.isLoggedOut) onLogout() }
-    LaunchedEffect(uiState.hasLeftEstate) { if (uiState.hasLeftEstate) onLeaveEstate() }
     LaunchedEffect(uiState.user) {
         uiState.user?.let {
             editName = it.displayName ?: ""
@@ -98,25 +95,6 @@ fun ProfileScreen(
         )
     }
 
-    if (showLeaveConfirm) {
-        AlertDialog(
-            onDismissRequest = { showLeaveConfirm = false },
-            title = { Text("Leave Estate?", fontWeight = FontWeight.Bold) },
-            text = { Text("You'll need a new invite code to re-join ${estate?.name ?: "this estate"}.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showLeaveConfirm = false
-                    viewModel.leaveEstate()
-                }) {
-                    Text("Leave", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLeaveConfirm = false }) { Text("Cancel") }
-            }
-        )
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -129,15 +107,21 @@ fun ProfileScreen(
                 .height(180.dp)
                 .background(hiveGreen)
         ) {
-            IconButton(
-                onClick = { showEdit = !showEdit },
-                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
-            ) {
-                Icon(
-                    if (showEdit) Icons.Default.Person else Icons.Default.Edit,
-                    contentDescription = if (showEdit) "View profile" else "Edit profile",
-                    tint = Color.White.copy(alpha = 0.9f)
-                )
+            Row(modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
+                IconButton(onClick = { showEdit = !showEdit }) {
+                    Icon(
+                        if (showEdit) Icons.Default.Person else Icons.Default.Edit,
+                        contentDescription = if (showEdit) "View profile" else "Edit profile",
+                        tint = Color.White.copy(alpha = 0.9f)
+                    )
+                }
+                IconButton(onClick = onSettings) {
+                    Icon(
+                        Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        tint = Color.White.copy(alpha = 0.9f)
+                    )
+                }
             }
         }
 
@@ -293,11 +277,11 @@ fun ProfileScreen(
                                 }
                             }
 
-                            Spacer(Modifier.height(14.dp))
-                            HorizontalDivider(color = darkGray.copy(alpha = 0.08f))
-                            Spacer(Modifier.height(12.dp))
-
                             if (isAdmin) {
+                                Spacer(Modifier.height(14.dp))
+                                HorizontalDivider(color = darkGray.copy(alpha = 0.08f))
+                                Spacer(Modifier.height(12.dp))
+
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -327,21 +311,6 @@ fun ProfileScreen(
                                     Spacer(Modifier.width(8.dp))
                                     Text("Admin Panel", fontWeight = FontWeight.SemiBold, color = hiveGreen, fontSize = 14.sp)
                                 }
-                            } else {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .clickable { showLeaveConfirm = true }
-                                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.07f))
-                                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(Icons.Default.Home, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Leave Estate", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
-                                }
                             }
                         }
                     }
@@ -367,26 +336,6 @@ fun ProfileScreen(
                         }
                     }
                     Spacer(Modifier.height(12.dp))
-                }
-
-                // Log out card
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = lightGold),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { viewModel.logout() }
-                            .padding(horizontal = 16.dp, vertical = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Text("Log Out", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error, fontSize = 15.sp)
-                    }
                 }
             }
 

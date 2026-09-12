@@ -6,14 +6,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -26,13 +29,45 @@ import com.eleazar.localhive.ui.feed.CreatePostScreen
 import com.eleazar.localhive.ui.feed.FeedScreen
 import com.eleazar.localhive.ui.messages.MessagesScreen
 import com.eleazar.localhive.ui.navigation.Screen
+import com.eleazar.localhive.ui.notifications.NotificationViewModel
 import com.eleazar.localhive.ui.profile.ProfileScreen
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(navController: NavHostController) {
     val bottomNavController = rememberNavController()
+    val notificationViewModel: NotificationViewModel = hiltViewModel()
+    val notificationUiState by notificationViewModel.uiState.collectAsState()
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text("Local Hive", color = colorResource(id = R.color.darkgray))
+                },
+                actions = {
+                    BadgedBox(
+                        badge = {
+                            if (notificationUiState.unreadCount > 0) {
+                                Badge(containerColor = colorResource(id = R.color.hivegreen)) {
+                                    Text("${notificationUiState.unreadCount}")
+                                }
+                            }
+                        },
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        IconButton(onClick = { navController.navigate(Screen.Notifications.route) }) {
+                            Icon(
+                                Icons.Default.Notifications,
+                                contentDescription = "Notifications",
+                                tint = colorResource(id = R.color.darkgray)
+                            )
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+            )
+        },
         bottomBar = { BottomNavigationBar(bottomNavController) },
         floatingActionButton = {
             FloatingActionButton(
@@ -67,16 +102,7 @@ fun MainScreen(navController: NavHostController) {
             }
             composable(Screen.Profile.route) {
                 ProfileScreen(
-                    onLogout = {
-                        navController.navigate(Screen.Splash.route) {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    },
-                    onLeaveEstate = {
-                        navController.navigate(Screen.EstateSelection.route) {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    },
+                    onSettings = { navController.navigate(Screen.Settings.route) },
                     onAdminPanel = { estateId ->
                         navController.navigate(Screen.EstateAdmin.createRoute(estateId))
                     }

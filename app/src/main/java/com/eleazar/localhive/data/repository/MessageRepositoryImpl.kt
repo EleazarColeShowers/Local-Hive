@@ -15,10 +15,11 @@ class MessageRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore
 ) : MessageRepository {
 
-    override fun getChats(userId: String): Flow<List<Chat>> = callbackFlow {
+    override fun getChats(userId: String, limit: Long): Flow<List<Chat>> = callbackFlow {
         val listener = firestore.collection("chats")
             .whereArrayContains("participants", userId)
             .orderBy("lastMessageTime", Query.Direction.DESCENDING)
+            .limit(limit)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) { close(error); return@addSnapshotListener }
                 val chats = snapshot?.documents?.mapNotNull { doc ->
@@ -29,10 +30,12 @@ class MessageRepositoryImpl @Inject constructor(
         awaitClose { listener.remove() }
     }
 
-    override fun getMessages(chatId: String): Flow<List<Message>> = callbackFlow {
+    // Newest-first: keeps the live window bounded to the latest page regardless of history size.
+    override fun getMessages(chatId: String, limit: Long): Flow<List<Message>> = callbackFlow {
         val listener = firestore.collection("chats").document(chatId)
             .collection("messages")
-            .orderBy("timestamp", Query.Direction.ASCENDING)
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .limit(limit)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) { close(error); return@addSnapshotListener }
                 val messages = snapshot?.documents?.mapNotNull { doc ->
@@ -41,6 +44,23 @@ class MessageRepositoryImpl @Inject constructor(
                 trySend(messages)
             }
         awaitClose { listener.remove() }
+    }
+
+    override suspend fun getOlderMessages(chatId: String, before: Long, limit: Long): Result<List<Message>> {
+        return try {
+            val snapshot = firestore.collection("chats").document(chatId)
+                .collection("messages")
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .startAfter(before)
+                .limit(limit)
+                .get().await()
+            val messages = snapshot.documents.mapNotNull { doc ->
+                doc.toObject(Message::class.java)?.copy(id = doc.id)
+            }
+            Result.success(messages)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     override suspend fun sendMessage(message: Message): Result<Unit> {

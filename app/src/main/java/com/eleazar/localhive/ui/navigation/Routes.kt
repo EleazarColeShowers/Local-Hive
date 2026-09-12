@@ -32,4 +32,7 @@ sealed class Screen(val route: String) {
     object EstateAdmin : Screen("estate_admin/{estateId}") {
         fun createRoute(estateId: String) = "estate_admin/$estateId"
     }
+
+    object Notifications : Screen("notifications")
+    object Settings : Screen("settings")
 }
