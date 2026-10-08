@@ -26,6 +26,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eleazar.localhive.R
 
 @Composable
@@ -37,7 +38,7 @@ fun DetailsSetUpScreen(
     var occupation by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
 
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(uiState.isDone) {
         if (uiState.isDone) onDetailsComplete()

@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eleazar.localhive.R
 import com.eleazar.localhive.ui.components.UserCard
 
@@ -26,7 +27,7 @@ fun DirectoryScreen(
     onMessageUser: (String) -> Unit = {},
     viewModel: DirectoryViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val hiveGreen = colorResource(id = R.color.hivegreen)
     val backgroundGold = colorResource(id = R.color.backgroundgold)
     val darkGray = colorResource(id = R.color.darkgray)

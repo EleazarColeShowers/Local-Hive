@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eleazar.localhive.R
 import com.eleazar.localhive.ui.components.PostCard
 
@@ -21,7 +22,7 @@ fun FeedScreen(
     onPostClick: (String) -> Unit = {},
     viewModel: FeedViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
     LaunchedEffect(listState) {

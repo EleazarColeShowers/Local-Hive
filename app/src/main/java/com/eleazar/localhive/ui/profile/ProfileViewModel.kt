@@ -1,9 +1,11 @@
 package com.eleazar.localhive.ui.profile
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eleazar.localhive.domain.AuthRepository
 import com.eleazar.localhive.domain.EstateRepository
+import com.eleazar.localhive.domain.StorageRepository
 import com.eleazar.localhive.domain.UserRepository
 import com.eleazar.localhive.domain.model.Estate
 import com.eleazar.localhive.domain.model.User
@@ -25,7 +27,8 @@ data class ProfileUiState(
 class ProfileViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val userRepository: UserRepository,
-    private val estateRepository: EstateRepository
+    private val estateRepository: EstateRepository,
+    private val storageRepository: StorageRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -58,11 +61,30 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
-    fun updateProfile(displayName: String, username: String, bio: String) {
+    fun updateProfile(displayName: String, username: String, bio: String, imageUri: Uri? = null) {
         val user = _uiState.value.user ?: return
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            val updated = user.copy(displayName = displayName, username = username, bio = bio)
+            _uiState.update { it.copy(isLoading = true, error = null) }
+
+            // An unchanged avatar keeps the URL already on the profile.
+            val imageUrl = imageUri?.let { uri ->
+                storageRepository.uploadProfileImage(user.id, uri).fold(
+                    onSuccess = { it },
+                    onFailure = { e ->
+                        _uiState.update {
+                            it.copy(isLoading = false, error = e.message ?: "Couldn't upload your photo")
+                        }
+                        return@launch
+                    }
+                )
+            } ?: user.profileImageUrl
+
+            val updated = user.copy(
+                displayName = displayName,
+                username = username,
+                bio = bio,
+                profileImageUrl = imageUrl
+            )
             userRepository.updateUser(updated).fold(
                 onSuccess = { _uiState.update { it.copy(user = updated, isLoading = false) } },
                 onFailure = { e -> _uiState.update { it.copy(error = e.message, isLoading = false) } }

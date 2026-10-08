@@ -6,6 +6,7 @@ import com.eleazar.localhive.data.repository.EstateRepositoryImpl
 import com.eleazar.localhive.data.repository.MessageRepositoryImpl
 import com.eleazar.localhive.data.repository.NotificationRepositoryImpl
 import com.eleazar.localhive.data.repository.PostRepositoryImpl
+import com.eleazar.localhive.data.repository.StorageRepositoryImpl
 import com.eleazar.localhive.data.repository.UserRepositoryImpl
 import com.eleazar.localhive.domain.AppSettingsRepository
 import com.eleazar.localhive.domain.AuthRepository
@@ -13,6 +14,7 @@ import com.eleazar.localhive.domain.EstateRepository
 import com.eleazar.localhive.domain.MessageRepository
 import com.eleazar.localhive.domain.NotificationRepository
 import com.eleazar.localhive.domain.PostRepository
+import com.eleazar.localhive.domain.StorageRepository
 import com.eleazar.localhive.domain.UserRepository
 import dagger.Binds
 import dagger.Module
@@ -41,6 +43,9 @@ abstract class RepositoryModule {
 
     @Binds @Singleton
     abstract fun bindNotificationRepository(impl: NotificationRepositoryImpl): NotificationRepository
+
+    @Binds @Singleton
+    abstract fun bindStorageRepository(impl: StorageRepositoryImpl): StorageRepository
 
     @Binds @Singleton
     abstract fun bindAppSettingsRepository(impl: AppSettingsRepositoryImpl): AppSettingsRepository

@@ -23,6 +23,7 @@ data class MessagesUiState(
     val hasMoreMessages: Boolean = true,
     val currentUserId: String? = null,
     val currentUserName: String? = null,
+    val totalUnread: Int = 0,
     val newChatId: String? = null,
     val error: String? = null
 )
@@ -64,7 +65,14 @@ class MessagesViewModel @Inject constructor(
         viewModelScope.launch {
             messageRepository.getChats(userId)
                 .catch { e -> _uiState.update { it.copy(error = e.message) } }
-                .collect { chats -> _uiState.update { it.copy(chats = chats) } }
+                .collect { chats ->
+                    _uiState.update {
+                        it.copy(
+                            chats = chats,
+                            totalUnread = chats.sumOf { chat -> chat.unreadFor(userId) }
+                        )
+                    }
+                }
         }
     }
 
@@ -111,6 +119,19 @@ class MessagesViewModel @Inject constructor(
         liveMessages.forEach { merged[it.id] = it }
         olderMessages.forEach { merged.putIfAbsent(it.id, it) }
         return merged.values.sortedByDescending { it.timestamp }
+    }
+
+    /**
+     * Called when a chat is on screen, including as new messages land in it, so the
+     * badge does not reappear for a conversation the user is already reading.
+     */
+    fun markChatRead(chatId: String) {
+        val userId = _uiState.value.currentUserId ?: return
+        val chat = _uiState.value.chats.find { it.id == chatId }
+        if (chat != null && chat.unreadFor(userId) == 0) return
+        viewModelScope.launch {
+            messageRepository.markChatRead(chatId, userId)
+        }
     }
 
     fun sendMessage(chatId: String, content: String) {

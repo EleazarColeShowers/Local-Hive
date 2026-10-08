@@ -11,10 +11,10 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eleazar.localhive.domain.AppSettingsRepository
 import com.eleazar.localhive.domain.ThemeMode
 import com.eleazar.localhive.ui.navigation.LocalHiveNavGraph
@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            val themeMode by appSettingsRepository.themeMode.collectAsState()
+            val themeMode by appSettingsRepository.themeMode.collectAsStateWithLifecycle()
             val darkTheme = when (themeMode) {
                 ThemeMode.DARK -> true
                 ThemeMode.LIGHT -> false

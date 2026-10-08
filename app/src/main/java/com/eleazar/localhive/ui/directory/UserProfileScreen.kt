@@ -1,7 +1,6 @@
 package com.eleazar.localhive.ui.directory
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -10,13 +9,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eleazar.localhive.R
+import com.eleazar.localhive.ui.components.Avatar
 import com.eleazar.localhive.ui.messages.MessagesViewModel
 
 
@@ -29,8 +29,8 @@ fun UserProfileScreen(
     directoryViewModel: DirectoryViewModel = hiltViewModel(),
     messagesViewModel: MessagesViewModel = hiltViewModel()
 ) {
-    val directoryState by directoryViewModel.uiState.collectAsState()
-    val messagesState by messagesViewModel.uiState.collectAsState()
+    val directoryState by directoryViewModel.uiState.collectAsStateWithLifecycle()
+    val messagesState by messagesViewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(userId) {
         directoryViewModel.loadUserProfile(userId)
@@ -65,18 +65,11 @@ fun UserProfileScreen(
                 modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Surface(
-                    modifier = Modifier.size(88.dp).clip(CircleShape),
-                    color = colorResource(id = R.color.hivegreen).copy(alpha = 0.15f)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = (user.displayName ?: user.username ?: "?").firstOrNull()?.uppercase() ?: "?",
-                            fontWeight = FontWeight.Bold, fontSize = 32.sp,
-                            color = colorResource(id = R.color.hivegreen)
-                        )
-                    }
-                }
+                Avatar(
+                    imageUrl = user.profileImageUrl,
+                    name = user.displayName ?: user.username,
+                    size = 88.dp
+                )
 
                 Spacer(Modifier.height(16.dp))
                 Text(user.displayName ?: user.username ?: "Neighbor", fontWeight = FontWeight.Bold, fontSize = 22.sp)

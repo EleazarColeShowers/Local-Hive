@@ -1,19 +1,30 @@
 package com.eleazar.localhive.ui.auth
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.eleazar.localhive.R
 
 @Composable
@@ -23,8 +34,13 @@ fun ProfileSetUpScreen(
 ) {
     var displayName by remember { mutableStateOf("") }
     var bio by remember { mutableStateOf("") }
+    var imageUri by remember { mutableStateOf<Uri?>(null) }
 
-    val uiState by viewModel.uiState.collectAsState()
+    val photoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri -> uri?.let { imageUri = it } }
+
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(uiState.isDone) {
         if (uiState.isDone) onProfileComplete()
@@ -51,7 +67,46 @@ fun ProfileSetUpScreen(
             Text(
                 text = "Tell your neighbors a little about yourself",
                 fontSize = 15.sp, color = colorResource(id = R.color.darkgray).copy(alpha = 0.7f),
-                textAlign = TextAlign.Center, modifier = Modifier.padding(bottom = 36.dp)
+                textAlign = TextAlign.Center, modifier = Modifier.padding(bottom = 24.dp)
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(104.dp)
+                    .clip(CircleShape)
+                    .border(2.dp, colorResource(id = R.color.hivegreen).copy(alpha = 0.4f), CircleShape)
+                    .background(Color.White)
+                    .clickable {
+                        photoPicker.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                val uri = imageUri
+                if (uri == null) {
+                    Text(
+                        "Add\nphoto",
+                        textAlign = TextAlign.Center,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = colorResource(id = R.color.hivegreen)
+                    )
+                } else {
+                    AsyncImage(
+                        model = uri,
+                        contentDescription = "Profile photo",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+            }
+
+            Text(
+                text = "Optional",
+                fontSize = 12.sp,
+                color = colorResource(id = R.color.darkgray).copy(alpha = 0.5f),
+                modifier = Modifier.padding(top = 8.dp, bottom = 24.dp)
             )
 
             OutlinedTextField(
@@ -74,7 +129,7 @@ fun ProfileSetUpScreen(
             }
 
             Button(
-                onClick = { viewModel.saveProfile(displayName, bio) },
+                onClick = { viewModel.saveProfile(displayName, bio, imageUri) },
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 enabled = displayName.isNotBlank() && !uiState.isLoading,
                 shape = RoundedCornerShape(16.dp),

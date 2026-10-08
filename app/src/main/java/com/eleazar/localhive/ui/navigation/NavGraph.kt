@@ -136,7 +136,8 @@ fun LocalHiveNavGraph(navController: NavHostController = rememberNavController()
 
         composable(
             route = Screen.ChatDetail.route,
-            arguments = listOf(navArgument("chatId") { type = NavType.StringType })
+            arguments = listOf(navArgument("chatId") { type = NavType.StringType }),
+            deepLinks = listOf(navDeepLink { uriPattern = "localhive://chat/{chatId}" })
         ) { backStackEntry ->
             val chatId = backStackEntry.arguments?.getString("chatId") ?: ""
             ChatDetailScreen(chatId = chatId, onNavigateBack = { navController.navigateUp() })

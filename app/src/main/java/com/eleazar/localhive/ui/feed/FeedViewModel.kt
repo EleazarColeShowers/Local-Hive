@@ -1,9 +1,11 @@
 package com.eleazar.localhive.ui.feed
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eleazar.localhive.domain.AuthRepository
 import com.eleazar.localhive.domain.PostRepository
+import com.eleazar.localhive.domain.StorageRepository
 import com.eleazar.localhive.domain.UserRepository
 import com.eleazar.localhive.domain.model.Comment
 import com.eleazar.localhive.domain.model.Post
@@ -23,6 +25,7 @@ data class FeedUiState(
     val error: String? = null,
     val currentUserId: String? = null,
     val currentUserName: String? = null,
+    val currentUserImageUrl: String? = null,
     val estateId: String? = null,
     val selectedPost: Post? = null,
     val comments: List<Comment> = emptyList(),
@@ -36,7 +39,8 @@ private const val POST_PAGE_SIZE = 20L
 class FeedViewModel @Inject constructor(
     private val postRepository: PostRepository,
     private val authRepository: AuthRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val storageRepository: StorageRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(FeedUiState())
@@ -54,7 +58,13 @@ class FeedViewModel @Inject constructor(
         _uiState.update { it.copy(currentUserId = userId) }
         viewModelScope.launch {
             userRepository.getUser(userId).onSuccess { user ->
-                _uiState.update { it.copy(currentUserName = user.displayName ?: user.username, estateId = user.estateId) }
+                _uiState.update {
+                    it.copy(
+                        currentUserName = user.displayName ?: user.username,
+                        currentUserImageUrl = user.profileImageUrl,
+                        estateId = user.estateId
+                    )
+                }
                 user.estateId?.let { loadPosts(it) }
             }
         }
@@ -103,17 +113,33 @@ class FeedViewModel @Inject constructor(
         return merged.values.sortedByDescending { it.createdAt }
     }
 
-    fun createPost(content: String) {
+    fun createPost(content: String, imageUri: Uri? = null) {
         val state = _uiState.value
         val estateId = state.estateId ?: return
         val userId = state.currentUserId ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isPosting = true, error = null) }
+
+            // Upload first: a post that referenced a failed upload would render a broken image.
+            val imageUrl = imageUri?.let { uri ->
+                storageRepository.uploadPostImage(userId, uri).fold(
+                    onSuccess = { it },
+                    onFailure = { e ->
+                        _uiState.update {
+                            it.copy(isPosting = false, error = e.message ?: "Couldn't upload the photo")
+                        }
+                        return@launch
+                    }
+                )
+            }
+
             val post = Post(
                 authorId = userId,
                 authorName = state.currentUserName ?: "Neighbor",
+                authorImageUrl = state.currentUserImageUrl,
                 estateId = estateId,
                 content = content,
+                imageUrl = imageUrl,
                 createdAt = System.currentTimeMillis()
             )
             postRepository.createPost(post)

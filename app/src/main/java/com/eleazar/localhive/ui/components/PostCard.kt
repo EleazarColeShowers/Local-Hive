@@ -13,10 +13,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.eleazar.localhive.R
 import com.eleazar.localhive.domain.model.Post
 import java.text.SimpleDateFormat
@@ -44,18 +46,7 @@ fun PostCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    modifier = Modifier.size(40.dp).clip(CircleShape),
-                    color = colorResource(id = R.color.hivegreen).copy(alpha = 0.2f)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = (post.authorName.firstOrNull() ?: "?").toString().uppercase(),
-                            fontWeight = FontWeight.Bold,
-                            color = colorResource(id = R.color.hivegreen)
-                        )
-                    }
-                }
+                Avatar(imageUrl = post.authorImageUrl, name = post.authorName, size = 40.dp)
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
                     Text(text = post.authorName, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
@@ -69,6 +60,20 @@ fun PostCard(
 
             Spacer(modifier = Modifier.height(12.dp))
             Text(text = post.content, fontSize = 15.sp, lineHeight = 22.sp)
+
+            post.imageUrl?.takeIf { it.isNotBlank() }?.let { imageUrl ->
+                Spacer(modifier = Modifier.height(12.dp))
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = "Post photo",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 280.dp)
+                        .clip(RoundedCornerShape(10.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            }
+
             Spacer(modifier = Modifier.height(12.dp))
 
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))

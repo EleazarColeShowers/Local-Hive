@@ -29,6 +29,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="localhive" android:host="join" />
                 <data android:scheme="localhive" android:host="notifications" />
+                <data android:scheme="localhive" android:host="chat" />
             </intent-filter>
         </activity>
 

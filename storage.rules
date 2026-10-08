@@ -1,0 +1,32 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isImageWithin(maxBytes) {
+      return request.resource != null
+             && request.resource.contentType.matches('image/.*')
+             && request.resource.size < maxBytes;
+    }
+
+    // Uploads are namespaced by uploader so the rule can tie a file to its owner.
+    match /profileImages/{userId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId && isImageWithin(5 * 1024 * 1024);
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /postImages/{userId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId && isImageWithin(10 * 1024 * 1024);
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /{allOther=**} {
+      allow read, write: if false;
+    }
+  }
+}

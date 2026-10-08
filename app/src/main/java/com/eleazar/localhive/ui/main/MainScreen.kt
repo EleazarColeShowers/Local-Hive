@@ -10,13 +10,13 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -28,6 +28,7 @@ import com.eleazar.localhive.ui.directory.DirectoryScreen
 import com.eleazar.localhive.ui.feed.CreatePostScreen
 import com.eleazar.localhive.ui.feed.FeedScreen
 import com.eleazar.localhive.ui.messages.MessagesScreen
+import com.eleazar.localhive.ui.messages.MessagesViewModel
 import com.eleazar.localhive.ui.navigation.Screen
 import com.eleazar.localhive.ui.notifications.NotificationViewModel
 import com.eleazar.localhive.ui.profile.ProfileScreen
@@ -37,7 +38,11 @@ import com.eleazar.localhive.ui.profile.ProfileScreen
 fun MainScreen(navController: NavHostController) {
     val bottomNavController = rememberNavController()
     val notificationViewModel: NotificationViewModel = hiltViewModel()
-    val notificationUiState by notificationViewModel.uiState.collectAsState()
+    val notificationUiState by notificationViewModel.uiState.collectAsStateWithLifecycle()
+
+    // Hoisted so the tab badge and the Messages tab share one chats listener.
+    val messagesViewModel: MessagesViewModel = hiltViewModel()
+    val messagesUiState by messagesViewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -68,7 +73,12 @@ fun MainScreen(navController: NavHostController) {
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         },
-        bottomBar = { BottomNavigationBar(bottomNavController) },
+        bottomBar = {
+            BottomNavigationBar(
+                navController = bottomNavController,
+                unreadMessages = messagesUiState.totalUnread
+            )
+        },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { navController.navigate("create_post") },
@@ -97,7 +107,8 @@ fun MainScreen(navController: NavHostController) {
             }
             composable(Screen.Messages.route) {
                 MessagesScreen(
-                    onChatClick = { chatId -> navController.navigate(Screen.ChatDetail.createRoute(chatId)) }
+                    onChatClick = { chatId -> navController.navigate(Screen.ChatDetail.createRoute(chatId)) },
+                    viewModel = messagesViewModel
                 )
             }
             composable(Screen.Profile.route) {
@@ -113,12 +124,12 @@ fun MainScreen(navController: NavHostController) {
 }
 
 @Composable
-fun BottomNavigationBar(navController: NavHostController) {
+fun BottomNavigationBar(navController: NavHostController, unreadMessages: Int = 0) {
     val items = listOf(
         BottomNavItem("Feed", Icons.Default.Home, Screen.Feed.route),
         BottomNavItem("Directory", Icons.Default.Person, Screen.Directory.route),
         BottomNavItem("", Icons.Default.Add, ""),
-        BottomNavItem("Messages", Icons.Default.Email, Screen.Messages.route),
+        BottomNavItem("Messages", Icons.Default.Email, Screen.Messages.route, badgeCount = unreadMessages),
         BottomNavItem("Profile", Icons.Default.Person, Screen.Profile.route)
     )
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -133,7 +144,19 @@ fun BottomNavigationBar(navController: NavHostController) {
                 Spacer(modifier = Modifier.weight(1f))
             } else {
                 NavigationBarItem(
-                    icon = { Icon(item.icon, contentDescription = item.label) },
+                    icon = {
+                        BadgedBox(
+                            badge = {
+                                if (item.badgeCount > 0) {
+                                    Badge(containerColor = colorResource(id = R.color.hivegreen)) {
+                                        Text(if (item.badgeCount > 99) "99+" else "${item.badgeCount}")
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(item.icon, contentDescription = item.label)
+                        }
+                    },
                     label = { Text(item.label) },
                     selected = currentRoute == item.route,
                     onClick = {
@@ -156,4 +179,9 @@ fun BottomNavigationBar(navController: NavHostController) {
     }
 }
 
-data class BottomNavItem(val label: String, val icon: ImageVector, val route: String)
+data class BottomNavItem(
+    val label: String,
+    val icon: ImageVector,
+    val route: String,
+    val badgeCount: Int = 0
+)

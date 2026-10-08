@@ -3,6 +3,8 @@ package com.eleazar.localhive.data.repository
 import com.eleazar.localhive.domain.MessageRepository
 import com.eleazar.localhive.domain.model.Chat
 import com.eleazar.localhive.domain.model.Message
+import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.channels.awaitClose
@@ -22,9 +24,7 @@ class MessageRepositoryImpl @Inject constructor(
             .limit(limit)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) { close(error); return@addSnapshotListener }
-                val chats = snapshot?.documents?.mapNotNull { doc ->
-                    doc.toObject(Chat::class.java)?.copy(id = doc.id)
-                } ?: emptyList()
+                val chats = snapshot?.documents?.mapNotNull { mapDocToChat(it) } ?: emptyList()
                 trySend(chats)
             }
         awaitClose { listener.remove() }
@@ -65,12 +65,38 @@ class MessageRepositoryImpl @Inject constructor(
 
     override suspend fun sendMessage(message: Message): Result<Unit> {
         return try {
-            val ref = firestore.collection("chats").document(message.chatId)
-                .collection("messages").document()
-            ref.set(message.copy(id = ref.id).toMap()).await()
-            firestore.collection("chats").document(message.chatId).update(
-                mapOf("lastMessage" to message.content, "lastMessageTime" to message.timestamp)
-            ).await()
+            val chatRef = firestore.collection("chats").document(message.chatId)
+            val chatDoc = chatRef.get().await()
+            val participants = (chatDoc.get("participants") as? List<*>)?.filterIsInstance<String>()
+                ?: throw Exception("Chat not found")
+
+            val messageRef = chatRef.collection("messages").document()
+
+            // One batch, so a message can never land without its chat summary following it.
+            val batch = firestore.batch()
+            batch.set(messageRef, message.copy(id = messageRef.id).toMap())
+
+            val chatUpdates = mutableMapOf<String, Any>(
+                "lastMessage" to message.content,
+                "lastMessageTime" to message.timestamp,
+                "lastMessageSenderId" to message.senderId
+            )
+            participants.filter { it != message.senderId }.forEach { recipientId ->
+                chatUpdates["unreadCounts.$recipientId"] = FieldValue.increment(1)
+            }
+            batch.update(chatRef, chatUpdates)
+
+            batch.commit().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun markChatRead(chatId: String, userId: String): Result<Unit> {
+        return try {
+            firestore.collection("chats").document(chatId)
+                .update("unreadCounts.$userId", 0).await()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -92,7 +118,8 @@ class MessageRepositoryImpl @Inject constructor(
                     participants = listOf(currentUserId, otherUserId),
                     participantNames = mapOf(currentUserId to currentUserName, otherUserId to otherUserName),
                     lastMessage = "",
-                    lastMessageTime = System.currentTimeMillis()
+                    lastMessageTime = System.currentTimeMillis(),
+                    unreadCounts = mapOf(currentUserId to 0, otherUserId to 0)
                 )
                 firestore.collection("chats").document(chatId).set(chat.toMap()).await()
             }
@@ -102,11 +129,49 @@ class MessageRepositoryImpl @Inject constructor(
         }
     }
 
+    /**
+     * Mapped by hand rather than via toObject: Firestore hands back every number as a Long,
+     * which a generic Map<String, Int> would happily accept and then blow up on at read.
+     */
+    private fun mapDocToChat(doc: DocumentSnapshot): Chat? {
+        return try {
+            val unread = (doc.get("unreadCounts") as? Map<*, *>)
+                ?.mapNotNull { (key, value) ->
+                    val userId = key as? String ?: return@mapNotNull null
+                    val count = (value as? Number)?.toInt() ?: return@mapNotNull null
+                    userId to count
+                }
+                ?.toMap()
+                ?: emptyMap()
+
+            Chat(
+                id = doc.id,
+                participants = (doc.get("participants") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                participantNames = (doc.get("participantNames") as? Map<*, *>)
+                    ?.mapNotNull { (key, value) ->
+                        val userId = key as? String ?: return@mapNotNull null
+                        val name = value as? String ?: return@mapNotNull null
+                        userId to name
+                    }
+                    ?.toMap()
+                    ?: emptyMap(),
+                lastMessage = doc.getString("lastMessage") ?: "",
+                lastMessageTime = doc.getLong("lastMessageTime") ?: 0L,
+                lastMessageSenderId = doc.getString("lastMessageSenderId") ?: "",
+                unreadCounts = unread
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private fun Chat.toMap() = mapOf(
         "participants" to participants,
         "participantNames" to participantNames,
         "lastMessage" to lastMessage,
-        "lastMessageTime" to lastMessageTime
+        "lastMessageTime" to lastMessageTime,
+        "lastMessageSenderId" to lastMessageSenderId,
+        "unreadCounts" to unreadCounts
     )
 
     private fun Message.toMap() = mapOf(

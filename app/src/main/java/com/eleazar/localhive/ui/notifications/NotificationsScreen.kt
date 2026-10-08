@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eleazar.localhive.R
 import com.eleazar.localhive.domain.model.AppNotification
 import com.eleazar.localhive.domain.model.NotificationType
@@ -38,7 +39,7 @@ fun NotificationsScreen(
     onNavigateToEstateAdmin: (String) -> Unit,
     viewModel: NotificationViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val dark = colorResource(id = R.color.darkgray)
     val green = colorResource(id = R.color.hivegreen)
 

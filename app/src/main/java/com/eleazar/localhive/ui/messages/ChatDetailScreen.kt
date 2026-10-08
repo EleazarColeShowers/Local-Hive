@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eleazar.localhive.R
 import com.eleazar.localhive.domain.model.Chat
 
@@ -28,11 +29,16 @@ fun ChatDetailScreen(
     viewModel: MessagesViewModel = hiltViewModel()
 ) {
     var messageText by remember { mutableStateOf("") }
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
     LaunchedEffect(chatId) {
         viewModel.loadMessages(chatId)
+    }
+
+    // Re-runs as messages arrive, so a conversation being read never re-badges itself.
+    LaunchedEffect(chatId, uiState.messages.firstOrNull()?.id, uiState.chats) {
+        viewModel.markChatRead(chatId)
     }
 
     // Messages are newest-first with a reversed LazyColumn, so index 0 is the visual bottom.

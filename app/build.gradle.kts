@@ -44,6 +44,12 @@ android {
     }
 }
 
+// Kotlin 2.0.x cannot parse the version string of JDK 22+, so the build fails on a
+// machine whose default JDK is newer. Pinning the toolchain keeps builds reproducible.
+kotlin {
+    jvmToolchain(17)
+}
+
 dependencies {
     implementation(libs.androidx.core.splashscreen)
     // Room
@@ -66,6 +72,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation(libs.androidx.activity.compose)
 
     // Compose

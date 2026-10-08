@@ -50,12 +50,24 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         if (!appSettingsRepository.pushNotificationsEnabled.value) return
 
-        remoteMessage.notification?.let {
-            showNotification(it.title, it.body)
-        }
+        // The backend sends data-only payloads so this runs in the background too and the
+        // in-app toggle above is always honoured. A `notification` block would instead be
+        // drawn by the system tray while the app is backgrounded, bypassing the check.
+        val data = remoteMessage.data
+        val title = data["title"] ?: remoteMessage.notification?.title
+        val body = data["body"] ?: remoteMessage.notification?.body
+        if (title == null && body == null) return
+
+        showNotification(
+            title = title,
+            message = body,
+            deepLink = data["deepLink"] ?: DEFAULT_DEEP_LINK,
+            // One entry per conversation or event rather than a single overwritten slot.
+            tag = data["tag"] ?: remoteMessage.messageId ?: DEFAULT_DEEP_LINK
+        )
     }
 
-    private fun showNotification(title: String?, message: String?) {
+    private fun showNotification(title: String?, message: String?, deepLink: String, tag: String) {
         val channelId = "fcm_channel"
 
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -71,11 +83,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         val contentIntent = Intent(this, MainActivity::class.java).apply {
             action = Intent.ACTION_VIEW
-            data = Uri.parse("localhive://notifications")
+            data = Uri.parse(deepLink)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
+        // Distinct request codes keep each deep link on its own PendingIntent.
         val pendingIntent = PendingIntent.getActivity(
-            this, 0, contentIntent,
+            this, tag.hashCode(), contentIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -88,6 +101,10 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             .setAutoCancel(true)
             .build()
 
-        manager.notify(1, notification)
+        manager.notify(tag, tag.hashCode(), notification)
+    }
+
+    private companion object {
+        const val DEFAULT_DEEP_LINK = "localhive://notifications"
     }
 }

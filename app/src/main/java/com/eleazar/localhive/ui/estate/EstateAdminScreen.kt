@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.eleazar.localhive.R
 import com.eleazar.localhive.domain.model.JoinRequest
@@ -38,7 +39,7 @@ fun EstateAdminScreen(
     onBack: () -> Unit,
     viewModel: EstateViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var selectedTab by remember { mutableIntStateOf(0) }
     val adminIds = uiState.estate?.adminIds ?: emptyList()
     val currentUserId = remember { viewModel.getCurrentUserId() ?: "" }
