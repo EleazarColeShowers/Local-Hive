@@ -15,14 +15,15 @@ import com.eleazar.localhive.ui.auth.ProfileSetUpScreen
 import com.eleazar.localhive.ui.auth.SignupScreen
 import com.eleazar.localhive.ui.auth.SplashScreen
 import com.eleazar.localhive.ui.directory.UserProfileScreen
-import com.eleazar.localhive.ui.estate.EstateAdminScreen
-import com.eleazar.localhive.ui.estate.EstateSelectionScreen
-import com.eleazar.localhive.ui.estate.JoinEstateScreen
+import com.eleazar.localhive.ui.estate.EstateAdminRoute
+import com.eleazar.localhive.ui.estate.EstateSelectionRoute
+import com.eleazar.localhive.ui.estate.JoinEstateRoute
 import com.eleazar.localhive.ui.feed.CreatePostScreen
 import com.eleazar.localhive.ui.feed.PostDetailScreen
 import com.eleazar.localhive.ui.main.MainScreen
 import com.eleazar.localhive.ui.messages.ChatDetailScreen
-import com.eleazar.localhive.ui.notifications.NotificationsScreen
+import com.eleazar.localhive.ui.notifications.NotificationRoute
+import com.eleazar.localhive.ui.settings.SettingsRoute
 import com.eleazar.localhive.ui.settings.SettingsScreen
 
 @Composable
@@ -109,7 +110,7 @@ fun LocalHiveNavGraph(navController: NavHostController = rememberNavController()
         }
 
         composable(Screen.EstateSelection.route) {
-            EstateSelectionScreen(
+            EstateSelectionRoute(
                 onEstateJoined = {
                     navController.navigate(Screen.Main.route) {
                         popUpTo(0) { inclusive = true }
@@ -152,7 +153,7 @@ fun LocalHiveNavGraph(navController: NavHostController = rememberNavController()
             deepLinks = listOf(navDeepLink { uriPattern = "localhive://join/{inviteCode}" })
         ) { backStackEntry ->
             val code = backStackEntry.arguments?.getString("inviteCode") ?: ""
-            JoinEstateScreen(
+            JoinEstateRoute(
                 initialCode = code,
                 onSuccess = {
                     navController.navigate(Screen.Main.route) { popUpTo(0) { inclusive = true } }
@@ -180,7 +181,7 @@ fun LocalHiveNavGraph(navController: NavHostController = rememberNavController()
             arguments = listOf(navArgument("estateId") { type = NavType.StringType })
         ) { backStackEntry ->
             val estateId = backStackEntry.arguments?.getString("estateId") ?: ""
-            EstateAdminScreen(
+            EstateAdminRoute(
                 estateId = estateId,
                 onBack = { navController.navigateUp() }
             )
@@ -190,7 +191,7 @@ fun LocalHiveNavGraph(navController: NavHostController = rememberNavController()
             route = Screen.Notifications.route,
             deepLinks = listOf(navDeepLink { uriPattern = "localhive://notifications" })
         ) {
-            NotificationsScreen(
+            NotificationRoute(
                 onBack = { navController.navigateUp() },
                 onNavigateToEstateAdmin = { estateId ->
                     navController.navigate(Screen.EstateAdmin.createRoute(estateId))
@@ -199,7 +200,7 @@ fun LocalHiveNavGraph(navController: NavHostController = rememberNavController()
         }
 
         composable(Screen.Settings.route) {
-            SettingsScreen(
+            SettingsRoute(
                 onBack = { navController.navigateUp() },
                 onLoggedOut = {
                     navController.navigate(Screen.Splash.route) {

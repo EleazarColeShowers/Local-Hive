@@ -51,6 +51,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":shared"))
     implementation(libs.androidx.core.splashscreen)
     // Room
     val roomVersion = "2.6.1"
@@ -81,6 +82,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation("androidx.compose.material:material-icons-extended")
 
     // Coil
     implementation(libs.coil.compose)

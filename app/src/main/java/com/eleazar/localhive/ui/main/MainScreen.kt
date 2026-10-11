@@ -25,13 +25,12 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.eleazar.localhive.R
 import com.eleazar.localhive.ui.directory.DirectoryScreen
-import com.eleazar.localhive.ui.feed.CreatePostScreen
 import com.eleazar.localhive.ui.feed.FeedScreen
 import com.eleazar.localhive.ui.messages.MessagesScreen
 import com.eleazar.localhive.ui.messages.MessagesViewModel
 import com.eleazar.localhive.ui.navigation.Screen
 import com.eleazar.localhive.ui.notifications.NotificationViewModel
-import com.eleazar.localhive.ui.profile.ProfileScreen
+import com.eleazar.localhive.ui.profile.ProfileRoute
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -112,7 +111,7 @@ fun MainScreen(navController: NavHostController) {
                 )
             }
             composable(Screen.Profile.route) {
-                ProfileScreen(
+                ProfileRoute(
                     onSettings = { navController.navigate(Screen.Settings.route) },
                     onAdminPanel = { estateId ->
                         navController.navigate(Screen.EstateAdmin.createRoute(estateId))
