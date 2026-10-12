@@ -19,11 +19,7 @@ fun NotificationRoute(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    val colors = NotificationColors(
-        darkGray = colorResource(id = R.color.darkgray),
-        hiveGreen = colorResource(id = R.color.hivegreen),
-        lightGold = colorResource(id = R.color.lightgold)
-    )
+    val colors = rememberNotificationColors()
 
     NotificationScreen(
         notifications = uiState.notifications,

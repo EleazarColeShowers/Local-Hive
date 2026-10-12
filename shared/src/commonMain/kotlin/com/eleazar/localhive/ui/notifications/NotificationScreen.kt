@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -45,8 +46,20 @@ import com.eleazar.localhive.domain.model.NotificationType
 data class NotificationColors(
     val darkGray: Color = Color(0xFF2C2C2C),
     val hiveGreen: Color = Color(0xFF4CAF50),
-    val lightGold: Color = Color(0xFFFFF9C4)
+    val lightGold: Color = Color(0xFFFFF9C4),
+    val cardBackground: Color = Color.White
 )
+
+@Composable
+fun rememberNotificationColors(): NotificationColors {
+    val colorScheme = androidx.compose.material3.MaterialTheme.colorScheme
+    return NotificationColors(
+        darkGray = colorScheme.onBackground,
+        hiveGreen = colorScheme.primary,
+        lightGold = colorScheme.surfaceVariant,
+        cardBackground = colorScheme.surface
+    )
+}
 
 /**
  * Bare notification UI. No ViewModel, Android Context, or navigation side effects in here.
@@ -56,7 +69,7 @@ fun NotificationScreen(
     notifications: List<AppNotification>,
     unreadCount: Int,
     error: String?,
-    colors: NotificationColors,
+    colors: NotificationColors = rememberNotificationColors(),
     onBack: () -> Unit,
     onMarkAllAsRead: () -> Unit,
     onNotificationClick: (AppNotification) -> Unit,
@@ -67,7 +80,11 @@ fun NotificationScreen(
     val dark = colors.darkGray
     val green = colors.hiveGreen
 
-    Column(modifier = modifier.fillMaxSize()) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+    ) {
         Row(
             modifier = Modifier
                 .padding(top = 8.dp, start = 4.dp, end = 16.dp)
@@ -159,7 +176,7 @@ private fun NotificationCard(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (notification.isRead) Color.White else colors.lightGold
+            containerColor = if (notification.isRead) colors.cardBackground else colors.lightGold
         ),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {

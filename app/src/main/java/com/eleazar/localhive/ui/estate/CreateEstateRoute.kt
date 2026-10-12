@@ -23,7 +23,9 @@ fun CreateEstateRoute(
     val colors = EstateColors(
         hiveGreen = colorResource(id = R.color.hivegreen),
         backgroundGold = colorResource(id = R.color.backgroundgold),
-        darkGray = colorResource(id = R.color.darkgray)
+        darkGray = colorResource(id = R.color.darkgray),
+        cardBackground = colorResource(id = R.color.card_background),
+        surfaceGradientEnd = colorResource(id = R.color.surface_gradient_end)
     )
 
     CreateEstateScreen(

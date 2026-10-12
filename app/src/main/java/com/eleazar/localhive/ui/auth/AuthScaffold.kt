@@ -112,6 +112,10 @@ fun GlassCard(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val cardBg = if (isDark) Color(0xFF1E1E1E).copy(alpha = 0.92f) else Color.White.copy(alpha = 0.94f)
+    val borderClr = if (isDark) Color.White.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.6f)
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -122,8 +126,8 @@ fun GlassCard(
                 spotColor = Color.Black.copy(alpha = 0.25f)
             )
             .clip(RoundedCornerShape(28.dp))
-            .background(Color.White.copy(alpha = 0.94f))
-            .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
+            .background(cardBg)
+            .border(1.dp, borderClr, RoundedCornerShape(28.dp))
             .padding(28.dp),
         content = content
     )

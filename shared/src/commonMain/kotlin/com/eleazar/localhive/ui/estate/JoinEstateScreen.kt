@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -63,7 +64,7 @@ fun JoinEstateScreen(
     requestedEstateIds: Set<String>,
     isLoading: Boolean,
     error: String?,
-    colors: EstateColors,
+    colors: EstateColors = rememberEstateColors(),
     onBack: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onRequestJoin: (estateId: String) -> Unit,
@@ -77,11 +78,13 @@ fun JoinEstateScreen(
     val green = colors.hiveGreen
     val gold = colors.backgroundGold
     val dark = colors.darkGray
+    val cardBg = colors.cardBackground
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(gold, Color(0xFFFFF8E7))))
+            .statusBarsPadding()
+            .background(Brush.verticalGradient(listOf(gold, colors.surfaceGradientEnd)))
     ) {
         Row(
             modifier = Modifier.padding(top = 8.dp, start = 4.dp, end = 16.dp),
@@ -148,7 +151,8 @@ fun JoinEstateScreen(
                 requestedEstateIds = requestedEstateIds,
                 onRequestJoin = onRequestJoin,
                 dark = dark,
-                green = green
+                green = green,
+                cardBg = cardBg
             )
             1 -> InviteCodeTab(
                 code = inviteCode,
@@ -157,7 +161,8 @@ fun JoinEstateScreen(
                 isLoading = isLoading,
                 error = error,
                 dark = dark,
-                green = green
+                green = green,
+                cardBg = cardBg
             )
         }
     }
@@ -172,7 +177,8 @@ private fun SearchTab(
     requestedEstateIds: Set<String>,
     onRequestJoin: (String) -> Unit,
     dark: Color,
-    green: Color
+    green: Color,
+    cardBg: Color
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         OutlinedTextField(
@@ -187,8 +193,10 @@ private fun SearchTab(
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = green,
                 unfocusedBorderColor = dark.copy(alpha = 0.2f),
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
+                focusedTextColor = dark,
+                unfocusedTextColor = dark,
+                focusedContainerColor = cardBg,
+                unfocusedContainerColor = cardBg,
                 cursorColor = green
             )
         )
@@ -224,7 +232,8 @@ private fun SearchTab(
                         hasRequested = estate.id in requestedEstateIds,
                         onRequest = { onRequestJoin(estate.id) },
                         dark = dark,
-                        green = green
+                        green = green,
+                        cardBg = cardBg
                     )
                 }
                 item { Spacer(Modifier.height(16.dp)) }
@@ -239,12 +248,13 @@ private fun EstateSearchCard(
     hasRequested: Boolean,
     onRequest: () -> Unit,
     dark: Color,
-    green: Color
+    green: Color,
+    cardBg: Color
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = cardBg),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Row(
@@ -312,7 +322,8 @@ private fun InviteCodeTab(
     isLoading: Boolean,
     error: String?,
     dark: Color,
-    green: Color
+    green: Color,
+    cardBg: Color
 ) {
     Column(
         modifier = Modifier
@@ -350,9 +361,11 @@ private fun InviteCodeTab(
                 focusedLabelColor = green,
                 unfocusedBorderColor = dark.copy(alpha = 0.25f),
                 unfocusedLabelColor = dark.copy(alpha = 0.5f),
+                focusedTextColor = dark,
+                unfocusedTextColor = dark,
                 cursorColor = green,
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White
+                focusedContainerColor = cardBg,
+                unfocusedContainerColor = cardBg
             )
         )
 

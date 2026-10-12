@@ -34,13 +34,7 @@ fun ProfileRoute(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { pickedImageUri = it } }
 
-    val colors = ProfileColors(
-        hiveGreen = colorResource(id = R.color.hivegreen),
-        honeyGold = colorResource(id = R.color.honeygold),
-        backgroundGold = colorResource(id = R.color.backgroundgold),
-        lightGold = colorResource(id = R.color.lightgold),
-        darkGray = colorResource(id = R.color.darkgray)
-    )
+    val colors = com.eleazar.localhive.ui.profile.rememberProfileColors()
 
     val user = uiState.user
     val estate = uiState.estate

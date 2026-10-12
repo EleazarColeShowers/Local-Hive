@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,7 +50,7 @@ import androidx.compose.ui.unit.sp
 fun CreateEstateScreen(
     isLoading: Boolean,
     error: String?,
-    colors: EstateColors,
+    colors: EstateColors = rememberEstateColors(),
     onCreateEstate: (name: String, address: String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
@@ -60,11 +61,13 @@ fun CreateEstateScreen(
     val green = colors.hiveGreen
     val gold = colors.backgroundGold
     val dark = colors.darkGray
+    val cardBg = colors.cardBackground
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(gold, Color(0xFFFFF8E7))))
+            .statusBarsPadding()
+            .background(Brush.verticalGradient(listOf(gold, colors.surfaceGradientEnd)))
     ) {
         Row(
             modifier = Modifier.padding(top = 8.dp, start = 4.dp, end = 16.dp),
@@ -129,7 +132,7 @@ fun CreateEstateScreen(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
                 shape = RoundedCornerShape(16.dp),
                 singleLine = true,
-                colors = fieldColors(green, dark)
+                colors = fieldColors(green, dark, cardBg)
             )
 
             Text(
@@ -150,7 +153,7 @@ fun CreateEstateScreen(
                 shape = RoundedCornerShape(16.dp),
                 singleLine = false,
                 maxLines = 2,
-                colors = fieldColors(green, dark)
+                colors = fieldColors(green, dark, cardBg)
             )
 
             error?.let {
@@ -187,12 +190,14 @@ fun CreateEstateScreen(
 }
 
 @Composable
-private fun fieldColors(green: Color, dark: Color) = OutlinedTextFieldDefaults.colors(
+private fun fieldColors(green: Color, dark: Color, cardBg: Color) = OutlinedTextFieldDefaults.colors(
     focusedBorderColor = green,
     focusedLabelColor = green,
     unfocusedBorderColor = dark.copy(alpha = 0.2f),
     unfocusedLabelColor = dark.copy(alpha = 0.5f),
+    focusedTextColor = dark,
+    unfocusedTextColor = dark,
     cursorColor = green,
-    focusedContainerColor = Color.White,
-    unfocusedContainerColor = Color.White
+    focusedContainerColor = cardBg,
+    unfocusedContainerColor = cardBg
 )

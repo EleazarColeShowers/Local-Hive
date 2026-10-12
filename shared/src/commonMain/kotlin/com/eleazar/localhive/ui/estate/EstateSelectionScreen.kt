@@ -59,12 +59,13 @@ fun EstateSelectionScreen(
     val green = colors.hiveGreen
     val gold = colors.backgroundGold
     val dark = colors.darkGray
+    val cardBg = colors.cardBackground
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(
-                Brush.verticalGradient(listOf(gold, gold.copy(alpha = 0.85f), Color(0xFFFFF8E7)))
+                Brush.verticalGradient(listOf(gold, gold.copy(alpha = 0.85f), colors.surfaceGradientEnd))
             )
     ) {
         AnimatedContent(
@@ -82,6 +83,7 @@ fun EstateSelectionScreen(
                 SelectionContent(
                     dark = dark,
                     green = green,
+                    cardBg = cardBg,
                     onCreateClick = onCreateClick,
                     onJoinClick = onJoinClick
                 )
@@ -94,6 +96,7 @@ fun EstateSelectionScreen(
 private fun SelectionContent(
     dark: Color,
     green: Color,
+    cardBg: Color,
     onCreateClick: () -> Unit,
     onJoinClick: () -> Unit
 ) {
@@ -152,9 +155,8 @@ private fun SelectionContent(
             icon = Icons.Default.Add,
             title = "Create Estate",
             subtitle = "Start a new community for your neighbourhood",
-            containerColor = Color.White,
+            containerColor = cardBg,
             contentColor = dark,
-            borderColor = green.copy(alpha = 0.3f),
             onClick = onCreateClick
         )
     }
@@ -167,7 +169,6 @@ private fun EstateOptionCard(
     subtitle: String,
     containerColor: Color,
     contentColor: Color,
-    borderColor: Color = Color.Transparent,
     onClick: () -> Unit
 ) {
     Card(

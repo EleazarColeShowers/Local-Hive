@@ -20,6 +20,7 @@ import com.eleazar.localhive.ui.estate.EstateSelectionRoute
 import com.eleazar.localhive.ui.estate.JoinEstateRoute
 import com.eleazar.localhive.ui.feed.CreatePostScreen
 import com.eleazar.localhive.ui.feed.PostDetailScreen
+import com.eleazar.localhive.ui.main.MainRoute
 import com.eleazar.localhive.ui.main.MainScreen
 import com.eleazar.localhive.ui.messages.ChatDetailScreen
 import com.eleazar.localhive.ui.notifications.NotificationRoute
@@ -120,7 +121,7 @@ fun LocalHiveNavGraph(navController: NavHostController = rememberNavController()
         }
 
         composable(Screen.Main.route) {
-            MainScreen(navController = navController)
+            MainRoute(navController = navController)
         }
 
         composable("create_post") {

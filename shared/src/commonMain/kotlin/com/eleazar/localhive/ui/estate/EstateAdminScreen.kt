@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -82,11 +83,12 @@ fun EstateAdminScreen(
     val green = colors.hiveGreen
     val gold = colors.backgroundGold
     val dark = colors.darkGray
+    val cardBg = colors.cardBackground
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(gold, Color(0xFFFFF8E7))))
+            .background(Brush.verticalGradient(listOf(gold, colors.surfaceGradientEnd)))
     ) {
         Row(
             modifier = Modifier.padding(top = 8.dp, start = 4.dp, end = 16.dp),
@@ -173,7 +175,8 @@ fun EstateAdminScreen(
                 onApprove = onApproveRequest,
                 onDeny = onDenyRequest,
                 dark = dark,
-                green = green
+                green = green,
+                cardBg = cardBg
             )
             1 -> MembersTab(
                 members = members,
@@ -181,7 +184,8 @@ fun EstateAdminScreen(
                 currentUserId = currentUserId,
                 onPromote = onPromoteToAdmin,
                 dark = dark,
-                green = green
+                green = green,
+                cardBg = cardBg
             )
         }
     }
@@ -193,7 +197,8 @@ private fun RequestsTab(
     onApprove: (String) -> Unit,
     onDeny: (String) -> Unit,
     dark: Color,
-    green: Color
+    green: Color,
+    cardBg: Color
 ) {
     if (requests.isEmpty()) {
         Box(
@@ -230,7 +235,8 @@ private fun RequestsTab(
                 onApprove = { onApprove(request.userId) },
                 onDeny = { onDeny(request.userId) },
                 dark = dark,
-                green = green
+                green = green,
+                cardBg = cardBg
             )
         }
     }
@@ -242,12 +248,13 @@ private fun JoinRequestCard(
     onApprove: () -> Unit,
     onDeny: () -> Unit,
     dark: Color,
-    green: Color
+    green: Color,
+    cardBg: Color
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = cardBg),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Row(
@@ -288,7 +295,7 @@ private fun JoinRequestCard(
                     modifier = Modifier
                         .size(38.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFFFEEEE))
+                        .background(Color(0xFFE53935).copy(alpha = 0.15f))
                 ) {
                     Icon(Icons.Default.Close, "Deny", tint = Color(0xFFE53935), modifier = Modifier.size(18.dp))
                 }
@@ -313,7 +320,8 @@ private fun MembersTab(
     currentUserId: String,
     onPromote: (String) -> Unit,
     dark: Color,
-    green: Color
+    green: Color,
+    cardBg: Color
 ) {
     if (members.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -333,7 +341,8 @@ private fun MembersTab(
                 canPromote = currentUserId in adminIds && member.id !in adminIds && member.id != currentUserId,
                 onPromote = { onPromote(member.id) },
                 dark = dark,
-                green = green
+                green = green,
+                cardBg = cardBg
             )
         }
     }
@@ -346,14 +355,15 @@ private fun MemberCard(
     canPromote: Boolean,
     onPromote: () -> Unit,
     dark: Color,
-    green: Color
+    green: Color,
+    cardBg: Color
 ) {
     var showConfirm by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = cardBg),
         elevation = CardDefaults.cardElevation(1.dp)
     ) {
         Row(

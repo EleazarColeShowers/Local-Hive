@@ -28,14 +28,15 @@ fun DirectoryScreen(
     viewModel: DirectoryViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val hiveGreen = colorResource(id = R.color.hivegreen)
-    val backgroundGold = colorResource(id = R.color.backgroundgold)
-    val darkGray = colorResource(id = R.color.darkgray)
+    val hiveGreen = MaterialTheme.colorScheme.primary
+    val backgroundGold = MaterialTheme.colorScheme.background
+    val darkGray = MaterialTheme.colorScheme.onBackground
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(backgroundGold)
+            .statusBarsPadding()
             .padding(horizontal = 16.dp)
     ) {
         Spacer(Modifier.height(16.dp))
@@ -61,9 +62,11 @@ fun DirectoryScreen(
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = hiveGreen,
                 unfocusedBorderColor = darkGray.copy(alpha = 0.2f),
+                focusedTextColor = darkGray,
+                unfocusedTextColor = darkGray,
                 cursorColor = hiveGreen,
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White
+                focusedContainerColor = colorResource(id = R.color.card_background),
+                unfocusedContainerColor = colorResource(id = R.color.card_background)
             )
         )
 

@@ -83,6 +83,7 @@ fun SettingsScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .statusBarsPadding()
                 .padding(top = 8.dp, start = 4.dp, end = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
