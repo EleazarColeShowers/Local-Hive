@@ -17,7 +17,8 @@ import javax.inject.Inject
 data class AuthUiState(
     val isLoading: Boolean = false,
     val user: User? = null,
-    val error: String? = null
+    val error: String? = null,
+    val reset: PasswordResetState = PasswordResetState.Idle
 )
 
 @HiltViewModel
@@ -40,6 +41,21 @@ class AuthViewModel @Inject constructor(
                 onFailure = { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
             )
         }
+    }
+
+    fun sendPasswordReset(email: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(reset = PasswordResetState.Sending) }
+            val next = authRepository.sendPasswordReset(email).fold(
+                onSuccess = { PasswordResetState.Sent(email) },
+                onFailure = { e -> PasswordResetState.Failed(e.message ?: "Couldn't send the reset email. Try again.") }
+            )
+            _uiState.update { it.copy(reset = next) }
+        }
+    }
+
+    fun clearPasswordReset() {
+        _uiState.update { it.copy(reset = PasswordResetState.Idle) }
     }
 
     fun signup(email: String, username: String, password: String) {

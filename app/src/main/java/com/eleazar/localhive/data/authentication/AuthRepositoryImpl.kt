@@ -1,17 +1,26 @@
 package com.eleazar.localhive.data.authentication
 
+import com.eleazar.localhive.data.local.dao.UserDao
+import com.eleazar.localhive.data.remote.api.ApiException
+import com.eleazar.localhive.data.remote.api.LocalHiveApi
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.eleazar.localhive.domain.AuthRepository
 import com.eleazar.localhive.domain.model.User
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 class AuthRepositoryImpl @Inject constructor(
     private val firebaseAuth: FirebaseAuth,
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val api: LocalHiveApi,
+    private val userDao: UserDao
 ) : AuthRepository {
 
     override suspend fun signup(email: String, username: String, password: String): Result<User> {
@@ -44,8 +53,49 @@ class AuthRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun sendPasswordReset(email: String): Result<Unit> {
+        return try {
+            firebaseAuth.sendPasswordResetEmail(email).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     override suspend fun logout() {
+        // So pushes for this account stop coming to a phone someone else may sign in on next.
+        // Must happen while still signed in; offline, it gives up rather than hold up logging out.
+        firebaseAuth.currentUser?.uid?.let { uid ->
+            withTimeoutOrNull(5_000) {
+                runCatching {
+                    firestore.collection("users").document(uid).update("fcmToken", FieldValue.delete()).await()
+                }
+            }
+        }
         firebaseAuth.signOut()
+        userDao.clear()
+    }
+
+    override suspend fun deleteAccount(password: String): Result<Unit> {
+        return try {
+            val user = firebaseAuth.currentUser ?: throw Exception("You're not signed in")
+            val email = user.email ?: throw Exception("This account has no email to confirm with")
+            try {
+                user.reauthenticate(EmailAuthProvider.getCredential(email, password)).await()
+            } catch (e: FirebaseAuthInvalidCredentialsException) {
+                throw Exception("That password isn't right")
+            }
+            try {
+                api.deleteAccount()
+            } catch (e: ApiException) {
+                throw Exception(e.message)
+            }
+            firebaseAuth.signOut()
+            userDao.clear()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     override fun getCurrentUserId(): String? = firebaseAuth.currentUser?.uid

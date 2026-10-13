@@ -21,4 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "LocalHive"
 include(":app")
- 
+include(":shared")

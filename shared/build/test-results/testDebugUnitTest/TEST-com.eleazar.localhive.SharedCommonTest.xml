@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.eleazar.localhive.SharedCommonTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-13T15:33:59" hostname="Eleazars-MacBook-Pro.local" time="0.009">
+  <properties/>
+  <testcase name="example" classname="com.eleazar.localhive.SharedCommonTest" time="0.009"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

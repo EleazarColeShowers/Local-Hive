@@ -103,3 +103,27 @@ exports.onMessageCreated = onDocumentCreated(
     });
   }
 );
+
+/** An admin's announcement reaches every member of the estate, not just whoever opens the feed. */
+exports.onAnnouncementCreated = onDocumentCreated(
+  "posts/{postId}",
+  async (event) => {
+    const post = event.data?.data();
+    if (post?.category !== "announcement" || !post.estateId) return;
+
+    // The rules already refuse announcements from non-admins; this guards against
+    // anything written around them (e.g. the console) blasting the whole estate.
+    const estate = await db.collection("estates").doc(post.estateId).get();
+    if (!estate.exists || !(estate.get("adminIds") || []).includes(post.authorId)) return;
+
+    const members = await db.collection("users").where("estateId", "==", post.estateId).get();
+    const recipients = members.docs.map((doc) => doc.id).filter((id) => id !== post.authorId);
+
+    await sendToUsers(recipients, {
+      title: `📣 ${estate.get("name") || "Estate"} announcement`,
+      body: post.content || "Tap to read",
+      deepLink: `localhive://post/${event.params.postId}`,
+      tag: `announcement-${event.params.postId}`,
+    });
+  }
+);

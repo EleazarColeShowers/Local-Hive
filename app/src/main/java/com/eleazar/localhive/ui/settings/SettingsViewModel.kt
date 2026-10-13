@@ -24,7 +24,9 @@ data class SettingsUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val isLoggedOut: Boolean = false,
-    val hasLeftEstate: Boolean = false
+    val hasLeftEstate: Boolean = false,
+    val isDeletingAccount: Boolean = false,
+    val deleteAccountError: String? = null
 )
 
 @HiltViewModel
@@ -91,6 +93,23 @@ class SettingsViewModel @Inject constructor(
             )
         }
     }
+
+    /** On success the user is signed out, so the screen heads back to the start like a logout. */
+    fun deleteAccount(password: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDeletingAccount = true, deleteAccountError = null) }
+            authRepository.deleteAccount(password).fold(
+                onSuccess = { _uiState.update { it.copy(isDeletingAccount = false, isLoggedOut = true) } },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(isDeletingAccount = false, deleteAccountError = e.message ?: "Couldn't delete your account. Try again.")
+                    }
+                }
+            )
+        }
+    }
+
+    fun clearDeleteAccountError() = _uiState.update { it.copy(deleteAccountError = null) }
 
     fun logout() {
         viewModelScope.launch {

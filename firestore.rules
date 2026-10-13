@@ -15,56 +15,170 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys();
     }
 
+    // The estate the caller currently belongs to, or null.
+    function myEstateId() {
+      return get(/databases/$(database)/documents/users/$(uid())).data.get('estateId', null);
+    }
+
+    function isMemberOf(estateId) {
+      return isSignedIn() && estateId != null && myEstateId() == estateId;
+    }
+
     function isEstateAdmin(estateId) {
       return isSignedIn()
              && uid() in get(/databases/$(database)/documents/estates/$(estateId)).data.adminIds;
     }
 
+    // As isEstateAdmin, but sees writes earlier in the same batch — creating an estate
+    // and attaching its creator to it happen together.
+    function isEstateAdminAfter(estateId) {
+      return isSignedIn()
+             && uid() in getAfter(/databases/$(database)/documents/estates/$(estateId)).data.adminIds;
+    }
+
+    // A join request is the only way into an estate besides creating it. Admins approve
+    // requests; a valid invite code lets the requester approve their own.
+    function hasApprovedRequest(estateId, userId) {
+      return getAfter(/databases/$(database)/documents/joinRequests/$(estateId + '_' + userId)).data.status == 'approved';
+    }
+
+    function inviteCodeOpens(code, estateId) {
+      return code is string
+             && get(/databases/$(database)/documents/inviteCodes/$(code)).data.estateId == estateId;
+    }
+
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create, delete: if isSignedIn() && uid() == userId;
-      allow update: if isSignedIn() && (
+      // Neighbours see each other; nobody sees residents of other estates.
+      // Written against resource.data.estateId directly so the directory's
+      // `estateId == X` query can be proven safe as a whole.
+      allow read: if isSignedIn() && (
         uid() == userId
-        // An estate admin approving a join request attaches the member to their estate.
-        // That is the only field they may touch on somebody else's profile.
-        || (changedKeys().hasOnly(['estateId'])
-            && isEstateAdmin(request.resource.data.estateId))
+        || (myEstateId() != null && resource.data.estateId == myEstateId())
       );
+      // New accounts start outside any estate and must join one through the flow below.
+      allow create: if isSignedIn() && uid() == userId
+                    && request.resource.data.get('estateId', null) == null;
+      allow update: if isSignedIn() && (
+        (uid() == userId && (
+          !('estateId' in changedKeys())
+          // Leaving.
+          || request.resource.data.get('estateId', null) == null
+          // Joining: an estate they just created, or one that has let them in.
+          || isEstateAdminAfter(request.resource.data.estateId)
+          || hasApprovedRequest(request.resource.data.estateId, userId)
+        ))
+        // An admin approving a request attaches that requester, and only that requester,
+        // to their estate. It is the only field they may touch on somebody else's profile.
+        || (changedKeys().hasOnly(['estateId'])
+            && isEstateAdmin(request.resource.data.estateId)
+            && hasApprovedRequest(request.resource.data.estateId, userId))
+        // An admin removing a member from their estate. Admins (and so the owner) have to
+        // lose admin first, so one admin can't throw out another in a single step.
+        || (changedKeys().hasOnly(['estateId'])
+            && request.resource.data.get('estateId', null) == null
+            && resource.data.get('estateId', null) is string
+            && isEstateAdmin(resource.data.estateId)
+            && !(userId in get(/databases/$(database)/documents/estates/$(resource.data.estateId)).data.adminIds))
+      );
+      allow delete: if isSignedIn() && uid() == userId;
+
+      // People this user has blocked. Private: the blocked person can't tell.
+      match /blocks/{blockedId} {
+        allow read, delete: if isSignedIn() && uid() == userId;
+        allow create, update: if isSignedIn() && uid() == userId && blockedId != userId;
+      }
     }
 
     match /estates/{estateId} {
+      // Public so people can find an estate to request; invite codes live elsewhere.
       allow read: if isSignedIn();
       // Whoever creates an estate must be an admin of it, so it always has an owner.
-      allow create: if isSignedIn() && uid() in request.resource.data.adminIds;
+      allow create: if isSignedIn()
+                    && request.resource.data.adminIds is list
+                    && uid() in request.resource.data.adminIds
+                    && request.resource.data.ownerId == uid()
+                    && request.resource.data.memberCount == 1
+                    && !('inviteCode' in request.resource.data);
       allow update: if isSignedIn() && (
-        uid() in resource.data.adminIds
-        // Joining or leaving adjusts the member tally and nothing else — in particular
-        // it must not let a member write themselves into adminIds.
-        || changedKeys().hasOnly(['memberCount'])
+        (uid() in resource.data.adminIds
+          && !('inviteCode' in request.resource.data)
+          && ownerKept())
+        // Joining or leaving moves the tally by one and touches nothing else — in
+        // particular a member cannot write themselves into adminIds.
+        || (changedKeys().hasOnly(['memberCount'])
+            && (request.resource.data.memberCount == resource.data.memberCount + 1
+                || request.resource.data.memberCount == resource.data.memberCount - 1))
       );
       allow delete: if isSignedIn() && uid() in resource.data.adminIds;
+
+      // The owner stays an admin no matter what other admins do. Only the owner can change
+      // that, by handing ownership to another admin as they leave.
+      function ownerKept() {
+        let owner = resource.data.get('ownerId', null);
+        let next = request.resource.data.get('ownerId', null);
+        return (next == owner && (owner == null || owner in request.resource.data.adminIds))
+               || (uid() == owner
+                   && next is string
+                   && next in request.resource.data.adminIds
+                   && !(uid() in request.resource.data.adminIds));
+      }
+
+      // The estate's current invite code, for its members to share.
+      match /private/{docId} {
+        allow read: if isMemberOf(estateId) || isEstateAdmin(estateId);
+        allow write: if isEstateAdminAfter(estateId);
+      }
+    }
+
+    // Maps an invite code to its estate. Fetchable only by someone who already knows the
+    // code — listing is off, so codes cannot be enumerated.
+    match /inviteCodes/{code} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create: if isEstateAdminAfter(request.resource.data.estateId);
+      allow update: if false;
+      allow delete: if isEstateAdmin(resource.data.estateId);
     }
 
     match /joinRequests/{requestId} {
-      allow read: if isSignedIn() && (
-        resource.data.userId == uid() || isEstateAdmin(resource.data.estateId)
+      function isRequester() {
+        return isSignedIn() && resource.data.userId == uid();
+      }
+
+      // A requester may file a pending request, or an approved one carrying a valid code.
+      function validRequest() {
+        let data = request.resource.data;
+        return data.userId == uid()
+               && data.estateId is string
+               && requestId == data.estateId + '_' + uid()
+               && (data.status == 'pending'
+                   || (data.status == 'approved' && inviteCodeOpens(data.get('inviteCode', null), data.estateId)));
+      }
+
+      allow read: if isRequester() || isEstateAdmin(resource.data.estateId);
+      allow create: if isSignedIn() && validRequest();
+      allow update: if isSignedIn() && (
+        // Approving or denying is an admin decision; a requester cannot approve their own
+        // without a code.
+        (changedKeys().hasOnly(['status', 'reviewedAt'])
+          && request.resource.data.status in ['approved', 'denied']
+          && isEstateAdmin(resource.data.estateId))
+        // Asking again after a denial, or switching to an invite code.
+        || (isRequester() && request.resource.data.estateId == resource.data.estateId && validRequest())
       );
-      allow create: if isSignedIn()
-                    && request.resource.data.userId == uid()
-                    && request.resource.data.estateId is string
-                    && request.resource.data.status == 'pending';
-      // Approving or denying is an admin decision; a requester cannot approve their own.
-      allow update: if changedKeys().hasOnly(['status'])
-                    && isEstateAdmin(resource.data.estateId);
-      // Requesters withdraw their own request.
-      allow delete: if isSignedIn() && resource.data.userId == uid();
+      // Requesters withdraw their own request (also on leaving); admins clear old ones.
+      allow delete: if isSignedIn() && (
+        resource == null || isRequester() || isEstateAdmin(resource.data.estateId)
+      );
     }
 
     match /notifications/{notificationId} {
       // Raised by whoever triggered the event (a join requester notifying an admin),
       // so at create time the recipient is somebody other than the writer.
+      // senderId must be the writer: the push Worker relies on it to tell who raised an alert.
       allow create: if isSignedIn()
                     && request.resource.data.recipientId is string
+                    && request.resource.data.senderId == uid()
                     && request.resource.data.isRead == false;
       allow read, delete: if isSignedIn() && resource.data.recipientId == uid();
       allow update: if isSignedIn()
@@ -73,19 +187,40 @@ service cloud.firestore {
     }
 
     match /posts/{postId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.authorId == uid();
+      // Posts are for the estate they were made in.
+      allow read: if isMemberOf(resource.data.estateId);
+      // Announcements carry an admin's authority, so only admins may post or keep one.
+      function categoryAllowed() {
+        return request.resource.data.get('category', '') != 'announcement'
+               || isEstateAdmin(request.resource.data.estateId);
+      }
+
+      allow create: if isSignedIn()
+                    && request.resource.data.authorId == uid()
+                    && isMemberOf(request.resource.data.estateId)
+                    && categoryAllowed();
       allow update: if isSignedIn() && (
-        resource.data.authorId == uid()
+        (resource.data.authorId == uid()
+          && request.resource.data.authorId == resource.data.authorId
+          && request.resource.data.estateId == resource.data.estateId
+          && (request.resource.data.get('category', '') == resource.data.get('category', '') || categoryAllowed()))
         // A neighbour may like a post or comment on it. Neither may rewrite its body.
-        || changedKeys().hasOnly(['likedBy', 'likeCount'])
-        || changedKeys().hasOnly(['commentCount'])
+        || (isMemberOf(resource.data.estateId) && (
+             changedKeys().hasOnly(['likedBy', 'likeCount'])
+             || changedKeys().hasOnly(['commentCount'])
+           ))
       );
       allow delete: if isSignedIn() && resource.data.authorId == uid();
 
       match /comments/{commentId} {
-        allow read: if isSignedIn();
-        allow create: if isSignedIn() && request.resource.data.authorId == uid();
+        function postEstate() {
+          return get(/databases/$(database)/documents/posts/$(postId)).data.estateId;
+        }
+
+        allow read: if isMemberOf(postEstate());
+        allow create: if isSignedIn()
+                      && request.resource.data.authorId == uid()
+                      && isMemberOf(postEstate());
         allow update: if false;
         // The comment's author, or the author of the post being commented on.
         allow delete: if isSignedIn() && (
@@ -95,27 +230,56 @@ service cloud.firestore {
       }
     }
 
+    // A chat's id is its two participants' uids, sorted and joined with "_". Creation
+    // enforces that, so membership can be read straight off the id — which also covers
+    // a conversation that has been opened but has no document until its first message.
     match /chats/{chatId} {
-      function chatParticipants() {
-        return get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+      function isMember() {
+        return isSignedIn() && uid() in chatId.split('_');
       }
 
-      // createOrGetChat probes for the document before creating it, and a rule that
-      // errors on a missing document surfaces as PERMISSION_DENIED rather than "absent".
+      function otherMember() {
+        let ids = chatId.split('_');
+        return ids[0] == uid() ? ids[1] : ids[0];
+      }
+
+      // Nobody can message a deleted account, someone they've blocked, or someone who has
+      // blocked them.
+      function canMessage() {
+        let other = otherMember();
+        return exists(/databases/$(database)/documents/users/$(other))
+               && !exists(/databases/$(database)/documents/users/$(uid())/blocks/$(other))
+               && !exists(/databases/$(database)/documents/users/$(other)/blocks/$(uid()));
+      }
+
+      // A missing chat must read as missing: the app opens a conversation before its
+      // first message exists, and an erroring rule would surface as PERMISSION_DENIED.
       allow get: if isSignedIn() && (resource == null || uid() in resource.data.participants);
+      // Must stay provable from the `participants array-contains uid` query alone, so
+      // no type checks or lookups here — Firestore rejects a list rule it cannot prove.
       allow list: if isSignedIn() && uid() in resource.data.participants;
-      allow create: if isSignedIn()
+      allow create: if isMember()
+                    && request.resource.data.participants is list
+                    && request.resource.data.participants.size() == 2
                     && uid() in request.resource.data.participants
-                    && request.resource.data.participants.size() == 2;
-      // Participants keep lastMessage and their unread tallies current.
-      allow update: if isSignedIn() && uid() in resource.data.participants;
+                    && (chatId == request.resource.data.participants[0] + '_' + request.resource.data.participants[1]
+                        || chatId == request.resource.data.participants[1] + '_' + request.resource.data.participants[0]);
+      // Participants keep the preview, names and unread tallies current; nobody can
+      // add or remove a member.
+      allow update: if isSignedIn()
+                    && uid() in resource.data.participants
+                    && request.resource.data.participants.toSet() == resource.data.participants.toSet();
       allow delete: if false;
 
       match /messages/{messageId} {
-        allow read: if isSignedIn() && uid() in chatParticipants();
-        allow create: if isSignedIn()
+        allow read: if isMember();
+        allow create: if isMember()
+                      && canMessage()
                       && request.resource.data.senderId == uid()
-                      && uid() in chatParticipants();
+                      && request.resource.data.chatId == chatId
+                      && request.resource.data.content is string
+                      && request.resource.data.content.size() > 0
+                      && request.resource.data.content.size() <= 5000;
         // Messages are immutable once sent.
         allow update, delete: if false;
       }

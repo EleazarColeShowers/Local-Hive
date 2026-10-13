@@ -3,6 +3,7 @@ package com.eleazar.localhive.ui.directory
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eleazar.localhive.domain.AuthRepository
+import com.eleazar.localhive.domain.EstateRepository
 import com.eleazar.localhive.domain.UserRepository
 import com.eleazar.localhive.domain.model.User
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -13,20 +14,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class DirectoryUiState(
-    val members: List<User> = emptyList(),
-    val filteredMembers: List<User> = emptyList(),
-    val selectedUser: User? = null,
-    val searchQuery: String = "",
-    val currentUserId: String? = null,
-    val isLoading: Boolean = false,
-    val error: String? = null
-)
-
 @HiltViewModel
 class DirectoryViewModel @Inject constructor(
     private val userRepository: UserRepository,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val estateRepository: EstateRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DirectoryUiState())
@@ -41,8 +33,13 @@ class DirectoryViewModel @Inject constructor(
     private fun loadMembers(userId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            userRepository.getUser(userId).onSuccess { user ->
+            userRepository.getUser(userId, cacheFirst = true).onSuccess { user ->
                 user.estateId?.let { estateId ->
+                    launch {
+                        estateRepository.observeEstate(estateId).collect { estate ->
+                            if (estate != null) _uiState.update { it.copy(adminIds = estate.adminIds.toSet()) }
+                        }
+                    }
                     userRepository.getEstateMembers(estateId)
                         .catch { e -> _uiState.update { it.copy(error = e.message, isLoading = false) } }
                         .collect { members ->

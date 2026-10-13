@@ -1,6 +1,8 @@
 package com.eleazar.localhive.data.repository
 
+import com.eleazar.localhive.data.remote.api.LocalHiveApi
 import com.eleazar.localhive.domain.PostRepository
+import com.eleazar.localhive.domain.model.PostCategory
 import com.eleazar.localhive.domain.model.Comment
 import com.eleazar.localhive.domain.model.Post
 import com.google.firebase.firestore.FieldValue
@@ -13,7 +15,8 @@ import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 class PostRepositoryImpl @Inject constructor(
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val api: LocalHiveApi
 ) : PostRepository {
 
     override fun getPostsForEstate(estateId: String, limit: Long): Flow<List<Post>> = callbackFlow {
@@ -52,6 +55,9 @@ class PostRepositoryImpl @Inject constructor(
         return try {
             val ref = firestore.collection("posts").document()
             firestore.collection("posts").document(ref.id).set(post.copy(id = ref.id).toMap()).await()
+            if (post.category == PostCategory.ANNOUNCEMENT.key) {
+                api.notifyInBackground("type" to "announcement", "postId" to ref.id)
+            }
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -121,7 +127,8 @@ class PostRepositoryImpl @Inject constructor(
         "authorImageUrl" to authorImageUrl, "estateId" to estateId,
         "content" to content, "imageUrl" to imageUrl,
         "createdAt" to createdAt, "likeCount" to likeCount,
-        "commentCount" to commentCount, "likedBy" to likedBy
+        "commentCount" to commentCount, "likedBy" to likedBy,
+        "category" to category
     )
 
     private fun Comment.toMap() = mapOf(
