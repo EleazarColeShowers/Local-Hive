@@ -1,6 +1,7 @@
 package com.eleazar.localhive.ui.components
 
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -27,7 +28,8 @@ fun LocalHiveTextField(
     leadingIcon: @Composable (() -> Unit)? = null,
     trailingIcon: @Composable (() -> Unit)? = null,
     visualTransformation: VisualTransformation = VisualTransformation.None,
-    keyboardOptions: KeyboardOptions = KeyboardOptions.Default
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default
 ) {
     OutlinedTextField(
         value = value,
@@ -42,6 +44,7 @@ fun LocalHiveTextField(
         trailingIcon = trailingIcon,
         visualTransformation = visualTransformation,
         keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
         supportingText = supportingText?.let { { Text(it) } },
         shape = RoundedCornerShape(12.dp),
         colors = OutlinedTextFieldDefaults.colors(
@@ -51,7 +54,14 @@ fun LocalHiveTextField(
             unfocusedLabelColor = DarkGray.copy(alpha = 0.6f),
             cursorColor = HiveGreen,
             focusedContainerColor = Color.White,
-            unfocusedContainerColor = Color.White
+            unfocusedContainerColor = Color.White,
+            // The field is always white, so its text stays dark in dark mode too.
+            focusedTextColor = DarkGray,
+            unfocusedTextColor = DarkGray,
+            focusedLeadingIconColor = DarkGray.copy(alpha = 0.6f),
+            unfocusedLeadingIconColor = DarkGray.copy(alpha = 0.5f),
+            focusedPlaceholderColor = DarkGray.copy(alpha = 0.4f),
+            unfocusedPlaceholderColor = DarkGray.copy(alpha = 0.4f)
         )
     )
 }

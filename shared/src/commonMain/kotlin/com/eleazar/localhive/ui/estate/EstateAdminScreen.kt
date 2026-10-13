@@ -22,12 +22,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -55,6 +58,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.text.style.TextOverflow
+import com.eleazar.localhive.ui.components.Avatar
+import com.eleazar.localhive.ui.components.RoleBadge
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.navigationBarsPadding
 import com.eleazar.localhive.domain.model.Estate
 import com.eleazar.localhive.domain.model.JoinRequest
 import com.eleazar.localhive.domain.model.User
@@ -74,6 +83,8 @@ fun EstateAdminScreen(
     onApproveRequest: (userId: String) -> Unit,
     onDenyRequest: (userId: String) -> Unit,
     onPromoteToAdmin: (userId: String) -> Unit,
+    onRemoveAdmin: (userId: String) -> Unit = {},
+    onRemoveMember: (userId: String) -> Unit = {},
     onClearError: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -88,7 +99,10 @@ fun EstateAdminScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(gold, colors.surfaceGradientEnd)))
+            .background(gold)
+            // Drawn edge to edge, so keep the header clear of the status bar and the list of the nav bar.
+            .statusBarsPadding()
+            .navigationBarsPadding()
     ) {
         Row(
             modifier = Modifier.padding(top = 8.dp, start = 4.dp, end = 16.dp),
@@ -181,8 +195,11 @@ fun EstateAdminScreen(
             1 -> MembersTab(
                 members = members,
                 adminIds = adminIds,
+                ownerId = estate?.ownerId.orEmpty(),
                 currentUserId = currentUserId,
                 onPromote = onPromoteToAdmin,
+                onRemoveAdmin = onRemoveAdmin,
+                onRemoveMember = onRemoveMember,
                 dark = dark,
                 green = green,
                 cardBg = cardBg
@@ -317,8 +334,11 @@ private fun JoinRequestCard(
 private fun MembersTab(
     members: List<User>,
     adminIds: List<String>,
+    ownerId: String,
     currentUserId: String,
     onPromote: (String) -> Unit,
+    onRemoveAdmin: (String) -> Unit,
+    onRemoveMember: (String) -> Unit,
     dark: Color,
     green: Color,
     cardBg: Color
@@ -330,16 +350,49 @@ private fun MembersTab(
         return
     }
 
+    val viewerIsAdmin = currentUserId in adminIds
+    // Owner first, then admins, then everyone else, each alphabetical.
+    val sorted = members.sortedWith(
+        compareBy<User>({ it.id != ownerId }, { it.id !in adminIds }, { (it.displayName ?: it.username ?: "").lowercase() })
+    )
+
     LazyColumn(
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        items(members, key = { it.id }) { member ->
+        item {
+            Text(
+                "Admins can approve requests, post announcements, make others admins and remove members. " +
+                    "The owner always stays an admin, and an admin has to lose admin before they can be removed.",
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                color = dark.copy(alpha = 0.6f),
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
+        items(sorted, key = { it.id }) { member ->
+            val isAdmin = member.id in adminIds
+            val isOwner = member.id == ownerId
             MemberCard(
                 member = member,
-                isAdmin = member.id in adminIds,
-                canPromote = currentUserId in adminIds && member.id !in adminIds && member.id != currentUserId,
-                onPromote = { onPromote(member.id) },
+                role = when {
+                    isOwner -> MemberRole.OWNER
+                    isAdmin -> MemberRole.ADMIN
+                    else -> MemberRole.MEMBER
+                },
+                isYou = member.id == currentUserId,
+                actions = when {
+                    !viewerIsAdmin || member.id == currentUserId || isOwner -> emptyList()
+                    isAdmin -> listOf(MemberAction.REMOVE_ADMIN)
+                    else -> listOf(MemberAction.MAKE_ADMIN, MemberAction.REMOVE_MEMBER)
+                },
+                onAction = { action ->
+                    when (action) {
+                        MemberAction.MAKE_ADMIN -> onPromote(member.id)
+                        MemberAction.REMOVE_ADMIN -> onRemoveAdmin(member.id)
+                        MemberAction.REMOVE_MEMBER -> onRemoveMember(member.id)
+                    }
+                },
                 dark = dark,
                 green = green,
                 cardBg = cardBg
@@ -348,95 +401,107 @@ private fun MembersTab(
     }
 }
 
+private enum class MemberRole { OWNER, ADMIN, MEMBER }
+private enum class MemberAction(val label: String, val destructive: Boolean) {
+    MAKE_ADMIN("Make admin", false),
+    REMOVE_ADMIN("Remove admin", true),
+    REMOVE_MEMBER("Remove from estate", true)
+}
+
 @Composable
 private fun MemberCard(
     member: User,
-    isAdmin: Boolean,
-    canPromote: Boolean,
-    onPromote: () -> Unit,
+    role: MemberRole,
+    isYou: Boolean,
+    actions: List<MemberAction>,
+    onAction: (MemberAction) -> Unit,
     dark: Color,
     green: Color,
     cardBg: Color
 ) {
-    var showConfirm by remember { mutableStateOf(false) }
+    var confirming by remember { mutableStateOf<MemberAction?>(null) }
+    var menuOpen by remember { mutableStateOf(false) }
+    val name = member.displayName ?: member.username ?: "Member"
 
-    Card(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBg),
-        elevation = CardDefaults.cardElevation(1.dp)
+        color = cardBg,
+        border = BorderStroke(1.dp, dark.copy(alpha = 0.06f))
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(start = 14.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (!member.profileImageUrl.isNullOrBlank()) {
-                AsyncImage(
-                    model = member.profileImageUrl,
-                    contentDescription = null,
-                    modifier = Modifier.size(44.dp).clip(CircleShape),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
-                    modifier = Modifier.size(44.dp).clip(CircleShape).background(green.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.Person, null, tint = green, modifier = Modifier.size(24.dp))
-                }
-            }
-
+            Avatar(imageUrl = member.profileImageUrl, name = name, size = 44.dp)
             Spacer(Modifier.width(12.dp))
-
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    member.displayName ?: member.username ?: "Member",
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                    color = dark
+                    if (isYou) "$name (you)" else name,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = dark,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                if (isAdmin) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 2.dp)
-                    ) {
-                        Icon(Icons.Default.Star, null, tint = Color(0xFFFFC107), modifier = Modifier.size(12.dp))
-                        Spacer(Modifier.width(3.dp))
-                        Text("Admin", fontSize = 11.sp, color = Color(0xFFFFC107), fontWeight = FontWeight.Medium)
-                    }
+                if (role != MemberRole.MEMBER) {
+                    Spacer(Modifier.height(4.dp))
+                    RoleBadge(owner = role == MemberRole.OWNER)
                 }
             }
-
-            if (canPromote) {
-                TextButton(
-                    onClick = { showConfirm = true },
-                    colors = ButtonDefaults.textButtonColors(contentColor = green)
-                ) {
-                    Text("Make Admin", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            if (actions.isNotEmpty()) {
+                Box {
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Manage $name", tint = dark.copy(alpha = 0.6f))
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        actions.forEach { action ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        action.label,
+                                        color = if (action.destructive) MaterialTheme.colorScheme.error else dark,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                },
+                                onClick = {
+                                    menuOpen = false
+                                    confirming = action
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 
-    if (showConfirm) {
+    confirming?.let { pending ->
+        val (title, body) = when (pending) {
+            MemberAction.MAKE_ADMIN -> "Make $name an admin?" to
+                "They'll be able to approve join requests, post announcements, make other members admins and remove members."
+            MemberAction.REMOVE_ADMIN -> "Remove $name as admin?" to
+                "They'll stay in the estate as a regular member."
+            MemberAction.REMOVE_MEMBER -> "Remove $name from the estate?" to
+                "They'll lose access to the feed, the directory and estate announcements, and get a notification. " +
+                "To come back they'll have to ask to join again or use an invite code."
+        }
         AlertDialog(
-            onDismissRequest = { showConfirm = false },
-            title = { Text("Make Admin?") },
-            text = {
-                Text(
-                    "Give ${member.displayName ?: "this member"} admin privileges? They'll be able to approve join requests and manage members.",
-                    textAlign = TextAlign.Start
-                )
-            },
+            onDismissRequest = { confirming = null },
+            containerColor = MaterialTheme.colorScheme.surface,
+            title = { Text(title, fontWeight = FontWeight.Bold) },
+            text = { Text(body) },
             confirmButton = {
-                TextButton(onClick = { onPromote(); showConfirm = false }) {
-                    Text("Confirm", color = green)
+                TextButton(onClick = { onAction(pending); confirming = null }) {
+                    Text(
+                        if (pending == MemberAction.REMOVE_MEMBER) "Remove" else pending.label,
+                        color = if (pending.destructive) MaterialTheme.colorScheme.error else green,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showConfirm = false }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { confirming = null }) { Text("Cancel") }
             }
         )
     }

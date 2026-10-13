@@ -14,7 +14,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import com.eleazar.localhive.ui.components.LeaveEstateDialog
+import com.eleazar.localhive.ui.components.LeaveRole
 import androidx.compose.material.icons.filled.AccountBox
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
@@ -85,7 +88,9 @@ data class ProfileEstateUi(
     val address: String,
     val inviteCode: String,
     val memberCount: Int,
-    val isAdmin: Boolean
+    val isAdmin: Boolean,
+    val isOwner: Boolean = false,
+    val leaveRole: LeaveRole = LeaveRole.MEMBER
 )
 
 private val HeroHeight = 168.dp
@@ -113,9 +118,11 @@ fun ProfileScreen(
     onShareInviteCode: (code: String, estateName: String) -> Unit,
     onSettings: () -> Unit,
     onAdminPanel: (estateId: String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLeaveEstate: () -> Unit = {}
 ) {
     var showEdit by remember { mutableStateOf(false) }
+    var showLeave by remember { mutableStateOf(false) }
     var showCodeDialog by remember { mutableStateOf(false) }
     var editName by remember { mutableStateOf("") }
     var editUsername by remember { mutableStateOf("") }
@@ -133,6 +140,16 @@ fun ProfileScreen(
     val isAdmin = estate?.isAdmin == true
     val letter = (user?.displayName ?: user?.username ?: "?").firstOrNull()?.uppercase() ?: "?"
     val avatarModel: Any? = pickedImage ?: user?.profileImageUrl?.takeIf { it.isNotBlank() }
+
+    if (showLeave && estate != null) {
+        LeaveEstateDialog(
+            estateName = estate.name,
+            role = estate.leaveRole,
+            onConfirm = onLeaveEstate,
+            onDismiss = { showLeave = false },
+            onOpenAdminPanel = { onAdminPanel(estate.id) }
+        )
+    }
 
     if (showCodeDialog && estate != null) {
         InviteCodeDialog(
@@ -197,7 +214,8 @@ fun ProfileScreen(
                     isAdmin = isAdmin,
                     colors = colors,
                     onShowInviteCode = { showCodeDialog = true },
-                    onAdminPanel = onAdminPanel
+                    onAdminPanel = onAdminPanel,
+                    onLeave = { showLeave = true }
                 )
             }
         }
@@ -376,7 +394,8 @@ private fun ViewContent(
     isAdmin: Boolean,
     colors: ProfileColors,
     onShowInviteCode: () -> Unit,
-    onAdminPanel: (String) -> Unit
+    onAdminPanel: (String) -> Unit,
+    onLeave: () -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -454,7 +473,7 @@ private fun ViewContent(
                         if (isAdmin) {
                             Surface(shape = RoundedCornerShape(50), color = colors.hiveGreen) {
                                 Text(
-                                    text = "Admin",
+                                    text = if (estate.isOwner) "Owner" else "Admin",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White,
@@ -498,6 +517,28 @@ private fun ViewContent(
                         subtitle = "Manage your estate",
                         colors = colors,
                         onClick = { onAdminPanel(estate.id) }
+                    )
+                }
+                HorizontalDivider(color = colors.darkGray.copy(alpha = 0.07f))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onLeave)
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ExitToApp,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = 8.dp).size(22.dp)
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Text(
+                        "Leave estate",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.error
                     )
                 }
             }

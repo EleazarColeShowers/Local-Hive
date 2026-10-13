@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eleazar.localhive.domain.AppSettingsRepository
 import com.eleazar.localhive.domain.ThemeMode
+import com.eleazar.localhive.ui.navigation.AndroidLocalHiveScreens
 import com.eleazar.localhive.ui.navigation.LocalHiveNavGraph
 import com.eleazar.localhive.ui.theme.LocalHiveTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -53,7 +54,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    LocalHiveNavGraph()
+                    LocalHiveNavGraph(screens = AndroidLocalHiveScreens)
                 }
             }
         }

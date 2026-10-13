@@ -14,6 +14,9 @@ navigationCompose = "2.9.7"
 coreSplashscreen = "1.2.0"
 coil = "2.7.0"
 composeMultiplatform = "1.7.3"
+# Last JetBrains navigation line that builds against CMP 1.7.x / Kotlin 2.0.x.
+# On Android it resolves to androidx.navigation:navigation-compose.
+navigationMultiplatform = "2.8.0-alpha12"
 
 
 [libraries]
@@ -35,6 +38,7 @@ firebase-auth-ktx = { group = "com.google.firebase", name = "firebase-auth-ktx" 
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "coreSplashscreen" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+jetbrains-navigation-compose = { group = "org.jetbrains.androidx.navigation", name = "navigation-compose", version.ref = "navigationMultiplatform" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

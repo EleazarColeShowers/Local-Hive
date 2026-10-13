@@ -36,6 +36,7 @@ kotlin {
             implementation(compose.components.resources)
             implementation(compose.materialIconsExtended)
             implementation("io.coil-kt.coil3:coil-compose:3.0.4")
+            implementation(libs.jetbrains.navigation.compose)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

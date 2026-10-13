@@ -168,6 +168,7 @@ private fun NotificationCard(
         NotificationType.JOIN_REQUEST -> Icons.Default.Person to green
         NotificationType.REQUEST_APPROVED -> Icons.Default.CheckCircle to green
         NotificationType.REQUEST_DENIED -> Icons.Default.Close to Color(0xFFE53935)
+        NotificationType.MEMBER_REMOVED -> Icons.Default.Close to Color(0xFFE53935)
     }
 
     Card(

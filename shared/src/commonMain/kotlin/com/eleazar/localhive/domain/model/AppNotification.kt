@@ -3,7 +3,8 @@ package com.eleazar.localhive.domain.model
 enum class NotificationType {
     JOIN_REQUEST,
     REQUEST_APPROVED,
-    REQUEST_DENIED
+    REQUEST_DENIED,
+    MEMBER_REMOVED
 }
 
 data class AppNotification(

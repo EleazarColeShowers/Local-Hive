@@ -4,6 +4,8 @@ import com.eleazar.localhive.domain.NotificationRepository
 import com.eleazar.localhive.domain.model.AppNotification
 import com.eleazar.localhive.domain.model.NotificationType
 import com.google.firebase.firestore.DocumentSnapshot
+import com.eleazar.localhive.data.remote.api.LocalHiveApi
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.channels.awaitClose
@@ -13,7 +15,9 @@ import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 class NotificationRepositoryImpl @Inject constructor(
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val auth: FirebaseAuth,
+    private val api: LocalHiveApi
 ) : NotificationRepository {
 
     override fun observeNotifications(userId: String): Flow<List<AppNotification>> = callbackFlow {
@@ -34,6 +38,8 @@ class NotificationRepositoryImpl @Inject constructor(
             val ref = firestore.collection("notifications").document()
             val data = mapOf(
                 "recipientId" to notification.recipientId,
+                // Rules require this to be the writer; the Worker checks it before pushing.
+                "senderId" to auth.currentUser?.uid,
                 "type" to notification.type.name,
                 "title" to notification.title,
                 "message" to notification.message,
@@ -43,6 +49,7 @@ class NotificationRepositoryImpl @Inject constructor(
                 "isRead" to false
             )
             ref.set(data).await()
+            api.notifyInBackground("type" to "notification", "notificationId" to ref.id)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

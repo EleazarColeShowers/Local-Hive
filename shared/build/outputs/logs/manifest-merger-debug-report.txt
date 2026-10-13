@@ -1,16 +1,16 @@
 -- Merging decision tree log ---
 manifest
-ADDED from /Users/eleazarcole-showers/StudioProjects/Local-Hive/shared/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest3442508054970910676.xml:2:13-83
-INJECTED from /Users/eleazarcole-showers/StudioProjects/Local-Hive/shared/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest3442508054970910676.xml:2:13-83
+ADDED from /Users/eleazarcole-showers/StudioProjects/Local-Hive/shared/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest6809783599226563208.xml:2:13-83
+INJECTED from /Users/eleazarcole-showers/StudioProjects/Local-Hive/shared/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest6809783599226563208.xml:2:13-83
 	package
-		INJECTED from /Users/eleazarcole-showers/StudioProjects/Local-Hive/shared/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest3442508054970910676.xml
+		INJECTED from /Users/eleazarcole-showers/StudioProjects/Local-Hive/shared/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest6809783599226563208.xml
 	xmlns:android
-		ADDED from /Users/eleazarcole-showers/StudioProjects/Local-Hive/shared/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest3442508054970910676.xml:2:23-81
+		ADDED from /Users/eleazarcole-showers/StudioProjects/Local-Hive/shared/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest6809783599226563208.xml:2:23-81
 uses-sdk
-INJECTED from /Users/eleazarcole-showers/StudioProjects/Local-Hive/shared/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest3442508054970910676.xml reason: use-sdk injection requested
-INJECTED from /Users/eleazarcole-showers/StudioProjects/Local-Hive/shared/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest3442508054970910676.xml
-INJECTED from /Users/eleazarcole-showers/StudioProjects/Local-Hive/shared/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest3442508054970910676.xml
+INJECTED from /Users/eleazarcole-showers/StudioProjects/Local-Hive/shared/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest6809783599226563208.xml reason: use-sdk injection requested
+INJECTED from /Users/eleazarcole-showers/StudioProjects/Local-Hive/shared/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest6809783599226563208.xml
+INJECTED from /Users/eleazarcole-showers/StudioProjects/Local-Hive/shared/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest6809783599226563208.xml
 	android:targetSdkVersion
-		INJECTED from /Users/eleazarcole-showers/StudioProjects/Local-Hive/shared/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest3442508054970910676.xml
+		INJECTED from /Users/eleazarcole-showers/StudioProjects/Local-Hive/shared/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest6809783599226563208.xml
 	android:minSdkVersion
-		INJECTED from /Users/eleazarcole-showers/StudioProjects/Local-Hive/shared/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest3442508054970910676.xml
+		INJECTED from /Users/eleazarcole-showers/StudioProjects/Local-Hive/shared/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest6809783599226563208.xml

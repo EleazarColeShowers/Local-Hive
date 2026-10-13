@@ -1,5 +1,7 @@
 package com.eleazar.localhive.ui.settings
 
+import com.eleazar.localhive.ui.components.LeaveEstateDialog
+import com.eleazar.localhive.ui.components.LeaveRole
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -7,16 +9,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -46,9 +51,16 @@ fun SettingsScreen(
     onPushNotificationsChange: (Boolean) -> Unit,
     onLeaveEstate: () -> Unit,
     onLogout: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    leaveRole: LeaveRole = LeaveRole.MEMBER,
+    onBlockedUsers: () -> Unit = {},
+    isDeletingAccount: Boolean = false,
+    deleteAccountError: String? = null,
+    onDeleteAccount: (password: String) -> Unit = {},
+    onDeleteAccountDismissed: () -> Unit = {}
 ) {
     var showLeaveConfirm by remember { mutableStateOf(false) }
+    var showDeleteAccount by remember { mutableStateOf(false) }
 
     val hiveGreen = colors.hiveGreen
     val backgroundGold = colors.backgroundGold
@@ -57,21 +69,26 @@ fun SettingsScreen(
     val hasEstate = estateName != null
 
     if (showLeaveConfirm) {
-        AlertDialog(
-            onDismissRequest = { showLeaveConfirm = false },
-            title = { Text("Leave Estate?", fontWeight = FontWeight.Bold) },
-            text = { Text("You'll need a new invite code to re-join ${estateName ?: "this estate"}.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showLeaveConfirm = false
-                    onLeaveEstate()
-                }) {
-                    Text("Leave", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
-                }
+        LeaveEstateDialog(
+            estateName = estateName ?: "this estate",
+            role = leaveRole,
+            onConfirm = onLeaveEstate,
+            onDismiss = { showLeaveConfirm = false }
+        )
+    }
+
+    if (showDeleteAccount) {
+        DeleteAccountDialog(
+            estateName = estateName,
+            leaveRole = leaveRole,
+            isDeleting = isDeletingAccount,
+            error = deleteAccountError,
+            onDelete = onDeleteAccount,
+            onDismiss = {
+                showDeleteAccount = false
+                onDeleteAccountDismissed()
             },
-            dismissButton = {
-                TextButton(onClick = { showLeaveConfirm = false }) { Text("Cancel") }
-            }
+            onPasswordChanged = onDeleteAccountDismissed
         )
     }
 
@@ -170,9 +187,27 @@ fun SettingsScreen(
                         Spacer(Modifier.width(14.dp))
                         Text(email, fontSize = 14.sp, color = darkGray)
                     }
-                    if (hasEstate) SettingsDivider(darkGray)
+                    SettingsDivider(darkGray)
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onBlockedUsers)
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.Block, null, tint = hiveGreen, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(14.dp))
+                    Text("Blocked people", fontSize = 14.sp, color = darkGray, modifier = Modifier.weight(1f))
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        null,
+                        tint = darkGray.copy(alpha = 0.4f),
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
                 if (hasEstate) {
+                    SettingsDivider(darkGray)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -228,6 +263,20 @@ fun SettingsScreen(
                     Text("Log Out", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error, fontSize = 15.sp)
                 }
             }
+
+            Spacer(Modifier.height(24.dp))
+
+            Text(
+                "Delete account",
+                color = MaterialTheme.colorScheme.error.copy(alpha = 0.85f),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { showDeleteAccount = true }
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            )
 
             error?.let {
                 Spacer(Modifier.height(12.dp))

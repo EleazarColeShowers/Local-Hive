@@ -31,15 +31,14 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import com.eleazar.localhive.ui.components.LocalHeaderActions
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -78,27 +77,15 @@ fun MainScreen(
     modifier: Modifier = Modifier,
     content: @Composable (PaddingValues) -> Unit
 ) {
-    // Slim bar slides away when the content scrolls, giving content more room.
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     val edgeToEdge = tabs.firstOrNull { it.route == currentRoute }?.edgeToEdge == true
 
     Scaffold(
-        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        modifier = modifier,
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = if (edgeToEdge) {
             ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.statusBars)
         } else {
             ScaffoldDefaults.contentWindowInsets
-        },
-        topBar = {
-            if (!edgeToEdge) {
-                MainTopBar(
-                    unreadNotifications = unreadNotifications,
-                    colors = colors,
-                    onNotificationsClick = onNotificationsClick,
-                    scrollBehavior = scrollBehavior
-                )
-            }
         },
         bottomBar = {
             MainBottomBar(
@@ -109,45 +96,38 @@ fun MainScreen(
                 onCreatePostClick = onCreatePostClick
             )
         },
-        content = content
+        content = { padding ->
+            // Each tab's ScreenHeader shows the bell beside its title.
+            CompositionLocalProvider(
+                LocalHeaderActions provides {
+                    NotificationsBell(unreadNotifications, colors, onNotificationsClick)
+                }
+            ) {
+                content(padding)
+            }
+        }
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MainTopBar(
+private fun NotificationsBell(
     unreadNotifications: Int,
     colors: MainScreenColors,
-    onNotificationsClick: () -> Unit,
-    scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior
+    onNotificationsClick: () -> Unit
 ) {
-    TopAppBar(
-        title = {}, // no title: each screen owns its own heading
-        actions = {
-            BadgedBox(
-                badge = { CountBadge(unreadNotifications, colors) },
-                modifier = Modifier.padding(end = 8.dp)
-            ) {
-                IconButton(onClick = onNotificationsClick) {
-                    Icon(
-                        imageVector = Icons.Outlined.Notifications,
-                        contentDescription = if (unreadNotifications > 0) {
-                            "Notifications, $unreadNotifications unread"
-                        } else {
-                            "Notifications"
-                        },
-                        tint = colors.chrome
-                    )
-                }
-            }
-        },
-        // Same colour as the page so the bar blends in instead of showing as a white strip.
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.background,
-            scrolledContainerColor = MaterialTheme.colorScheme.background
-        ),
-        scrollBehavior = scrollBehavior
-    )
+    IconButton(onClick = onNotificationsClick) {
+        BadgedBox(badge = { CountBadge(unreadNotifications, colors) }) {
+            Icon(
+                imageVector = Icons.Outlined.Notifications,
+                contentDescription = if (unreadNotifications > 0) {
+                    "Notifications, $unreadNotifications unread"
+                } else {
+                    "Notifications"
+                },
+                tint = MaterialTheme.colorScheme.onBackground
+            )
+        }
+    }
 }
 
 /**

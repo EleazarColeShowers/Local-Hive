@@ -1,0 +1,15 @@
+# Free-tier Cloudflare Worker standing in for Cloud Functions (which need Firebase's paid plan).
+# Secrets are set with `npx wrangler secret put <NAME>`, never written here:
+#   FIREBASE_SERVICE_ACCOUNT  - the full JSON key for a Firebase service account
+#   CLOUDINARY_API_KEY        - from the Cloudinary dashboard
+#   CLOUDINARY_API_SECRET     - from the Cloudinary dashboard
+name = "localhive"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+workers_dev = true
+# Preview URLs would expose a second copy of the API at a different address.
+preview_urls = false
+
+[vars]
+FIREBASE_PROJECT_ID = "localhive-4a645"
+CLOUDINARY_CLOUD_NAME = "bsgju3dx"

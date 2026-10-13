@@ -11,5 +11,7 @@ data class Post(
     val createdAt: Long = 0L,
     val likeCount: Int = 0,
     val commentCount: Int = 0,
-    val likedBy: List<String> = emptyList()
+    val likedBy: List<String> = emptyList(),
+    /** A [PostCategory] key, or blank for an untagged post. */
+    val category: String = ""
 )

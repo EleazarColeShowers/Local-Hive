@@ -20,7 +20,8 @@ data class ProfileUiState(
     val user: User? = null,
     val estate: Estate? = null,
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val hasLeftEstate: Boolean = false
 )
 
 @HiltViewModel
@@ -54,9 +55,28 @@ class ProfileViewModel @Inject constructor(
 
     private fun loadEstate(estateId: String) {
         viewModelScope.launch {
-            estateRepository.getEstate(estateId).fold(
-                onSuccess = { estate -> _uiState.update { it.copy(estate = estate) } },
-                onFailure = { /* non-critical, ignore */ }
+            estateRepository.getEstate(estateId).onSuccess { estate ->
+                _uiState.update { it.copy(estate = estate) }
+            }
+            // Stay current with admin changes; the invite code only comes from getEstate.
+            estateRepository.observeEstate(estateId).collect { live ->
+                if (live != null) {
+                    _uiState.update { state ->
+                        state.copy(estate = live.copy(inviteCode = state.estate?.inviteCode.orEmpty()))
+                    }
+                }
+            }
+        }
+    }
+
+    fun leaveEstate() {
+        val user = _uiState.value.user ?: return
+        val estateId = user.estateId ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null) }
+            estateRepository.leaveEstate(estateId, user.id).fold(
+                onSuccess = { _uiState.update { it.copy(isLoading = false, hasLeftEstate = true) } },
+                onFailure = { e -> _uiState.update { it.copy(isLoading = false, error = e.message ?: "Couldn't leave the estate") } }
             )
         }
     }

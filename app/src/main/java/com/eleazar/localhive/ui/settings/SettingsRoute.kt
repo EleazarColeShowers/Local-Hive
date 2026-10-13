@@ -7,6 +7,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eleazar.localhive.R
 import com.eleazar.localhive.domain.ThemeMode
+import com.eleazar.localhive.ui.components.LeaveRole
 import com.eleazar.localhive.ui.profile.ProfileColors
 
 /**
@@ -18,6 +19,7 @@ fun SettingsRoute(
     onBack: () -> Unit,
     onLoggedOut: () -> Unit,
     onLeftEstate: () -> Unit,
+    onBlockedUsers: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -58,6 +60,12 @@ fun SettingsRoute(
         },
         onPushNotificationsChange = { viewModel.setPushNotificationsEnabled(it) },
         onLeaveEstate = { viewModel.leaveEstate() },
-        onLogout = { viewModel.logout() }
+        leaveRole = uiState.estate?.let { LeaveRole.of(it, uiState.user?.id) } ?: LeaveRole.MEMBER,
+        onLogout = { viewModel.logout() },
+        onBlockedUsers = onBlockedUsers,
+        isDeletingAccount = uiState.isDeletingAccount,
+        deleteAccountError = uiState.deleteAccountError,
+        onDeleteAccount = viewModel::deleteAccount,
+        onDeleteAccountDismissed = viewModel::clearDeleteAccountError
     )
 }

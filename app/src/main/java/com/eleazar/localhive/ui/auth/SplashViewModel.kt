@@ -41,24 +41,30 @@ class SplashViewModel @Inject constructor(
                 _authState.value = AuthState.NotLoggedIn
                 return@launch
             }
-            syncFcmToken(userId)
-            authRepository.getUserProfile(userId).fold(
+            // Neither of these decides where to go, so they run alongside rather than in front.
+            launch { syncFcmToken(userId) }
+
+            // Cache-first: a returning user's profile is already on the device, so routing
+            // doesn't wait on the network.
+            userRepository.getUser(userId, cacheFirst = true).fold(
                 onSuccess = { user ->
                     val estateId = user.estateId
                     if (estateId == null) {
                         _authState.value = AuthState.LoggedInNoEstate
-                        return@fold
+                    } else {
+                        _authState.value = AuthState.LoggedInWithEstate
+                        launch { dropEstateIfDeleted(estateId, userId) }
                     }
-                    estateRepository.getEstate(estateId).fold(
-                        onSuccess = { _authState.value = AuthState.LoggedInWithEstate },
-                        onFailure = {
-                            estateRepository.leaveEstate(estateId, userId)
-                            _authState.value = AuthState.LoggedInNoEstate
-                        }
-                    )
                 },
                 onFailure = { _authState.value = AuthState.NotLoggedIn }
             )
+        }
+    }
+
+    /** An estate that was deleted while the user was away; they'll be routed to pick a new one next launch. */
+    private suspend fun dropEstateIfDeleted(estateId: String, userId: String) {
+        if (estateRepository.estateExists(estateId) == false) {
+            estateRepository.leaveEstate(estateId, userId)
         }
     }
 

@@ -1,5 +1,7 @@
 package com.eleazar.localhive.data.repository
 
+import android.util.Log
+import com.eleazar.localhive.data.remote.api.LocalHiveApi
 import com.eleazar.localhive.domain.MessageRepository
 import com.eleazar.localhive.domain.model.Chat
 import com.eleazar.localhive.domain.model.Message
@@ -7,24 +9,36 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
+private const val TAG = "MessageRepository"
+
 class MessageRepositoryImpl @Inject constructor(
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val api: LocalHiveApi
 ) : MessageRepository {
 
+    // Sorted on the device rather than with orderBy, so the list doesn't hinge on a
+    // composite index being deployed. A user's chat count is small enough for that.
     override fun getChats(userId: String, limit: Long): Flow<List<Chat>> = callbackFlow {
         val listener = firestore.collection("chats")
             .whereArrayContains("participants", userId)
-            .orderBy("lastMessageTime", Query.Direction.DESCENDING)
-            .limit(limit)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { close(error); return@addSnapshotListener }
-                val chats = snapshot?.documents?.mapNotNull { mapDocToChat(it) } ?: emptyList()
+                if (error != null) {
+                    Log.w(TAG, "Chat list listener failed", error)
+                    close(error)
+                    return@addSnapshotListener
+                }
+                val chats = snapshot?.documents
+                    ?.mapNotNull { mapDocToChat(it) }
+                    ?.sortedByDescending { it.lastMessageTime }
+                    ?.take(limit.toInt())
+                    ?: emptyList()
                 trySend(chats)
             }
         awaitClose { listener.remove() }
@@ -37,7 +51,11 @@ class MessageRepositoryImpl @Inject constructor(
             .orderBy("timestamp", Query.Direction.DESCENDING)
             .limit(limit)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { close(error); return@addSnapshotListener }
+                if (error != null) {
+                    Log.w(TAG, "Message listener failed for $chatId", error)
+                    close(error)
+                    return@addSnapshotListener
+                }
                 val messages = snapshot?.documents?.mapNotNull { doc ->
                     doc.toObject(Message::class.java)?.copy(id = doc.id)
                 } ?: emptyList()
@@ -63,32 +81,44 @@ class MessageRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun sendMessage(message: Message): Result<Unit> {
+    /**
+     * A merge write rather than read-then-write: it creates the chat on the first message
+     * and updates it after, without a round trip first — so the message shows up locally
+     * straight away and the send still queues while offline.
+     */
+    override suspend fun sendMessage(message: Message, participantNames: Map<String, String>): Result<Unit> {
         return try {
-            val chatRef = firestore.collection("chats").document(message.chatId)
-            val chatDoc = chatRef.get().await()
-            val participants = (chatDoc.get("participants") as? List<*>)?.filterIsInstance<String>()
-                ?: throw Exception("Chat not found")
+            val participants = Chat.participantsOf(message.chatId)
+            require(participants.size == 2 && message.senderId in participants) {
+                "Not a participant of chat ${message.chatId}"
+            }
 
+            val chatRef = firestore.collection("chats").document(message.chatId)
             val messageRef = chatRef.collection("messages").document()
 
-            // One batch, so a message can never land without its chat summary following it.
-            val batch = firestore.batch()
-            batch.set(messageRef, message.copy(id = messageRef.id).toMap())
-
-            val chatUpdates = mutableMapOf<String, Any>(
+            val unreadCounts = participants.associateWith<String, Any> { userId ->
+                // Sending implies the sender has read everything up to now.
+                if (userId == message.senderId) 0 else FieldValue.increment(1)
+            }
+            val chatFields = mapOf(
+                "participants" to participants,
+                "participantNames" to participantNames.filter { (id, name) -> id in participants && name.isNotBlank() },
                 "lastMessage" to message.content,
                 "lastMessageTime" to message.timestamp,
-                "lastMessageSenderId" to message.senderId
+                "lastMessageSenderId" to message.senderId,
+                "unreadCounts" to unreadCounts
             )
-            participants.filter { it != message.senderId }.forEach { recipientId ->
-                chatUpdates["unreadCounts.$recipientId"] = FieldValue.increment(1)
-            }
-            batch.update(chatRef, chatUpdates)
 
-            batch.commit().await()
+            firestore.batch()
+                .set(chatRef, chatFields, SetOptions.merge())
+                .set(messageRef, message.copy(id = messageRef.id).toMap())
+                .commit()
+                .await()
+            // Only once the server has it, so the Worker can read the message it's pushing.
+            api.notifyInBackground("type" to "message", "chatId" to message.chatId, "messageId" to messageRef.id)
             Result.success(Unit)
         } catch (e: Exception) {
+            Log.w(TAG, "Send failed for ${message.chatId}", e)
             Result.failure(e)
         }
     }
@@ -98,32 +128,6 @@ class MessageRepositoryImpl @Inject constructor(
             firestore.collection("chats").document(chatId)
                 .update("unreadCounts.$userId", 0).await()
             Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    override suspend fun createOrGetChat(
-        currentUserId: String,
-        currentUserName: String,
-        otherUserId: String,
-        otherUserName: String
-    ): Result<String> {
-        return try {
-            val chatId = listOf(currentUserId, otherUserId).sorted().joinToString("_")
-            val doc = firestore.collection("chats").document(chatId).get().await()
-            if (!doc.exists()) {
-                val chat = Chat(
-                    id = chatId,
-                    participants = listOf(currentUserId, otherUserId),
-                    participantNames = mapOf(currentUserId to currentUserName, otherUserId to otherUserName),
-                    lastMessage = "",
-                    lastMessageTime = System.currentTimeMillis(),
-                    unreadCounts = mapOf(currentUserId to 0, otherUserId to 0)
-                )
-                firestore.collection("chats").document(chatId).set(chat.toMap()).await()
-            }
-            Result.success(chatId)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -144,9 +148,13 @@ class MessageRepositoryImpl @Inject constructor(
                 ?.toMap()
                 ?: emptyMap()
 
+            val participants = (doc.get("participants") as? List<*>)?.filterIsInstance<String>()
+                ?.takeIf { it.isNotEmpty() }
+                ?: Chat.participantsOf(doc.id)
+
             Chat(
                 id = doc.id,
-                participants = (doc.get("participants") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                participants = participants,
                 participantNames = (doc.get("participantNames") as? Map<*, *>)
                     ?.mapNotNull { (key, value) ->
                         val userId = key as? String ?: return@mapNotNull null
@@ -156,23 +164,15 @@ class MessageRepositoryImpl @Inject constructor(
                     ?.toMap()
                     ?: emptyMap(),
                 lastMessage = doc.getString("lastMessage") ?: "",
-                lastMessageTime = doc.getLong("lastMessageTime") ?: 0L,
+                lastMessageTime = (doc.get("lastMessageTime") as? Number)?.toLong() ?: 0L,
                 lastMessageSenderId = doc.getString("lastMessageSenderId") ?: "",
+                deletedParticipants = (doc.get("deletedParticipants") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
                 unreadCounts = unread
             )
         } catch (e: Exception) {
             null
         }
     }
-
-    private fun Chat.toMap() = mapOf(
-        "participants" to participants,
-        "participantNames" to participantNames,
-        "lastMessage" to lastMessage,
-        "lastMessageTime" to lastMessageTime,
-        "lastMessageSenderId" to lastMessageSenderId,
-        "unreadCounts" to unreadCounts
-    )
 
     private fun Message.toMap() = mapOf(
         "chatId" to chatId, "senderId" to senderId,

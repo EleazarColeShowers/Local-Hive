@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.eleazar.localhive.ui.components.LeaveRole
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eleazar.localhive.R
 
@@ -24,9 +25,11 @@ import com.eleazar.localhive.R
 fun ProfileRoute(
     onSettings: () -> Unit = {},
     onAdminPanel: (estateId: String) -> Unit = {},
+    onLeftEstate: () -> Unit = {},
     viewModel: ProfileViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    LaunchedEffect(uiState.hasLeftEstate) { if (uiState.hasLeftEstate) onLeftEstate() }
     val context = LocalContext.current
     var pickedImageUri by remember { mutableStateOf<Uri?>(null) }
 
@@ -59,7 +62,9 @@ fun ProfileRoute(
             address = it.address,
             inviteCode = it.inviteCode,
             memberCount = it.memberCount,
-            isAdmin = user != null && user.id in it.adminIds
+            isAdmin = it.isAdmin(user?.id),
+            isOwner = it.isOwner(user?.id),
+            leaveRole = LeaveRole.of(it, user?.id)
         )
     }
 
@@ -92,6 +97,7 @@ fun ProfileRoute(
             context.startActivity(Intent.createChooser(intent, "Share Invite Code"))
         },
         onSettings = onSettings,
-        onAdminPanel = onAdminPanel
+        onAdminPanel = onAdminPanel,
+        onLeaveEstate = viewModel::leaveEstate
     )
 }

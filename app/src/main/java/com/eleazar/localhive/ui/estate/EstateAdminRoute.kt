@@ -43,6 +43,8 @@ fun EstateAdminRoute(
         onApproveRequest = { userId -> viewModel.approveRequest(estateId, userId) },
         onDenyRequest = { userId -> viewModel.denyRequest(estateId, userId) },
         onPromoteToAdmin = { userId -> viewModel.promoteToAdmin(estateId, userId) },
+        onRemoveAdmin = { userId -> viewModel.removeAdmin(estateId, userId) },
+        onRemoveMember = { userId -> viewModel.removeMember(estateId, userId) },
         onClearError = { viewModel.clearError() }
     )
 }

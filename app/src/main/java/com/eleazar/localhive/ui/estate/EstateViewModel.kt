@@ -189,12 +189,30 @@ class EstateViewModel @Inject constructor(
         }
     }
 
+    fun removeAdmin(estateId: String, userId: String) {
+        viewModelScope.launch {
+            estateRepository.removeAdmin(estateId, userId).fold(
+                onSuccess = { _uiState.update { it.copy(error = null) } },
+                onFailure = { e -> _uiState.update { it.copy(error = e.message) } }
+            )
+        }
+    }
+
+    fun removeMember(estateId: String, userId: String) {
+        viewModelScope.launch {
+            estateRepository.removeMember(estateId, userId).fold(
+                onSuccess = { _uiState.update { it.copy(error = null) } },
+                onFailure = { e -> _uiState.update { it.copy(error = e.message) } }
+            )
+        }
+    }
+
+    /** Live, so promoting or removing an admin shows up in the members list straight away. */
     fun loadEstate(estateId: String) {
         viewModelScope.launch {
-            estateRepository.getEstate(estateId).fold(
-                onSuccess = { estate -> _uiState.update { it.copy(estate = estate) } },
-                onFailure = {}
-            )
+            estateRepository.observeEstate(estateId).collect { estate ->
+                if (estate != null) _uiState.update { it.copy(estate = estate) }
+            }
         }
     }
 
