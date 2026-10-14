@@ -13,22 +13,24 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AlternateEmail
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -83,7 +85,7 @@ fun NotificationScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .statusBarsPadding()
+            .systemBarsPadding()
     ) {
         Row(
             modifier = Modifier
@@ -137,10 +139,7 @@ fun NotificationScreen(
             return
         }
 
-        LazyColumn(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
+        LazyColumn {
             items(notifications, key = { it.id }) { notification ->
                 NotificationCard(
                     notification = notification,
@@ -149,6 +148,7 @@ fun NotificationScreen(
                     onClick = { onNotificationClick(notification) },
                     onDismiss = { onNotificationDismiss(notification.id) }
                 )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
     }
@@ -169,71 +169,70 @@ private fun NotificationCard(
         NotificationType.REQUEST_APPROVED -> Icons.Default.CheckCircle to green
         NotificationType.REQUEST_DENIED -> Icons.Default.Close to Color(0xFFE53935)
         NotificationType.MEMBER_REMOVED -> Icons.Default.Close to Color(0xFFE53935)
+        NotificationType.MENTION -> Icons.Default.AlternateEmail to green
+        NotificationType.PAYMENT_SUBMITTED -> Icons.Outlined.ReceiptLong to green
+        NotificationType.PAYMENT_CONFIRMED -> Icons.Default.CheckCircle to green
+        NotificationType.PAYMENT_REJECTED -> Icons.Default.Close to Color(0xFFE53935)
+        NotificationType.POST_REMOVED -> Icons.Outlined.Delete to Color(0xFFE53935)
     }
 
-    Card(
+    // Unread rows get a faint brand tint, as most apps' notification lists do.
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (notification.isRead) colors.cardBackground else colors.lightGold
-        ),
-        elevation = CardDefaults.cardElevation(2.dp)
+            .background(if (notification.isRead) Color.Transparent else green.copy(alpha = 0.06f))
+            .clickable(onClick = onClick)
+            .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(iconColor.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
         ) {
+            Icon(icon, null, tint = iconColor, modifier = Modifier.size(20.dp))
+        }
+
+        Spacer(Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(notification.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = dark)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                notification.message,
+                fontSize = 13.sp,
+                color = dark.copy(alpha = 0.6f),
+                lineHeight = 18.sp
+            )
+            if (formattedTime.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    formattedTime,
+                    fontSize = 12.sp,
+                    color = dark.copy(alpha = 0.4f)
+                )
+            }
+        }
+
+        if (!notification.isRead) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .padding(start = 8.dp)
+                    .size(8.dp)
                     .clip(CircleShape)
-                    .background(iconColor.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, null, tint = iconColor, modifier = Modifier.size(20.dp))
-            }
+                    .background(green)
+            )
+        }
 
-            Spacer(Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(notification.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = dark)
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    notification.message,
-                    fontSize = 13.sp,
-                    color = dark.copy(alpha = 0.6f),
-                    lineHeight = 18.sp
-                )
-                if (formattedTime.isNotBlank()) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        formattedTime,
-                        fontSize = 12.sp,
-                        color = dark.copy(alpha = 0.4f)
-                    )
-                }
-            }
-
-            if (!notification.isRead) {
-                Box(
-                    modifier = Modifier
-                        .padding(start = 8.dp)
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(green)
-                )
-            }
-
-            IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-                Icon(
-                    Icons.Default.Close,
-                    "Dismiss",
-                    tint = dark.copy(alpha = 0.2f),
-                    modifier = Modifier.size(16.dp)
-                )
-            }
+        IconButton(onClick = onDismiss) {
+            Icon(
+                Icons.Default.Close,
+                "Dismiss",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }

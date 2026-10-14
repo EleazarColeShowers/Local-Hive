@@ -1,9 +1,16 @@
 package com.eleazar.localhive.data
 
 import android.app.Application
-import dagger.hilt.android.HiltAndroidApp
+import com.eleazar.localhive.BuildConfig
+import com.eleazar.localhive.di.initKoin
+import org.koin.android.ext.koin.androidContext
 
-@HiltAndroidApp
-class MyApplication: Application() {
+class MyApplication : Application() {
 
+    override fun onCreate() {
+        super.onCreate()
+        initKoin(apiBaseUrl = BuildConfig.LOCALHIVE_API_URL) {
+            androidContext(this@MyApplication)
+        }
+    }
 }

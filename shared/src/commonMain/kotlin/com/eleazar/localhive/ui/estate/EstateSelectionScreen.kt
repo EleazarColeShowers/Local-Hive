@@ -21,13 +21,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -64,9 +65,7 @@ fun EstateSelectionScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(listOf(gold, gold.copy(alpha = 0.85f), colors.surfaceGradientEnd))
-            )
+            .background(gold)
     ) {
         AnimatedContent(
             targetState = pendingRequest,
@@ -125,8 +124,8 @@ private fun SelectionContent(
         Spacer(Modifier.height(24.dp))
 
         Text(
-            text = "Find Your Estate",
-            fontSize = 30.sp,
+            text = "Find your estate",
+            fontSize = 26.sp,
             fontWeight = FontWeight.Bold,
             color = dark,
             textAlign = TextAlign.Center
@@ -134,26 +133,26 @@ private fun SelectionContent(
         Text(
             text = "Join your neighbourhood community\nor start a new one",
             fontSize = 15.sp,
-            color = dark.copy(alpha = 0.6f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             lineHeight = 22.sp,
-            modifier = Modifier.padding(top = 10.dp, bottom = 44.dp)
+            modifier = Modifier.padding(top = 8.dp, bottom = 36.dp)
         )
 
         EstateOptionCard(
             icon = Icons.Default.Search,
-            title = "Search & Join Estate",
+            title = "Join an estate",
             subtitle = "Find your estate and send a join request",
-            containerColor = green,
-            contentColor = Color.White,
+            containerColor = cardBg,
+            contentColor = dark,
             onClick = onJoinClick
         )
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(12.dp))
 
         EstateOptionCard(
             icon = Icons.Default.Add,
-            title = "Create Estate",
+            title = "Create an estate",
             subtitle = "Start a new community for your neighbourhood",
             containerColor = cardBg,
             contentColor = dark,
@@ -171,33 +170,30 @@ private fun EstateOptionCard(
     contentColor: Color,
     onClick: () -> Unit
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = containerColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+    // An outlined choice row: icon, what it does, and a chevron to say it leads somewhere.
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = containerColor,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Row(
-            modifier = Modifier.padding(22.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(52.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(contentColor.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, null, tint = contentColor, modifier = Modifier.size(26.dp))
-            }
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
             Spacer(Modifier.width(16.dp))
-            Column {
-                Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = contentColor)
-                Spacer(Modifier.height(3.dp))
-                Text(subtitle, fontSize = 13.sp, color = contentColor.copy(alpha = 0.7f), lineHeight = 18.sp)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = contentColor)
+                Spacer(Modifier.height(2.dp))
+                Text(subtitle, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 19.sp)
             }
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -234,8 +230,8 @@ private fun PendingRequestContent(
         Spacer(Modifier.height(28.dp))
 
         Text(
-            "Request Sent!",
-            fontSize = 28.sp,
+            "Request sent",
+            fontSize = 26.sp,
             fontWeight = FontWeight.Bold,
             color = dark,
             textAlign = TextAlign.Center
@@ -269,7 +265,7 @@ private fun PendingRequestContent(
             colors = ButtonDefaults.outlinedButtonColors(contentColor = dark.copy(alpha = 0.6f)),
             border = BorderStroke(1.dp, dark.copy(alpha = 0.25f))
         ) {
-            Text("Cancel Request", modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+            Text("Cancel request", modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
         }
     }
 }

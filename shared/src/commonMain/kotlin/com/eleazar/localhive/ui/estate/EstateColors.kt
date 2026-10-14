@@ -15,12 +15,12 @@ data class EstateColors(
 @Composable
 fun rememberEstateColors(): EstateColors {
     val colorScheme = MaterialTheme.colorScheme
-    val isDark = colorScheme.onBackground.red > 0.5f
+    // Flat: the old cream-to-gold gradient ends on the same colour it starts with now.
     return EstateColors(
         hiveGreen = colorScheme.primary,
         backgroundGold = colorScheme.background,
         darkGray = colorScheme.onBackground,
         cardBackground = colorScheme.surface,
-        surfaceGradientEnd = if (isDark) Color(0xFF1A1813) else Color(0xFFFFF8E7)
+        surfaceGradientEnd = colorScheme.background
     )
 }

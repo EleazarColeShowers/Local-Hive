@@ -1,7 +1,5 @@
 package com.eleazar.localhive.ui.auth
 
-import com.eleazar.localhive.ui.theme.DarkGray
-import com.eleazar.localhive.ui.theme.HiveGreen
 import com.eleazar.localhive.ui.util.isValidEmail
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -50,8 +48,8 @@ fun SignupScreen(
 
     val isEmailValid = email.isEmpty() || isValidEmail(email)
     val isUsernameValid = username.isEmpty() || username.matches(Regex("^[a-zA-Z0-9_.]{3,20}$"))
-    val darkGray = DarkGray
-    val hiveGreen = HiveGreen
+    val darkGray = MaterialTheme.colorScheme.onBackground
+    val hiveGreen = MaterialTheme.colorScheme.primary
 
     AuthScreenScaffold {
         GlassCard {

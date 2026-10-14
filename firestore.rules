@@ -29,6 +29,12 @@ service cloud.firestore {
              && uid() in get(/databases/$(database)/documents/estates/$(estateId)).data.adminIds;
     }
 
+    // The member an admin appointed to look after the estate's money.
+    function isTreasurerOf(estateId) {
+      return isSignedIn()
+             && get(/databases/$(database)/documents/estates/$(estateId)).data.get('treasurerId', '') == uid();
+    }
+
     // As isEstateAdmin, but sees writes earlier in the same batch — creating an estate
     // and attaching its creator to it happen together.
     function isEstateAdminAfter(estateId) {
@@ -108,6 +114,11 @@ service cloud.firestore {
         || (changedKeys().hasOnly(['memberCount'])
             && (request.resource.data.memberCount == resource.data.memberCount + 1
                 || request.resource.data.memberCount == resource.data.memberCount - 1))
+        // A treasurer who isn't an admin gives the role up as they leave, and nothing more.
+        || (changedKeys().hasOnly(['memberCount', 'treasurerId'])
+            && resource.data.get('treasurerId', '') == uid()
+            && request.resource.data.get('treasurerId', '') == ''
+            && request.resource.data.memberCount == resource.data.memberCount - 1)
       );
       allow delete: if isSignedIn() && uid() in resource.data.adminIds;
 
@@ -123,10 +134,137 @@ service cloud.firestore {
                    && !(uid() in request.resource.data.adminIds));
       }
 
+      // Dues: the treasurer sets them; every member can see what's owed.
+      match /levies/{levyId} {
+        allow read: if isMemberOf(estateId);
+        allow create, update: if isTreasurerOf(estateId)
+                              && request.resource.data.title is string
+                              && request.resource.data.amount is int
+                              && request.resource.data.amount > 0;
+        allow delete: if isTreasurerOf(estateId);
+
+        // One per resident, keyed by their uid. Only they and the treasurer can see it.
+        match /payments/{userId} {
+          allow read: if isSignedIn() && (uid() == userId || isTreasurerOf(estateId));
+          // A resident sends proof for themselves. It always arrives pending, and can't be
+          // replaced once the treasurer has confirmed it.
+          allow create, update: if (isSignedIn()
+                                    && uid() == userId
+                                    && isMemberOf(estateId)
+                                    && request.resource.data.userId == uid()
+                                    && request.resource.data.status == 'pending'
+                                    && request.resource.data.keys().hasOnly(
+                                         ['userId', 'userName', 'levyId', 'amount', 'status', 'proofUrl', 'submittedAt'])
+                                    && (resource == null || resource.data.status != 'paid'))
+                                // The treasurer confirms, rejects or records a cash payment.
+                                || (isTreasurerOf(estateId)
+                                    && request.resource.data.userId == userId
+                                    && request.resource.data.status in ['pending', 'paid', 'rejected']);
+          allow delete: if isTreasurerOf(estateId);
+        }
+      }
+
+      // Spending is logged by the treasurer and open to every member, for transparency.
+      match /expenses/{expenseId} {
+        allow read: if isMemberOf(estateId);
+        allow create, update: if isTreasurerOf(estateId)
+                              && request.resource.data.amount is int
+                              && request.resource.data.amount > 0;
+        allow delete: if isTreasurerOf(estateId);
+      }
+
       // The estate's current invite code, for its members to share.
       match /private/{docId} {
         allow read: if isMemberOf(estateId) || isEstateAdmin(estateId);
         allow write: if isEstateAdminAfter(estateId);
+      }
+
+      // Polls: admins ask, every member votes once. The tallies live on the poll for all to see;
+      // each vote is a separate document only its voter can read. A vote and its tally are
+      // written in one batch, and the two rules below hold each to the other.
+      function pollPath(pollId) {
+        return /databases/$(database)/documents/estates/$(estateId)/polls/$(pollId);
+      }
+
+      function votePath(pollId) {
+        return /databases/$(database)/documents/estates/$(estateId)/pollVotes/$(pollId + '_' + uid());
+      }
+
+      function pollOpen(poll) {
+        return poll.closed == false
+               && (poll.closesAt == 0 || request.time.toMillis() < poll.closesAt);
+      }
+
+      match /polls/{pollId} {
+        allow read: if isMemberOf(estateId);
+        allow create: if isEstateAdmin(estateId)
+                      && request.resource.data.createdBy == uid()
+                      && request.resource.data.question is string
+                      && request.resource.data.question.size() > 0
+                      && request.resource.data.question.size() <= 200
+                      && request.resource.data.options is list
+                      && request.resource.data.options.size() >= 2
+                      && request.resource.data.options.size() <= 6
+                      && request.resource.data.closesAt is int
+                      && request.resource.data.closed == false
+                      && request.resource.data.counts.size() == 0
+                      && request.resource.data.voteCount == 0;
+        allow update: if (isEstateAdmin(estateId)
+                          && changedKeys().hasOnly(['closed'])
+                          && request.resource.data.closed == true)
+                      || tallyForNewVote();
+        allow delete: if isEstateAdmin(estateId);
+
+        // The caller's vote document appears in this same batch, and the option it names, and
+        // only that one, goes up by one.
+        function tallyForNewVote() {
+          let option = string(getAfter(votePath(pollId)).data.option);
+          return isMemberOf(estateId)
+                 && pollOpen(resource.data)
+                 && !exists(votePath(pollId))
+                 && existsAfter(votePath(pollId))
+                 && changedKeys().hasOnly(['counts', 'voteCount'])
+                 && request.resource.data.voteCount == resource.data.voteCount + 1
+                 && request.resource.data.counts.diff(resource.data.counts).affectedKeys().hasOnly([option])
+                 && request.resource.data.counts[option] == resource.data.counts.get(option, 0) + 1;
+        }
+      }
+
+      match /pollVotes/{voteId} {
+        allow read: if isSignedIn() && resource.data.userId == uid();
+        // One per member per poll, keyed "<pollId>_<uid>", and final: never changed or removed.
+        allow create: if isMemberOf(estateId)
+                      && request.resource.data.keys().hasOnly(['pollId', 'userId', 'option', 'at'])
+                      && request.resource.data.userId == uid()
+                      && request.resource.data.pollId is string
+                      && voteId == request.resource.data.pollId + '_' + uid()
+                      && request.resource.data.option is int
+                      && request.resource.data.option >= 0
+                      && request.resource.data.option < get(pollPath(request.resource.data.pollId)).data.options.size()
+                      && getAfter(pollPath(request.resource.data.pollId)).data.voteCount
+                         == get(pollPath(request.resource.data.pollId)).data.voteCount + 1;
+        allow update, delete: if false;
+      }
+
+      // "Is there light?": the latest word on each supply, and every report behind it.
+      match /utilities/{kind} {
+        allow read: if isMemberOf(estateId);
+        allow create, update: if isMemberOf(estateId)
+                              && kind in ['power', 'water']
+                              && request.resource.data.keys().hasOnly(['isOn', 'since', 'updatedAt', 'updatedBy', 'updatedByName'])
+                              && request.resource.data.isOn is bool
+                              && request.resource.data.updatedBy == uid();
+        allow delete: if false;
+      }
+
+      match /utilityReports/{reportId} {
+        allow read: if isMemberOf(estateId);
+        allow create: if isMemberOf(estateId)
+                      && request.resource.data.keys().hasOnly(['kind', 'isOn', 'by', 'byName', 'at'])
+                      && request.resource.data.kind in ['power', 'water']
+                      && request.resource.data.isOn is bool
+                      && request.resource.data.by == uid();
+        allow update, delete: if false;
       }
     }
 
@@ -195,22 +333,59 @@ service cloud.firestore {
                || isEstateAdmin(request.resource.data.estateId);
       }
 
+      function isIncident(category) {
+        return category in ['security', 'emergency'];
+      }
+
+      // Security reports and emergencies start open, and an emergency says what kind it is.
+      function incidentValid() {
+        let data = request.resource.data;
+        let category = data.get('category', '');
+        return !isIncident(category)
+               || (data.get('incidentStatus', '') == 'open'
+                   && data.get('location', '') is string
+                   && data.get('location', '').size() <= 200
+                   && (category != 'emergency'
+                       || data.get('emergencyType', '') in ['break_in', 'fire', 'medical', 'other']));
+      }
+
       allow create: if isSignedIn()
                     && request.resource.data.authorId == uid()
                     && isMemberOf(request.resource.data.estateId)
-                    && categoryAllowed();
+                    && categoryAllowed()
+                    && incidentValid();
       allow update: if isSignedIn() && (
         (resource.data.authorId == uid()
           && request.resource.data.authorId == resource.data.authorId
           && request.resource.data.estateId == resource.data.estateId
-          && (request.resource.data.get('category', '') == resource.data.get('category', '') || categoryAllowed()))
+          && (request.resource.data.get('category', '') == resource.data.get('category', '') || categoryAllowed())
+          // An old post can't be turned into an emergency, which would pin it to everyone's feed.
+          && (request.resource.data.get('category', '') != 'emergency'
+              || resource.data.get('category', '') == 'emergency'))
+        // Admins move a security report or emergency from open to resolved, and change nothing else.
+        || (isIncident(resource.data.get('category', ''))
+            && isEstateAdmin(resource.data.estateId)
+            && changedKeys().hasOnly(['incidentStatus', 'statusUpdatedBy', 'statusUpdatedByName', 'statusUpdatedAt'])
+            && request.resource.data.incidentStatus in ['open', 'handling', 'resolved']
+            && request.resource.data.statusUpdatedBy == uid())
         // A neighbour may like a post or comment on it. Neither may rewrite its body.
         || (isMemberOf(resource.data.estateId) && (
              changedKeys().hasOnly(['likedBy', 'likeCount'])
              || changedKeys().hasOnly(['commentCount'])
            ))
+        // A neighbour says they're on their way to an emergency: they add themselves, by name,
+        // and touch nobody else's entry.
+        || (isMemberOf(resource.data.estateId)
+            && resource.data.get('category', '') == 'emergency'
+            && changedKeys().hasOnly(['responders'])
+            && request.resource.data.responders.diff(resource.data.get('responders', {})).affectedKeys().hasOnly([uid()])
+            && request.resource.data.responders[uid()] is string)
       );
-      allow delete: if isSignedIn() && resource.data.authorId == uid();
+      // Authors remove their own posts; admins can remove any post in their estate.
+      allow delete: if isSignedIn() && (
+        resource.data.authorId == uid()
+        || isEstateAdmin(resource.data.estateId)
+      );
 
       match /comments/{commentId} {
         function postEstate() {
@@ -222,10 +397,12 @@ service cloud.firestore {
                       && request.resource.data.authorId == uid()
                       && isMemberOf(postEstate());
         allow update: if false;
-        // The comment's author, or the author of the post being commented on.
+        // The comment's author, the author of the post being commented on, or an admin of its
+        // estate (deleting a post takes its comments with it).
         allow delete: if isSignedIn() && (
           resource.data.authorId == uid()
           || get(/databases/$(database)/documents/posts/$(postId)).data.authorId == uid()
+          || isEstateAdmin(postEstate())
         );
       }
     }

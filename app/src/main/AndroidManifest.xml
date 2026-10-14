@@ -32,6 +32,15 @@
                 <data android:scheme="localhive" android:host="notifications" />
                 <data android:scheme="localhive" android:host="chat" />
                 <data android:scheme="localhive" android:host="post" />
+                <data android:scheme="localhive" android:host="levy" />
+            </intent-filter>
+            <!-- Share sheet: a link or text, a photo or a video becomes a new post. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
             </intent-filter>
         </activity>
 

@@ -10,25 +10,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.eleazar.localhive.ui.theme.BackgroundGold
+import androidx.compose.material3.MaterialTheme
 import localhive.shared.generated.resources.Res
 import localhive.shared.generated.resources.localhivelogo
 import org.jetbrains.compose.resources.painterResource
 
-/** Bare splash: the logo on brand gold. Where to go next is decided by the host's route. */
+/** Bare splash: the logo on the app background. Where to go next is decided by the host's route. */
 @Composable
 fun SplashScreen(modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(BackgroundGold),
+            .background(MaterialTheme.colorScheme.background),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Image(
             painter = painterResource(Res.drawable.localhivelogo),
             contentDescription = null,
-            modifier = Modifier.size(300.dp)
+            modifier = Modifier.size(160.dp)
         )
     }
 }

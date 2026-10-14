@@ -42,10 +42,3 @@ fun dayLabel(millis: Long, now: Long = nowMillis()): String {
         else -> formatDate(millis, "MMM d, yyyy")
     }
 }
-
-/** "Good morning" / "Good afternoon" / "Good evening" for the device's local time. */
-fun greeting(now: Long = nowMillis()): String = when (formatDate(now, "H").toIntOrNull() ?: 12) {
-    in 5..11 -> "Good morning"
-    in 12..16 -> "Good afternoon"
-    else -> "Good evening"
-}

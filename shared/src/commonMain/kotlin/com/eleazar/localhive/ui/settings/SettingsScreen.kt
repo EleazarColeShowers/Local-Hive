@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Email
@@ -57,7 +58,9 @@ fun SettingsScreen(
     isDeletingAccount: Boolean = false,
     deleteAccountError: String? = null,
     onDeleteAccount: (password: String) -> Unit = {},
-    onDeleteAccountDismissed: () -> Unit = {}
+    onDeleteAccountDismissed: () -> Unit = {},
+    lightAlerts: Boolean = false,
+    onLightAlertsChange: (Boolean) -> Unit = {}
 ) {
     var showLeaveConfirm by remember { mutableStateOf(false) }
     var showDeleteAccount by remember { mutableStateOf(false) }
@@ -120,7 +123,8 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp)
+                .navigationBarsPadding()
+                .padding(vertical = 8.dp)
         ) {
             SettingsSection(title = "Appearance", lightGold = lightGold, darkGray = darkGray) {
                 ThemeModeRow(
@@ -157,7 +161,7 @@ fun SettingsScreen(
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Notifications, null, tint = hiveGreen, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.Notifications, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
                     Spacer(Modifier.width(14.dp))
                     Text(
                         "Push notifications",
@@ -168,6 +172,29 @@ fun SettingsScreen(
                     Switch(
                         checked = pushNotificationsEnabled,
                         onCheckedChange = onPushNotificationsChange,
+                        colors = SwitchDefaults.colors(checkedTrackColor = hiveGreen)
+                    )
+                }
+                SettingsDivider(darkGray)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Bolt, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Light is back alerts", fontSize = 14.sp, color = darkGray)
+                        Text(
+                            "A notification when a neighbour reports the light is back",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = lightAlerts,
+                        onCheckedChange = onLightAlertsChange,
                         colors = SwitchDefaults.colors(checkedTrackColor = hiveGreen)
                     )
                 }
@@ -183,7 +210,7 @@ fun SettingsScreen(
                             .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Email, null, tint = hiveGreen, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Email, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(14.dp))
                         Text(email, fontSize = 14.sp, color = darkGray)
                     }
@@ -196,7 +223,7 @@ fun SettingsScreen(
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Outlined.Block, null, tint = hiveGreen, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Outlined.Block, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
                     Spacer(Modifier.width(14.dp))
                     Text("Blocked people", fontSize = 14.sp, color = darkGray, modifier = Modifier.weight(1f))
                     Icon(
@@ -236,7 +263,7 @@ fun SettingsScreen(
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Info, null, tint = hiveGreen, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
                     Spacer(Modifier.width(14.dp))
                     Text("App version", fontSize = 14.sp, color = darkGray, modifier = Modifier.weight(1f))
                     Text(versionName, fontSize = 13.sp, color = darkGray.copy(alpha = 0.5f))
@@ -245,24 +272,19 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = lightGold),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onLogout() }
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onLogout() }
-                        .padding(horizontal = 16.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.ExitToApp, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text("Log Out", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error, fontSize = 15.sp)
-                }
+                Icon(Icons.Default.ExitToApp, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(16.dp))
+                Text("Log out", color = MaterialTheme.colorScheme.error, fontSize = 16.sp)
             }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             Spacer(Modifier.height(24.dp))
 
@@ -295,27 +317,20 @@ private fun SettingsSection(
     darkGray: Color,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    // Grouped like system settings: a small coloured heading over plain rows.
     Text(
-        title.uppercase(),
-        fontSize = 12.sp,
+        title,
+        fontSize = 14.sp,
         fontWeight = FontWeight.SemiBold,
-        color = darkGray.copy(alpha = 0.5f),
-        letterSpacing = 1.sp,
-        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp)
     )
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = lightGold),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(content = content)
-    }
+    Column(modifier = Modifier.fillMaxWidth(), content = content)
 }
 
 @Composable
 private fun SettingsDivider(darkGray: Color) {
-    HorizontalDivider(color = darkGray.copy(alpha = 0.08f), modifier = Modifier.padding(horizontal = 16.dp))
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 16.dp))
 }
 
 @Composable

@@ -25,4 +25,11 @@ async function sha1Hex(text) {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export const UPLOAD_KINDS = { profile: "profileImages", post: "postImages" };
+/** Each upload kind's folder, and the Cloudinary resource type its files are stored as. */
+export const UPLOAD_KINDS = {
+  profile: { folder: "profileImages", resourceType: "image" },
+  post: { folder: "postImages", resourceType: "image" },
+  video: { folder: "postVideos", resourceType: "video" },
+  // Proof of levy payments and receipts for estate expenses.
+  receipt: { folder: "receipts", resourceType: "image" },
+};

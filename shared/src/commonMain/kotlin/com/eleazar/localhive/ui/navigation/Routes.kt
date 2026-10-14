@@ -9,7 +9,6 @@ sealed class Screen(val route: String) {
     object SignUp : Screen("signup")
     object Login : Screen("login")
     object ProfileSetup : Screen("profile_setup")
-    object DetailsSetup : Screen("details_setup")
     object EstateSelection : Screen("estate_selection")
     object Main : Screen("main")
 
@@ -19,6 +18,10 @@ sealed class Screen(val route: String) {
     object Profile : Screen("profile")
 
     object CreatePost : Screen("create_post")
+    object EmergencyAlert : Screen("emergency_alert")
+    object EditPost : Screen("edit_post/{postId}") {
+        fun createRoute(postId: String) = "edit_post/$postId"
+    }
 
     object PostDetail : Screen("post_detail/{postId}") {
         fun createRoute(postId: String) = "post_detail/$postId"
@@ -37,6 +40,17 @@ sealed class Screen(val route: String) {
     object EstateAdmin : Screen("estate_admin/{estateId}") {
         fun createRoute(estateId: String) = "estate_admin/$estateId"
     }
+
+    object Finances : Screen("finances")
+    object LevyDetail : Screen("levy/{levyId}") {
+        fun createRoute(levyId: String) = "levy/$levyId"
+    }
+    object CreateLevy : Screen("create_levy")
+    object AddExpense : Screen("add_expense")
+
+    object Polls : Screen("polls")
+    object CreatePoll : Screen("create_poll")
+    object Utilities : Screen("utilities")
 
     object Notifications : Screen("notifications")
     object Settings : Screen("settings")

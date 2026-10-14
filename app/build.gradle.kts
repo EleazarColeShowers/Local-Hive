@@ -3,8 +3,6 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.ksp)
-    alias(libs.plugins.hilt)
     alias(libs.plugins.kotlin.android)
     id("com.google.gms.google-services")
 }
@@ -41,8 +39,8 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     buildFeatures {
@@ -51,7 +49,7 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = "11"
+        jvmTarget = "17"
     }
 }
 
@@ -64,21 +62,18 @@ kotlin {
 dependencies {
     implementation(project(":shared"))
     implementation(libs.androidx.core.splashscreen)
-    // Room
-    val roomVersion = "2.6.1"
-    implementation("androidx.room:room-runtime:$roomVersion")
-    implementation("androidx.room:room-ktx:$roomVersion")       // ← add this for coroutines support
-    ksp("androidx.room:room-compiler:$roomVersion")
 
-    // Firebase
+    // Firebase. Auth and Firestore come through :shared (GitLive's SDK wraps these same libraries);
+    // the BOM keeps every Firebase library on one release.
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-analytics")
-    implementation("com.google.firebase:firebase-auth-ktx")
-    implementation("com.google.firebase:firebase-firestore-ktx")
-    // Photos go to Cloudinary via the Worker; Firebase Storage needs the paid plan.
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("androidx.exifinterface:exifinterface:1.3.7")
     implementation("com.google.firebase:firebase-messaging-ktx")
+
+    // Dependency injection, shared with iOS (the modules live in :shared).
+    implementation(libs.koin.android)
+
+    // Prompts Play Store installs to update in place.
+    implementation("com.google.android.play:app-update:2.1.0")
 
 
     // Core
@@ -97,13 +92,6 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation("androidx.compose.material:material-icons-extended")
 
-    // Coil
-    implementation(libs.coil.compose)
-
-    // Hilt
-    implementation("com.google.dagger:hilt-android:2.56.1")
-    ksp("com.google.dagger:hilt-compiler:2.56.1")
-
     // Test
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -112,9 +100,4 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-
-    //navigation
-    implementation("androidx.navigation:navigation-compose:2.9.7")
-    implementation("androidx.hilt:hilt-navigation-compose:1.3.0")
-
 }

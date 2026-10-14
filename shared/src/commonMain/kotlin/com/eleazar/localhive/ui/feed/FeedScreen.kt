@@ -1,27 +1,46 @@
 package com.eleazar.localhive.ui.feed
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Forum
+import androidx.compose.material.icons.outlined.Emergency
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.eleazar.localhive.ui.components.ComposePrompt
+import com.eleazar.localhive.ui.components.EmergencyBanner
+import com.eleazar.localhive.ui.components.EstateGlance
+import com.eleazar.localhive.ui.components.PollsGlance
+import com.eleazar.localhive.ui.components.icon
+import com.eleazar.localhive.ui.finance.DuesSummary
+import com.eleazar.localhive.domain.model.Post
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.eleazar.localhive.domain.model.UtilityKind
+import com.eleazar.localhive.domain.model.UtilityStatus
 import com.eleazar.localhive.ui.components.EmptyState
 import com.eleazar.localhive.ui.components.PostCard
-import com.eleazar.localhive.ui.components.ScreenGutter
 import com.eleazar.localhive.ui.components.ScreenHeader
+import com.eleazar.localhive.domain.model.IncidentStatus
 import com.eleazar.localhive.domain.model.PostCategory
-import com.eleazar.localhive.ui.util.greeting
+import com.eleazar.localhive.ui.theme.AlertRed
 import com.eleazar.localhive.ui.util.nowMillis
 
 /** How long an announcement stays pinned to the top of the feed. */
 private const val PIN_WINDOW_MILLIS = 7 * 24 * 60 * 60 * 1000L
+
+/** An emergency nobody marks resolved stops being pinned after this. */
+private const val EMERGENCY_WINDOW_MILLIS = 24 * 60 * 60 * 1000L
 
 @Composable
 fun FeedScreen(
@@ -30,7 +49,20 @@ fun FeedScreen(
     onCreatePost: () -> Unit,
     onLike: (postId: String) -> Unit,
     onLoadMore: () -> Unit,
+    onUserClick: (userId: String) -> Unit = {},
+    onEmergency: () -> Unit = {},
+    onEditPost: (postId: String) -> Unit = {},
+    onDeletePost: (postId: String, reason: String) -> Unit = { _, _ -> },
+    utilities: Map<UtilityKind, UtilityStatus> = emptyMap(),
+    polls: PollsGlance = PollsGlance(open = 0, awaitingVote = 0),
+    dues: DuesSummary? = null,
+    onUtilities: () -> Unit = {},
+    onPolls: () -> Unit = {},
+    onDues: () -> Unit = {},
 ) {
+    // Saved by name: an enum's name survives process death on every platform.
+    var filterName by rememberSaveable { mutableStateOf(FeedFilter.ALL.name) }
+    val filter = FeedFilter.valueOf(filterName)
     val loadMore by rememberUpdatedState(onLoadMore)
     val listState = rememberLazyListState()
     val accent = MaterialTheme.colorScheme.primary
@@ -46,34 +78,49 @@ fun FeedScreen(
             }
     }
 
-    val firstName = uiState.currentUserName?.trim()?.substringBefore(' ')?.takeIf { it.isNotBlank() }
-    val estateLine = uiState.estateName?.let { name ->
-        when (val others = (uiState.memberCount - 1).coerceAtLeast(0)) {
-            0 -> name
-            1 -> "$name · 1 neighbour"
-            else -> "$name · $others neighbours"
-        }
-    }
-
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(bottom = 16.dp)
     ) {
         item(key = "header") {
-            ScreenHeader(
-                title = if (firstName != null) "${greeting()}, $firstName" else greeting(),
-                subtitle = estateLine
+            ScreenHeader(title = uiState.estateName ?: "LocalHive", action = {
+                if (uiState.estateId != null) SosButton(onClick = onEmergency)
+            })
+        }
+        val emergencies = uiState.posts.filter {
+            it.category == PostCategory.EMERGENCY.key
+                && it.incidentStatus != IncidentStatus.RESOLVED.key
+                && nowMillis() - it.createdAt < EMERGENCY_WINDOW_MILLIS
+        }
+        items(emergencies, key = { "emergency-${it.id}" }) { post ->
+            EmergencyBanner(
+                post = post,
+                onClick = { onPostClick(post.id) },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+            )
+        }
+        if (uiState.estateId != null) item(key = "glance") {
+            EstateGlance(
+                utilities = utilities,
+                polls = polls,
+                dues = dues,
+                onUtilities = onUtilities,
+                onPolls = onPolls,
+                onDues = onDues,
+                modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 8.dp)
             )
         }
         item(key = "compose") {
             ComposePrompt(
                 name = uiState.currentUserName,
                 photoUrl = uiState.currentUserImageUrl,
-                onClick = onCreatePost,
-                modifier = Modifier.padding(horizontal = ScreenGutter)
+                onClick = onCreatePost
             )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        }
+        if (uiState.posts.isNotEmpty() || filter != FeedFilter.ALL) item(key = "filters") {
+            FeedFilterRow(selected = filter, onSelect = { filterName = it.name })
         }
 
         when {
@@ -90,12 +137,28 @@ fun FeedScreen(
                     modifier = Modifier.padding(top = 48.dp)
                 )
             }
+            uiState.posts.none(filter::matches) -> item(key = "empty-filter") {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(top = 40.dp, start = 24.dp, end = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "No ${filter.label.lowercase()} posts yet",
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    if (uiState.hasMorePosts) {
+                        TextButton(onClick = onLoadMore, enabled = !uiState.isLoadingMore) { Text("Look further back") }
+                    }
+                }
+            }
             else -> {
+                val shown = uiState.posts.filter(filter::matches)
                 // The newest recent announcement sits above everything; the rest stay in date order.
-                val pinned = uiState.posts.firstOrNull {
+                val pinned = shown.firstOrNull {
                     it.category == PostCategory.ANNOUNCEMENT.key && nowMillis() - it.createdAt < PIN_WINDOW_MILLIS
                 }
-                val ordered = listOfNotNull(pinned) + uiState.posts.filter { it.id != pinned?.id }
+                val ordered = listOfNotNull(pinned) + shown.filter { it.id != pinned?.id }
                 items(ordered, key = { it.id }) { post ->
                     PostCard(
                         post = post,
@@ -105,8 +168,19 @@ fun FeedScreen(
                         onClick = { onPostClick(post.id) },
                         authorIsAdmin = post.authorId in uiState.adminIds,
                         pinned = post.id == pinned?.id,
-                        modifier = Modifier.padding(horizontal = ScreenGutter)
+                        onMentionClick = onUserClick,
+                        onEdit = { onEditPost(post.id) }.takeIf { post.authorId == uiState.currentUserId },
+                        onDelete = { reason: String -> onDeletePost(post.id, reason) }.takeIf { post.authorId == uiState.currentUserId || uiState.isAdmin }
                     )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+                // A filtered list can be too short to scroll, so it offers older posts itself.
+                if (filter != FeedFilter.ALL && uiState.hasMorePosts && !uiState.isLoadingMore) {
+                    item(key = "older") {
+                        Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
+                            TextButton(onClick = onLoadMore) { Text("Load older posts") }
+                        }
+                    }
                 }
                 if (uiState.isLoadingMore) {
                     item(key = "more") {
@@ -116,6 +190,64 @@ fun FeedScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+/** Opens the SOS screen; nothing is sent until the alert there is held down. */
+@Composable
+private fun SosButton(onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(50),
+        color = AlertRed,
+        contentColor = Color.White,
+        modifier = Modifier.padding(end = 4.dp).height(34.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Outlined.Emergency, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("SOS", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        }
+    }
+}
+
+/** Narrows the feed to one kind of post. */
+private enum class FeedFilter(val label: String, val categories: Set<PostCategory>) {
+    ALL("All", emptySet()),
+    ANNOUNCEMENTS("Announcements", setOf(PostCategory.ANNOUNCEMENT)),
+    // Emergencies are security too, and the one place to find past ones.
+    SECURITY("Security", setOf(PostCategory.SECURITY, PostCategory.EMERGENCY)),
+    FOR_SALE("For sale", setOf(PostCategory.FOR_SALE)),
+    EVENTS("Events", setOf(PostCategory.EVENT)),
+    QUESTIONS("Questions", setOf(PostCategory.QUESTION)),
+    NOTICES("Notices", setOf(PostCategory.NOTICE));
+
+    fun matches(post: Post): Boolean = this == ALL || PostCategory.fromKey(post.category) in categories
+}
+
+@Composable
+private fun FeedFilterRow(selected: FeedFilter, onSelect: (FeedFilter) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        FeedFilter.entries.forEach { option ->
+            FilterChip(
+                selected = option == selected,
+                onClick = { onSelect(option) },
+                label = { Text(option.label) },
+                leadingIcon = option.categories.firstOrNull()?.let { category ->
+                    { Icon(category.icon, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                },
+                shape = RoundedCornerShape(50)
+            )
         }
     }
 }

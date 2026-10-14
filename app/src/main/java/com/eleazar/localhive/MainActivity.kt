@@ -6,33 +6,39 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.eleazar.localhive.domain.AppSettingsRepository
-import com.eleazar.localhive.domain.ThemeMode
-import com.eleazar.localhive.ui.navigation.AndroidLocalHiveScreens
-import com.eleazar.localhive.ui.navigation.LocalHiveNavGraph
-import com.eleazar.localhive.ui.theme.LocalHiveTheme
-import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
+import com.eleazar.localhive.ui.LocalHiveApp
+import com.eleazar.localhive.ui.share.LocalShareInbox
+import com.eleazar.localhive.ui.share.ShareInbox
+import com.eleazar.localhive.ui.share.toIncomingShare
+import com.eleazar.localhive.ui.update.InAppUpdater
 
-@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    @Inject lateinit var appSettingsRepository: AppSettingsRepository
+    private val shareInbox: ShareInbox by viewModels()
+    private val updater = InAppUpdater(this)
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+
+        // Only on first creation: after a rotation the inbox (a ViewModel) still has it, or it's been used.
+        if (savedInstanceState == null) {
+            intent.toIncomingShare(contentResolver)?.let(shareInbox::offer)
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
@@ -42,20 +48,30 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            val themeMode by appSettingsRepository.themeMode.collectAsStateWithLifecycle()
-            val darkTheme = when (themeMode) {
-                ThemeMode.DARK -> true
-                ThemeMode.LIGHT -> false
-                ThemeMode.SYSTEM -> isSystemInDarkTheme()
-            }
-
-            LocalHiveTheme(darkTheme = darkTheme) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    LocalHiveNavGraph(screens = AndroidLocalHiveScreens)
-                }
+            val pendingShare by shareInbox.pending.collectAsStateWithLifecycle()
+            CompositionLocalProvider(LocalShareInbox provides shareInbox) {
+                LocalHiveApp(
+                    hasPendingShare = pendingShare != null,
+                    // Follows the in-app theme, which can differ from the phone's: dark icons on the
+                    // white app, light icons in dark mode.
+                    onDarkThemeChange = { darkTheme ->
+                        WindowCompat.getInsetsController(window, window.decorView).apply {
+                            isAppearanceLightStatusBars = !darkTheme
+                            isAppearanceLightNavigationBars = !darkTheme
+                        }
+                    },
+                    overlay = {
+                        if (updater.updateReady) {
+                            AlertDialog(
+                                onDismissRequest = updater::postpone,
+                                title = { Text("Update ready") },
+                                text = { Text("A new version of LocalHive has downloaded. Restart to start using it.") },
+                                confirmButton = { TextButton(onClick = updater::install) { Text("Restart") } },
+                                dismissButton = { TextButton(onClick = updater::postpone) { Text("Later") } }
+                            )
+                        }
+                    }
+                )
             }
         }
     }

@@ -3,16 +3,14 @@ package com.eleazar.localhive.ui.components
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import com.eleazar.localhive.ui.theme.DarkGray
-import com.eleazar.localhive.ui.theme.HiveGreen
 
 @Composable
 fun LocalHiveTextField(
@@ -47,21 +45,11 @@ fun LocalHiveTextField(
         keyboardActions = keyboardActions,
         supportingText = supportingText?.let { { Text(it) } },
         shape = RoundedCornerShape(12.dp),
+        // Material's own outlined field on the theme's colours, so it reads right in dark mode too.
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = HiveGreen,
-            focusedLabelColor = HiveGreen,
-            unfocusedBorderColor = DarkGray.copy(alpha = 0.3f),
-            unfocusedLabelColor = DarkGray.copy(alpha = 0.6f),
-            cursorColor = HiveGreen,
-            focusedContainerColor = Color.White,
-            unfocusedContainerColor = Color.White,
-            // The field is always white, so its text stays dark in dark mode too.
-            focusedTextColor = DarkGray,
-            unfocusedTextColor = DarkGray,
-            focusedLeadingIconColor = DarkGray.copy(alpha = 0.6f),
-            unfocusedLeadingIconColor = DarkGray.copy(alpha = 0.5f),
-            focusedPlaceholderColor = DarkGray.copy(alpha = 0.4f),
-            unfocusedPlaceholderColor = DarkGray.copy(alpha = 0.4f)
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+            unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            focusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
         )
     )
 }

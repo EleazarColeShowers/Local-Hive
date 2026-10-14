@@ -4,9 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 
 /**
- * The content of each destination, supplied by the platform. The shared graph decides where
- * every callback leads; the platform only decides how a screen gets its state (Hilt
- * ViewModels on Android, whatever iOS ends up using).
+ * The content of each destination. The graph decides where every callback leads; this decides
+ * how a screen gets its state. [AppLocalHiveScreens] is the real one, used on both platforms.
  */
 @Stable
 interface LocalHiveScreens {
@@ -27,9 +26,6 @@ interface LocalHiveScreens {
     fun ProfileSetup(onProfileComplete: () -> Unit)
 
     @Composable
-    fun DetailsSetup(onDetailsComplete: () -> Unit)
-
-    @Composable
     fun EstateSelection(onEstateJoined: () -> Unit)
 
     /** The tabbed home screen. Use [MainTabsHost] for the tab navigation itself. */
@@ -39,8 +35,21 @@ interface LocalHiveScreens {
     @Composable
     fun CreatePost(onNavigateBack: () -> Unit)
 
+    /** The SOS screen. */
     @Composable
-    fun PostDetail(postId: String, onNavigateBack: () -> Unit)
+    fun EmergencyAlert(onNavigateBack: () -> Unit)
+
+    /** The composer, opened on one of the user's own posts. */
+    @Composable
+    fun EditPost(postId: String, onNavigateBack: () -> Unit)
+
+    @Composable
+    fun PostDetail(
+        postId: String,
+        onNavigateBack: () -> Unit,
+        onOpenProfile: (userId: String) -> Unit,
+        onEditPost: (postId: String) -> Unit
+    )
 
     @Composable
     fun ChatDetail(chatId: String, onNavigateBack: () -> Unit, onOpenProfile: (userId: String) -> Unit)
@@ -55,7 +64,30 @@ interface LocalHiveScreens {
     fun EstateAdmin(estateId: String, onBack: () -> Unit)
 
     @Composable
-    fun Notifications(onBack: () -> Unit, onNavigateToEstateAdmin: (estateId: String) -> Unit)
+    fun Notifications(
+        onBack: () -> Unit,
+        onNavigateToEstateAdmin: (estateId: String) -> Unit,
+        onNavigateToPost: (postId: String) -> Unit,
+        onNavigateToLevy: (levyId: String) -> Unit
+    )
+
+    /** The estate's dues and expenses. */
+    @Composable
+    fun Finances(
+        onBack: () -> Unit,
+        onLevyClick: (levyId: String) -> Unit,
+        onCreateLevy: () -> Unit,
+        onAddExpense: () -> Unit
+    )
+
+    @Composable
+    fun LevyDetail(levyId: String, onBack: () -> Unit)
+
+    @Composable
+    fun CreateLevy(onBack: () -> Unit)
+
+    @Composable
+    fun AddExpense(onBack: () -> Unit)
 
     @Composable
     fun Settings(
@@ -67,6 +99,16 @@ interface LocalHiveScreens {
 
     @Composable
     fun BlockedUsers(onBack: () -> Unit)
+
+    @Composable
+    fun Polls(onBack: () -> Unit, onCreatePoll: () -> Unit)
+
+    @Composable
+    fun CreatePoll(onBack: () -> Unit)
+
+    /** "Is there light?": power and water status. */
+    @Composable
+    fun Utilities(onBack: () -> Unit)
 }
 
 /** Where the Main screen and its tabs can lead in the app-level graph. */
@@ -77,9 +119,13 @@ class MainActions(
     val onChatClick: (chatId: String) -> Unit,
     val onNotificationsClick: () -> Unit,
     val onCreatePost: () -> Unit,
+    val onEmergency: () -> Unit,
+    val onEditPost: (postId: String) -> Unit,
+    val onPolls: () -> Unit,
+    val onUtilities: () -> Unit,
     val onSettings: () -> Unit,
     val onAdminPanel: (estateId: String) -> Unit,
-    val onLeftEstate: () -> Unit,
+    val onFinances: () -> Unit,
     /** The user was removed by an admin; ignored unless Main is the current destination. */
     val onRemovedFromEstate: () -> Unit
 )

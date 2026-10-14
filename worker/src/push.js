@@ -4,11 +4,13 @@ import { serviceAccessToken } from "./google.js";
 const DEAD_TOKEN_ERRORS = new Set(["UNREGISTERED", "INVALID_ARGUMENT"]);
 
 /**
- * Sends a data-only push to each user with a registered device, so the app always runs its own
- * onMessageReceived and can honour the in-app "push notifications" toggle — a payload with a
- * `notification` block would be drawn by the system tray instead, bypassing it.
+ * Sends a push to each user with a registered device. Android gets it data-only, so the app always
+ * runs its own onMessageReceived and can honour the in-app "push notifications" toggle — a payload
+ * with a `notification` block would be drawn by the system tray instead, bypassing it. iOS only
+ * shows a push that carries an alert, so Apple devices get one; there the app honours the toggle
+ * by taking its token off the profile instead.
  */
-export async function sendToUsers(db, env, userIds, { title, body, deepLink, tag }) {
+export async function sendToUsers(db, env, userIds, { title, body, deepLink, tag, channel }) {
   const recipients = [...new Set(userIds)].filter(Boolean);
   if (recipients.length === 0) return 0;
 
@@ -29,8 +31,14 @@ export async function sendToUsers(db, env, userIds, { title, body, deepLink, tag
         body: JSON.stringify({
           message: {
             token,
-            data: { title, body: truncate(body, 300), deepLink, tag },
+            // `channel` lets Android give emergencies their own, louder notification channel.
+            data: { title, body: truncate(body, 300), deepLink, tag, ...(channel ? { channel } : {}) },
             android: { priority: "HIGH" },
+            apns: {
+              payload: {
+                aps: { alert: { title, body: truncate(body, 300) }, sound: "default", "thread-id": tag },
+              },
+            },
           },
         }),
       });

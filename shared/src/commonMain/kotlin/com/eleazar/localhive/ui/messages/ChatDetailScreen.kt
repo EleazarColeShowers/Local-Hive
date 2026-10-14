@@ -69,6 +69,7 @@ import com.eleazar.localhive.domain.model.Message
 import kotlinx.coroutines.launch
 import com.eleazar.localhive.ui.blocking.BlockConfirmDialog
 import com.eleazar.localhive.ui.components.Avatar
+import com.eleazar.localhive.ui.components.LinkifiedText
 import com.eleazar.localhive.ui.theme.HiveGreen
 import com.eleazar.localhive.ui.util.clockTime
 import com.eleazar.localhive.ui.util.dayLabel
@@ -349,7 +350,8 @@ private fun MessageBubble(
             bottomStart = if (joinsBelow) small else large
         )
     }
-    val container = if (isOwn) colors.hiveGreen else MaterialTheme.colorScheme.surface
+    // Grey for theirs, as most messengers do; white wouldn't show on the white page.
+    val container = if (isOwn) colors.hiveGreen else MaterialTheme.colorScheme.surfaceContainerHigh
     val content = if (isOwn) Color.White else MaterialTheme.colorScheme.onSurface
 
     Row(
@@ -361,11 +363,10 @@ private fun MessageBubble(
             color = container,
             contentColor = content,
             tonalElevation = 0.dp,
-            shadowElevation = if (isOwn) 0.dp else 0.5.dp,
             modifier = Modifier.widthIn(min = 64.dp, max = 296.dp)
         ) {
             Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 6.dp)) {
-                Text(text = message.content, fontSize = 15.sp, lineHeight = 21.sp)
+                LinkifiedText(text = message.content, fontSize = 15.sp, lineHeight = 21.sp)
                 Text(
                     text = clockTime(message.timestamp),
                     fontSize = 11.sp,

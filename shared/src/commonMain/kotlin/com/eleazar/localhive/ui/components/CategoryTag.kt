@@ -10,7 +10,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Campaign
+import androidx.compose.material.icons.outlined.Emergency
 import androidx.compose.material.icons.outlined.Event
+import androidx.compose.material.icons.outlined.GppMaybe
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Sell
 import androidx.compose.material3.Icon
@@ -27,10 +29,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.eleazar.localhive.domain.model.PostCategory
+import com.eleazar.localhive.ui.theme.AlertRed
 import com.eleazar.localhive.ui.theme.Clay
 import com.eleazar.localhive.ui.theme.HoneyInk
 import com.eleazar.localhive.ui.theme.HiveGreen
 import com.eleazar.localhive.ui.theme.Plum
+import com.eleazar.localhive.ui.theme.Slate
 import com.eleazar.localhive.ui.theme.Teal
 
 val PostCategory.color: Color
@@ -41,6 +45,8 @@ val PostCategory.color: Color
         PostCategory.QUESTION -> Teal
         PostCategory.FOR_SALE -> HiveGreen
         PostCategory.EVENT -> Plum
+        PostCategory.SECURITY -> Slate
+        PostCategory.EMERGENCY -> AlertRed
     }
 
 val PostCategory.icon: ImageVector
@@ -50,9 +56,11 @@ val PostCategory.icon: ImageVector
         PostCategory.QUESTION -> Icons.AutoMirrored.Outlined.HelpOutline
         PostCategory.FOR_SALE -> Icons.Outlined.Sell
         PostCategory.EVENT -> Icons.Outlined.Event
+        PostCategory.SECURITY -> Icons.Outlined.GppMaybe
+        PostCategory.EMERGENCY -> Icons.Outlined.Emergency
     }
 
-/** Small tinted pill naming a post's category. With [onClick] it acts as a toggle chip. */
+/** A post's category as a small coloured label. With [onClick] it's a toggle chip instead. */
 @Composable
 fun CategoryTag(
     category: PostCategory,
@@ -91,6 +99,11 @@ fun CategoryTag(
     if (onClick != null) {
         Surface(onClick = onClick, shape = shape, color = container, border = border, modifier = modifier, content = body)
     } else {
-        Surface(shape = shape, color = container, border = border, modifier = modifier, content = body)
+        // In the feed it's a label, not a control, so it gets no chip around it.
+        Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+            Icon(category.icon, contentDescription = null, tint = tint, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(category.label, color = tint, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        }
     }
 }

@@ -10,34 +10,27 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.eleazar.localhive.MainActivity
 import com.eleazar.localhive.R
+import com.eleazar.localhive.data.remote.PushTokenSync
 import com.eleazar.localhive.domain.AppSettingsRepository
-import com.eleazar.localhive.domain.AuthRepository
-import com.eleazar.localhive.domain.UserRepository
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import javax.inject.Inject
+import org.koin.android.ext.android.inject
 
-@AndroidEntryPoint
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
-    @Inject lateinit var appSettingsRepository: AppSettingsRepository
-    @Inject lateinit var authRepository: AuthRepository
-    @Inject lateinit var userRepository: UserRepository
+    private val appSettingsRepository: AppSettingsRepository by inject()
+    private val pushTokenSync: PushTokenSync by inject()
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        val userId = authRepository.getCurrentUserId() ?: return
-        serviceScope.launch {
-            userRepository.updateFcmToken(userId, token)
-        }
+        serviceScope.launch { pushTokenSync.onNewToken(token) }
     }
 
     override fun onDestroy() {
@@ -63,21 +56,27 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             message = body,
             deepLink = data["deepLink"] ?: DEFAULT_DEEP_LINK,
             // One entry per conversation or event rather than a single overwritten slot.
-            tag = data["tag"] ?: remoteMessage.messageId ?: DEFAULT_DEEP_LINK
+            tag = data["tag"] ?: remoteMessage.messageId ?: DEFAULT_DEEP_LINK,
+            emergency = data["channel"] == EMERGENCY_CHANNEL_ID
         )
     }
 
-    private fun showNotification(title: String?, message: String?, deepLink: String, tag: String) {
-        val channelId = "fcm_channel"
+    private fun showNotification(title: String?, message: String?, deepLink: String, tag: String, emergency: Boolean) {
+        val channelId = if (emergency) EMERGENCY_CHANNEL_ID else "fcm_channel"
 
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                channelId,
-                "FCM Channel",
-                NotificationManager.IMPORTANCE_HIGH
-            )
+            val channel = if (emergency) {
+                // Its own channel, so people can keep SOS alerts loud while muting everything else.
+                NotificationChannel(channelId, "Emergency alerts", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "SOS alerts from neighbours in your estate"
+                    enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 600, 300, 600, 300, 600)
+                }
+            } else {
+                NotificationChannel(channelId, "FCM Channel", NotificationManager.IMPORTANCE_HIGH)
+            }
             manager.createNotificationChannel(channel)
         }
 
@@ -99,6 +98,13 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
+            .apply {
+                if (emergency) {
+                    setCategory(NotificationCompat.CATEGORY_ALARM)
+                    setColor(EMERGENCY_COLOR)
+                    setStyle(NotificationCompat.BigTextStyle().bigText(message))
+                }
+            }
             .build()
 
         manager.notify(tag, tag.hashCode(), notification)
@@ -106,5 +112,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     private companion object {
         const val DEFAULT_DEEP_LINK = "localhive://notifications"
+        /** Matches the `channel` the Worker puts on SOS pushes. */
+        const val EMERGENCY_CHANNEL_ID = "emergency"
+        const val EMERGENCY_COLOR = 0xFFC62828.toInt()
     }
 }

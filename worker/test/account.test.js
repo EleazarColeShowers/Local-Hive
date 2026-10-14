@@ -147,3 +147,20 @@ test("deleting needs a password entered in the last five minutes", () => {
   assert.doesNotThrow(() => requireRecentLogin(now / 1000 - 60, now));
   assert.throws(() => requireRecentLogin(now / 1000 - 600, now), (e) => e.status === 401);
 });
+
+test("deleting the treasurer's account leaves the estate without a treasurer", async () => {
+  const initial = base();
+  initial["estates/E1"].treasurerId = "me";
+  const db = memoryDb(initial);
+  await deleteAccount(db, "me", noAuth);
+  assert.equal(db.docs["estates/E1"].treasurerId, "");
+  assert.equal(db.docs["estates/E1"].memberCount, 3);
+});
+
+test("deleting someone else leaves the treasurer in place", async () => {
+  const initial = base();
+  initial["estates/E1"].treasurerId = "other";
+  const db = memoryDb(initial);
+  await deleteAccount(db, "me", noAuth);
+  assert.equal(db.docs["estates/E1"].treasurerId, "other");
+});

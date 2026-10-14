@@ -1,17 +1,19 @@
 package com.eleazar.localhive.ui.feed
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -30,7 +32,15 @@ import coil3.compose.AsyncImage
 import com.eleazar.localhive.domain.model.PostCategory
 import com.eleazar.localhive.ui.components.Avatar
 import com.eleazar.localhive.ui.components.CategoryTag
+import com.eleazar.localhive.ui.components.MentionSuggestionList
 import com.eleazar.localhive.ui.components.ScreenGutter
+import com.eleazar.localhive.ui.components.activeMentionQuery
+import com.eleazar.localhive.ui.components.insertMention
+import com.eleazar.localhive.ui.components.mentionName
+import com.eleazar.localhive.ui.components.mentionSuggestions
+import com.eleazar.localhive.ui.components.mentionsIn
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 
 /** Long enough for a proper notice, short enough to read in the feed. */
 private const val MAX_POST_LENGTH = 2000
@@ -38,31 +48,49 @@ private const val MAX_POST_LENGTH = 2000
 /**
  * Bare post composer.
  *
- * @param pickedImage platform image model (e.g. an Android Uri) from the route's picker, previewed here
- * @param onPickPhoto the route launches its photo picker
- * @param onRemovePhoto the route forgets the picked image
+ * @param pickedMedia platform image model (e.g. an Android Uri, or a video's first frame) previewed here
+ * @param pickedIsVideo the picked media is a video, so its preview gets a play badge
+ * @param initialContent text to start from, e.g. something shared from another app
+ * @param onPickMedia the route launches its photo and video picker
+ * @param onRemoveMedia the route forgets the picked photo or video
+ * @param editing changing an existing post: its text, tags and location can change, but not its
+ *   category or media
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CreatePostScreen(
     uiState: FeedUiState,
-    pickedImage: Any?,
-    onPickPhoto: () -> Unit,
-    onRemovePhoto: () -> Unit,
-    onPost: (content: String, category: PostCategory?) -> Unit,
+    pickedMedia: Any?,
+    pickedIsVideo: Boolean,
+    onPickMedia: () -> Unit,
+    onRemoveMedia: () -> Unit,
+    onPost: (content: String, category: PostCategory?, mentions: Map<String, String>, location: String) -> Unit,
     onNavigateBack: () -> Unit,
+    initialContent: String = "",
+    editing: Boolean = false,
+    initialCategoryKey: String? = null,
+    initialLocation: String = "",
+    initialMentions: Map<String, String> = emptyMap(),
 ) {
-    var content by rememberSaveable { mutableStateOf("") }
+    var field by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        val start = initialContent.take(MAX_POST_LENGTH)
+        mutableStateOf(TextFieldValue(start, TextRange(start.length)))
+    }
+    val content = field.text
+    // Everyone picked from the suggestions; trimmed to those still named in the text on posting.
+    var picked by rememberSaveable { mutableStateOf(initialMentions) }
+    val mentionQuery = activeMentionQuery(field)
+    val suggestions = mentionQuery?.let { mentionSuggestions(uiState.members, it.query) }.orEmpty()
     // Saved by key: a plain string survives process death on every platform.
-    var categoryKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var categoryKey by rememberSaveable { mutableStateOf(initialCategoryKey) }
     val category = PostCategory.fromKey(categoryKey)
+    var location by rememberSaveable { mutableStateOf(initialLocation) }
     val focusRequester = remember { FocusRequester() }
     val accent = MaterialTheme.colorScheme.primary
     val muted = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f)
-    val pickPhoto = onPickPhoto
-    val imageUri = pickedImage
+    val hasMedia = pickedMedia != null || pickedIsVideo
 
-    val canPost = (content.isNotBlank() || imageUri != null) && !uiState.isPosting
+    val canPost = (content.isNotBlank() || hasMedia) && !uiState.isPosting
 
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
@@ -70,7 +98,7 @@ fun CreatePostScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("New post", fontWeight = FontWeight.SemiBold) },
+                title = { Text(if (editing) "Edit post" else "New post", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack, enabled = !uiState.isPosting) {
                         Icon(Icons.Default.Close, contentDescription = "Discard")
@@ -78,7 +106,7 @@ fun CreatePostScreen(
                 },
                 actions = {
                     Button(
-                        onClick = { onPost(content.trim(), category) },
+                        onClick = { onPost(content.trim(), category, mentionsIn(content, picked), location.trim()) },
                         enabled = canPost,
                         shape = RoundedCornerShape(50),
                         colors = ButtonDefaults.buttonColors(containerColor = accent),
@@ -92,9 +120,17 @@ fun CreatePostScreen(
                                 strokeWidth = 2.dp
                             )
                             Spacer(Modifier.width(8.dp))
-                            Text("Posting", fontWeight = FontWeight.SemiBold)
+                            val progress = uiState.uploadProgress
+                            Text(
+                                when {
+                                    progress != null -> "Uploading ${(progress * 100).toInt()}%"
+                                    editing -> "Saving"
+                                    else -> "Posting"
+                                },
+                                fontWeight = FontWeight.SemiBold
+                            )
                         } else {
-                            Text("Post", fontWeight = FontWeight.SemiBold)
+                            Text(if (editing) "Save" else "Post", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 },
@@ -103,20 +139,33 @@ fun CreatePostScreen(
         },
         bottomBar = {
             Surface(color = MaterialTheme.colorScheme.surface) {
-                Column {
+                Column(modifier = Modifier.navigationBarsPadding().imePadding()) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    // Just above the keyboard, where the person typing will see it.
+                    if (mentionQuery != null && suggestions.isNotEmpty()) {
+                        MentionSuggestionList(suggestions, onPick = { member ->
+                            field = insertMention(field, mentionQuery, member)
+                            picked = picked + (member.id to member.mentionName)
+                        })
+                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .navigationBarsPadding()
-                            .imePadding()
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TextButton(onClick = pickPhoto, enabled = !uiState.isPosting) {
-                            Icon(Icons.Outlined.Image, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(if (imageUri == null) "Add photo" else "Change photo", color = accent, fontWeight = FontWeight.Medium)
+                        // A post's photo or video stays as it was posted.
+                        if (!editing) {
+                            TextButton(onClick = onPickMedia, enabled = !uiState.isPosting) {
+                                Icon(Icons.Outlined.Image, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    if (hasMedia) "Change photo or video" else "Add photo or video",
+                                    color = accent,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
                         }
                         Spacer(Modifier.weight(1f))
                         val remaining = MAX_POST_LENGTH - content.length
@@ -151,8 +200,11 @@ fun CreatePostScreen(
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        if (category == PostCategory.ANNOUNCEMENT) "Pinned to the top of everyone's feed"
-                        else "Visible to everyone in your estate",
+                        when (category) {
+                            PostCategory.ANNOUNCEMENT -> "Pinned to the top of everyone's feed"
+                            PostCategory.SECURITY -> "Visible to your estate; admins are notified"
+                            else -> "Visible to everyone in your estate"
+                        },
                         fontSize = 12.sp,
                         color = muted
                     )
@@ -160,13 +212,17 @@ fun CreatePostScreen(
             }
 
             Spacer(Modifier.height(14.dp))
-            // Optional; tapping the selected one again clears it.
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // A post keeps its category: changing it could turn an old post into an announcement.
+            if (editing) {
+                category?.let { CategoryTag(it) }
+            } else FlowRow(
+                // Optional; tapping the selected one again clears it. Wrapped rather than scrolled,
+                // so every category is in view.
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Announcements are offered to admins only; the rules refuse them from anyone else.
-                PostCategory.entries.filter { !it.adminOnly || uiState.isAdmin }.forEach { option ->
+                PostCategory.entries.filter { it.inComposer && (!it.adminOnly || uiState.isAdmin) }.forEach { option ->
                     CategoryTag(
                         category = option,
                         selected = category == option,
@@ -175,11 +231,28 @@ fun CreatePostScreen(
                 }
             }
 
+            if (category?.isIncident == true) {
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = location,
+                    onValueChange = { location = it.take(120) },
+                    label = { Text("Where in the estate?") },
+                    placeholder = { Text("e.g. Back fence by Block C") },
+                    leadingIcon = { Icon(Icons.Outlined.LocationOn, contentDescription = null) },
+                    singleLine = true,
+                    enabled = !uiState.isPosting,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
             Spacer(Modifier.height(16.dp))
             // Bare field so the text starts on the same edge as the author row above.
             BasicTextField(
-                value = content,
-                onValueChange = { content = it.take(MAX_POST_LENGTH) },
+                value = field,
+                onValueChange = {
+                    field = if (it.text.length <= MAX_POST_LENGTH) it
+                    else TextFieldValue(it.text.take(MAX_POST_LENGTH), TextRange(MAX_POST_LENGTH))
+                },
                 enabled = !uiState.isPosting,
                 textStyle = LocalTextStyle.current.copy(
                     fontSize = 18.sp,
@@ -194,27 +267,51 @@ fun CreatePostScreen(
                 decorationBox = { inner ->
                     Box {
                         if (content.isEmpty()) {
-                            Text("What's happening in the estate?", fontSize = 18.sp, lineHeight = 26.sp, color = muted)
+                            Text(
+                                when {
+                                    pickedIsVideo -> "Add a caption"
+                                    category == PostCategory.SECURITY -> "What did you see? When did it happen?"
+                                    else -> "What's happening in the estate?"
+                                },
+                                fontSize = 18.sp,
+                                lineHeight = 26.sp,
+                                color = muted
+                            )
                         }
                         inner()
                     }
                 }
             )
 
-            imageUri?.let { uri ->
+            if (hasMedia) {
                 Spacer(Modifier.height(8.dp))
-                Box {
-                    AsyncImage(
-                        model = uri,
-                        contentDescription = "Selected photo",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(4f / 3f)
-                            .clip(RoundedCornerShape(16.dp)),
-                        contentScale = ContentScale.Crop
-                    )
-                    FilledIconButton(
-                        onClick = onRemovePhoto,
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(4f / 3f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(if (pickedIsVideo) Color.Black else Color.Transparent)
+                ) {
+                    // A video's still may still be loading, so the black box stands in until then.
+                    pickedMedia?.let { model ->
+                        AsyncImage(
+                            model = model,
+                            contentDescription = if (pickedIsVideo) "Selected video" else "Selected photo",
+                            modifier = Modifier.matchParentSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                    if (pickedIsVideo) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.Black.copy(alpha = 0.55f),
+                            modifier = Modifier.align(Alignment.Center).size(56.dp)
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.padding(12.dp))
+                        }
+                    }
+                    if (!editing) FilledIconButton(
+                        onClick = onRemoveMedia,
                         enabled = !uiState.isPosting,
                         shape = CircleShape,
                         modifier = Modifier.align(Alignment.TopEnd).padding(10.dp).size(34.dp),
@@ -223,7 +320,7 @@ fun CreatePostScreen(
                             contentColor = Color.White
                         )
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = "Remove photo", modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Close, contentDescription = if (pickedIsVideo) "Remove video" else "Remove photo", modifier = Modifier.size(18.dp))
                     }
                 }
             }

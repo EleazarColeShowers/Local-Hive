@@ -5,7 +5,7 @@ which need Firebase's paid Blaze plan. It:
 
 - **signs photo uploads** to Cloudinary, after checking the user's Firebase login, so the
   Cloudinary secret never ships in the app;
-- **sends push notifications** for chat messages, join requests and announcements. It reads
+- **sends push notifications** for chat messages, join requests, announcements, SOS emergencies and follow-ups ("I'm coming", "I'm safe now"), security reports (to admins), new polls, opt-in "light is back" alerts, and removed-post notices. An hourly cron trigger also reminds members who haven't voted about polls closing within a day. It reads
   the message, notification or post from Firestore itself, checks the caller is its sender,
   and sends each push at most once.
 

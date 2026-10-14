@@ -85,6 +85,8 @@ fun EstateAdminScreen(
     onPromoteToAdmin: (userId: String) -> Unit,
     onRemoveAdmin: (userId: String) -> Unit = {},
     onRemoveMember: (userId: String) -> Unit = {},
+    /** Null leaves the estate without a treasurer. */
+    onSetTreasurer: (userId: String?) -> Unit = {},
     onClearError: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -112,7 +114,7 @@ fun EstateAdminScreen(
                 Icon(Icons.Default.ArrowBack, "Back", tint = dark)
             }
             Column {
-                Text("Estate Admin", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = dark)
+                Text("Estate admin", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = dark)
                 Text("Manage your community", fontSize = 12.sp, color = dark.copy(alpha = 0.5f))
             }
         }
@@ -196,10 +198,12 @@ fun EstateAdminScreen(
                 members = members,
                 adminIds = adminIds,
                 ownerId = estate?.ownerId.orEmpty(),
+                treasurerId = estate?.treasurerId.orEmpty(),
                 currentUserId = currentUserId,
                 onPromote = onPromoteToAdmin,
                 onRemoveAdmin = onRemoveAdmin,
                 onRemoveMember = onRemoveMember,
+                onSetTreasurer = onSetTreasurer,
                 dark = dark,
                 green = green,
                 cardBg = cardBg
@@ -272,7 +276,8 @@ private fun JoinRequestCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = cardBg),
-        elevation = CardDefaults.cardElevation(2.dp)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -298,7 +303,7 @@ private fun JoinRequestCard(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    request.userName.ifBlank { "Unknown User" },
+                    request.userName.ifBlank { "Unknown user" },
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 15.sp,
                     color = dark
@@ -335,10 +340,12 @@ private fun MembersTab(
     members: List<User>,
     adminIds: List<String>,
     ownerId: String,
+    treasurerId: String,
     currentUserId: String,
     onPromote: (String) -> Unit,
     onRemoveAdmin: (String) -> Unit,
     onRemoveMember: (String) -> Unit,
+    onSetTreasurer: (String?) -> Unit,
     dark: Color,
     green: Color,
     cardBg: Color
@@ -356,23 +363,24 @@ private fun MembersTab(
         compareBy<User>({ it.id != ownerId }, { it.id !in adminIds }, { (it.displayName ?: it.username ?: "").lowercase() })
     )
 
-    LazyColumn(
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
+    val treasurerName = members.firstOrNull { it.id == treasurerId }?.let { it.displayName ?: it.username }
+
+    LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
         item {
             Text(
                 "Admins can approve requests, post announcements, make others admins and remove members. " +
-                    "The owner always stays an admin, and an admin has to lose admin before they can be removed.",
+                    "The owner always stays an admin, and an admin has to lose admin before they can be removed. " +
+                    "The treasurer, who can be anyone, sets dues, confirms payments and logs expenses.",
                 fontSize = 13.sp,
                 lineHeight = 18.sp,
-                color = dark.copy(alpha = 0.6f),
-                modifier = Modifier.padding(bottom = 4.dp)
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
             )
         }
         items(sorted, key = { it.id }) { member ->
             val isAdmin = member.id in adminIds
             val isOwner = member.id == ownerId
+            val isTreasurer = treasurerId.isNotBlank() && member.id == treasurerId
             MemberCard(
                 member = member,
                 role = when {
@@ -381,16 +389,23 @@ private fun MembersTab(
                     else -> MemberRole.MEMBER
                 },
                 isYou = member.id == currentUserId,
-                actions = when {
-                    !viewerIsAdmin || member.id == currentUserId || isOwner -> emptyList()
-                    isAdmin -> listOf(MemberAction.REMOVE_ADMIN)
-                    else -> listOf(MemberAction.MAKE_ADMIN, MemberAction.REMOVE_MEMBER)
+                isTreasurer = isTreasurer,
+                treasurerName = treasurerName,
+                actions = buildList {
+                    if (!viewerIsAdmin) return@buildList
+                    // Anyone can hold the treasurer role, the admin making the change included.
+                    add(if (isTreasurer) MemberAction.REMOVE_TREASURER else MemberAction.MAKE_TREASURER)
+                    if (member.id == currentUserId || isOwner) return@buildList
+                    if (isAdmin) add(MemberAction.REMOVE_ADMIN)
+                    else addAll(listOf(MemberAction.MAKE_ADMIN, MemberAction.REMOVE_MEMBER))
                 },
                 onAction = { action ->
                     when (action) {
                         MemberAction.MAKE_ADMIN -> onPromote(member.id)
                         MemberAction.REMOVE_ADMIN -> onRemoveAdmin(member.id)
                         MemberAction.REMOVE_MEMBER -> onRemoveMember(member.id)
+                        MemberAction.MAKE_TREASURER -> onSetTreasurer(member.id)
+                        MemberAction.REMOVE_TREASURER -> onSetTreasurer(null)
                     }
                 },
                 dark = dark,
@@ -405,6 +420,8 @@ private enum class MemberRole { OWNER, ADMIN, MEMBER }
 private enum class MemberAction(val label: String, val destructive: Boolean) {
     MAKE_ADMIN("Make admin", false),
     REMOVE_ADMIN("Remove admin", true),
+    MAKE_TREASURER("Make treasurer", false),
+    REMOVE_TREASURER("Remove as treasurer", true),
     REMOVE_MEMBER("Remove from estate", true)
 }
 
@@ -413,6 +430,9 @@ private fun MemberCard(
     member: User,
     role: MemberRole,
     isYou: Boolean,
+    isTreasurer: Boolean,
+    /** Who holds the role now, so appointing someone else can say who they replace. */
+    treasurerName: String?,
     actions: List<MemberAction>,
     onAction: (MemberAction) -> Unit,
     dark: Color,
@@ -423,14 +443,9 @@ private fun MemberCard(
     var menuOpen by remember { mutableStateOf(false) }
     val name = member.displayName ?: member.username ?: "Member"
 
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = cardBg,
-        border = BorderStroke(1.dp, dark.copy(alpha = 0.06f))
-    ) {
+    Column {
         Row(
-            modifier = Modifier.padding(start = 14.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Avatar(imageUrl = member.profileImageUrl, name = name, size = 44.dp)
@@ -438,15 +453,20 @@ private fun MemberCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     if (isYou) "$name (you)" else name,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 16.sp,
                     color = dark,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (role != MemberRole.MEMBER) {
-                    Spacer(Modifier.height(4.dp))
-                    RoleBadge(owner = role == MemberRole.OWNER)
+                if (role != MemberRole.MEMBER || isTreasurer) {
+                    Row(
+                        modifier = Modifier.padding(top = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (role != MemberRole.MEMBER) RoleBadge(owner = role == MemberRole.OWNER)
+                        if (isTreasurer) RoleBadge(treasurer = true)
+                    }
                 }
             }
             if (actions.isNotEmpty()) {
@@ -474,6 +494,7 @@ private fun MemberCard(
                 }
             }
         }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 72.dp))
     }
 
     confirming?.let { pending ->
@@ -482,6 +503,12 @@ private fun MemberCard(
                 "They'll be able to approve join requests, post announcements, make other members admins and remove members."
             MemberAction.REMOVE_ADMIN -> "Remove $name as admin?" to
                 "They'll stay in the estate as a regular member."
+            MemberAction.MAKE_TREASURER -> "Make $name the treasurer?" to (
+                (treasurerName?.let { "They'll take over from $it. " } ?: "") +
+                    "They'll be able to set dues, confirm residents' payments, send reminders and log the estate's expenses."
+            )
+            MemberAction.REMOVE_TREASURER -> "Remove $name as treasurer?" to
+                "The estate will have no treasurer until you appoint another. Existing dues and expenses stay."
             MemberAction.REMOVE_MEMBER -> "Remove $name from the estate?" to
                 "They'll lose access to the feed, the directory and estate announcements, and get a notification. " +
                 "To come back they'll have to ask to join again or use an invite code."

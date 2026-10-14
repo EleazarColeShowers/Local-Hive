@@ -1,7 +1,5 @@
 package com.eleazar.localhive.ui.auth
 
-import com.eleazar.localhive.ui.theme.DarkGray
-import com.eleazar.localhive.ui.theme.HiveGreen
 import com.eleazar.localhive.ui.util.isValidEmail
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -62,8 +60,8 @@ fun LoginScreen(
     val isEmailValid = remember(email) {
         email.isEmpty() || isValidEmail(email)
     }
-    val darkGray = DarkGray
-    val hiveGreen = HiveGreen
+    val darkGray = MaterialTheme.colorScheme.onBackground
+    val hiveGreen = MaterialTheme.colorScheme.primary
     val keyboardController = LocalSoftwareKeyboardController.current
 
     val canSubmit = isEmailValid && email.isNotBlank() && password.isNotBlank() && !isLoading

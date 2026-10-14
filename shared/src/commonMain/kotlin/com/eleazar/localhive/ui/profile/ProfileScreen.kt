@@ -14,10 +14,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.HowToVote
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.Settings
+import com.eleazar.localhive.ui.components.RoleBadge
+import com.eleazar.localhive.ui.components.ScreenHeader
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import com.eleazar.localhive.ui.components.LeaveEstateDialog
-import com.eleazar.localhive.ui.components.LeaveRole
 import androidx.compose.material.icons.filled.AccountBox
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
@@ -90,11 +93,10 @@ data class ProfileEstateUi(
     val memberCount: Int,
     val isAdmin: Boolean,
     val isOwner: Boolean = false,
-    val leaveRole: LeaveRole = LeaveRole.MEMBER
+    val isTreasurer: Boolean = false
 )
 
-private val HeroHeight = 168.dp
-private val AvatarSize = 112.dp
+private val AvatarSize = 96.dp
 
 /**
  * Bare profile UI. No ViewModel, Context, Toast, Intents or pickers in here.
@@ -118,11 +120,12 @@ fun ProfileScreen(
     onShareInviteCode: (code: String, estateName: String) -> Unit,
     onSettings: () -> Unit,
     onAdminPanel: (estateId: String) -> Unit,
+    onFinances: () -> Unit,
     modifier: Modifier = Modifier,
-    onLeaveEstate: () -> Unit = {}
+    onPolls: () -> Unit = {},
+    onUtilities: () -> Unit = {}
 ) {
     var showEdit by remember { mutableStateOf(false) }
-    var showLeave by remember { mutableStateOf(false) }
     var showCodeDialog by remember { mutableStateOf(false) }
     var editName by remember { mutableStateOf("") }
     var editUsername by remember { mutableStateOf("") }
@@ -141,16 +144,6 @@ fun ProfileScreen(
     val letter = (user?.displayName ?: user?.username ?: "?").firstOrNull()?.uppercase() ?: "?"
     val avatarModel: Any? = pickedImage ?: user?.profileImageUrl?.takeIf { it.isNotBlank() }
 
-    if (showLeave && estate != null) {
-        LeaveEstateDialog(
-            estateName = estate.name,
-            role = estate.leaveRole,
-            onConfirm = onLeaveEstate,
-            onDismiss = { showLeave = false },
-            onOpenAdminPanel = { onAdminPanel(estate.id) }
-        )
-    }
-
     if (showCodeDialog && estate != null) {
         InviteCodeDialog(
             inviteCode = estate.inviteCode,
@@ -168,20 +161,24 @@ fun ProfileScreen(
             .background(colors.backgroundGold)
             .verticalScroll(rememberScrollState())
     ) {
-        ProfileHeader(
+        ScreenHeader(
+            title = "Profile",
+            action = {
+                IconButton(onClick = onSettings) {
+                    Icon(Icons.Outlined.Settings, contentDescription = "Settings", tint = colors.darkGray)
+                }
+            }
+        )
+        ProfileAvatar(
             letter = letter,
-            avatarModel = avatarModel,
+            model = avatarModel,
             editing = showEdit,
             colors = colors,
-            onToggleEdit = {
-                if (showEdit) resetFields() // cancelling discards unsaved edits
-                showEdit = !showEdit
-            },
-            onSettings = onSettings,
-            onPickPhoto = onPickPhoto
+            onClick = onPickPhoto,
+            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp)
         )
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
 
         AnimatedContent(
             targetState = showEdit,
@@ -213,9 +210,12 @@ fun ProfileScreen(
                     estate = estate,
                     isAdmin = isAdmin,
                     colors = colors,
+                    onEdit = { showEdit = true },
                     onShowInviteCode = { showCodeDialog = true },
                     onAdminPanel = onAdminPanel,
-                    onLeave = { showLeave = true }
+                    onFinances = onFinances,
+                    onPolls = onPolls,
+                    onUtilities = onUtilities
                 )
             }
         }
@@ -240,80 +240,7 @@ fun ProfileScreen(
     }
 }
 
-// ───────────────────────── Header ─────────────────────────
-
-@Composable
-private fun ProfileHeader(
-    letter: String,
-    avatarModel: Any?,
-    editing: Boolean,
-    colors: ProfileColors,
-    onToggleEdit: () -> Unit,
-    onSettings: () -> Unit,
-    onPickPhoto: () -> Unit
-) {
-    val heroBrush = Brush.verticalGradient(
-        listOf(colors.hiveGreen, lerp(colors.hiveGreen, Color.Black, 0.3f))
-    )
-    val glass = IconButtonDefaults.iconButtonColors(
-        containerColor = Color.White.copy(alpha = 0.18f),
-        contentColor = Color.White
-    )
-
-    // Avatar sits at the bottom of this box and overlaps the hero by half its height.
-    Box(modifier = Modifier.fillMaxWidth().height(HeroHeight + AvatarSize / 2)) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(HeroHeight)
-                .clip(RoundedCornerShape(bottomStart = 36.dp, bottomEnd = 36.dp))
-                .background(heroBrush)
-        ) {
-            // Soft decorative circles
-            Box(
-                Modifier
-                    .align(Alignment.TopStart)
-                    .offset(x = (-40).dp, y = (-30).dp)
-                    .size(140.dp)
-                    .background(Color.White.copy(alpha = 0.07f), CircleShape)
-            )
-            Box(
-                Modifier
-                    .align(Alignment.BottomEnd)
-                    .offset(x = 30.dp, y = 40.dp)
-                    .size(120.dp)
-                    .background(Color.White.copy(alpha = 0.07f), CircleShape)
-            )
-
-            Row(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .statusBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                IconButton(onClick = onToggleEdit, colors = glass) {
-                    Icon(
-                        imageVector = if (editing) Icons.Default.Close else Icons.Default.Edit,
-                        contentDescription = if (editing) "Cancel editing" else "Edit profile"
-                    )
-                }
-                IconButton(onClick = onSettings, colors = glass) {
-                    Icon(Icons.Default.Settings, contentDescription = "Settings")
-                }
-            }
-        }
-
-        ProfileAvatar(
-            letter = letter,
-            model = avatarModel,
-            editing = editing,
-            colors = colors,
-            onClick = onPickPhoto,
-            modifier = Modifier.align(Alignment.BottomCenter)
-        )
-    }
-}
+// ───────────────────────── Avatar ─────────────────────────
 
 @Composable
 private fun ProfileAvatar(
@@ -327,31 +254,19 @@ private fun ProfileAvatar(
     Box(modifier = modifier.size(AvatarSize)) {
         Surface(
             shape = CircleShape,
-            color = colors.cardBackground,
-            shadowElevation = 8.dp,
-            border = BorderStroke(4.dp, colors.backgroundGold),
+            color = MaterialTheme.colorScheme.primaryContainer,
             modifier = Modifier
                 .fillMaxSize()
                 .clip(CircleShape)
                 .clickable(enabled = editing, onClickLabel = "Change photo", onClick = onClick)
         ) {
             if (model == null) {
-                Box(
-                    modifier = Modifier.background(
-                        Brush.linearGradient(
-                            listOf(
-                                colors.honeyGold.copy(alpha = 0.40f),
-                                colors.honeyGold.copy(alpha = 0.12f)
-                            )
-                        )
-                    ),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(contentAlignment = Alignment.Center) {
                     Text(
                         text = letter,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 42.sp,
-                        color = colors.hiveGreen
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 38.sp,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
             } else {
@@ -368,9 +283,8 @@ private fun ProfileAvatar(
             Surface(
                 shape = CircleShape,
                 color = colors.hiveGreen,
-                border = BorderStroke(3.dp, colors.backgroundGold),
-                shadowElevation = 4.dp,
-                modifier = Modifier.align(Alignment.BottomEnd).size(34.dp)
+                border = BorderStroke(2.dp, MaterialTheme.colorScheme.background),
+                modifier = Modifier.align(Alignment.BottomEnd).size(30.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
@@ -393,9 +307,12 @@ private fun ViewContent(
     estate: ProfileEstateUi?,
     isAdmin: Boolean,
     colors: ProfileColors,
+    onEdit: () -> Unit,
     onShowInviteCode: () -> Unit,
     onAdminPanel: (String) -> Unit,
-    onLeave: () -> Unit
+    onFinances: () -> Unit,
+    onPolls: () -> Unit,
+    onUtilities: () -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -403,8 +320,8 @@ private fun ViewContent(
     ) {
         Text(
             text = user?.displayName ?: user?.username ?: "Neighbor",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
             color = colors.darkGray,
             textAlign = TextAlign.Center,
             maxLines = 1,
@@ -412,31 +329,34 @@ private fun ViewContent(
             modifier = Modifier.padding(horizontal = 24.dp)
         )
         user?.username?.takeIf { it.isNotBlank() }?.let {
-            Spacer(Modifier.height(6.dp))
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = colors.hiveGreen.copy(alpha = 0.1f)
-            ) {
-                Text(
-                    text = "@$it",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = colors.hiveGreen,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                )
-            }
+            Text(
+                text = "@$it",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         user?.bio?.takeIf { it.isNotBlank() }?.let { bio ->
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
             Text(
                 text = bio,
                 style = MaterialTheme.typography.bodyMedium,
-                color = colors.darkGray.copy(alpha = 0.7f),
+                color = colors.darkGray,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 36.dp)
+                modifier = Modifier.padding(horizontal = 32.dp)
             )
         }
 
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(16.dp))
+        OutlinedButton(
+            onClick = onEdit,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(40.dp),
+            shape = RoundedCornerShape(10.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        ) {
+            Text("Edit profile", fontWeight = FontWeight.SemiBold, color = colors.darkGray)
+        }
+
+        Spacer(Modifier.height(24.dp))
 
         if (estate != null) {
             SectionLabel("Your estate", colors)
@@ -447,7 +367,7 @@ private fun ViewContent(
                             Text(
                                 text = estate.name,
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.SemiBold,
                                 color = colors.darkGray
                             )
                             if (estate.address.isNotBlank()) {
@@ -470,36 +390,45 @@ private fun ViewContent(
                                 }
                             }
                         }
-                        if (isAdmin) {
-                            Surface(shape = RoundedCornerShape(50), color = colors.hiveGreen) {
-                                Text(
-                                    text = if (estate.isOwner) "Owner" else "Admin",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                )
-                            }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (estate.isTreasurer) RoleBadge(treasurer = true)
+                            if (isAdmin) RoleBadge(owner = estate.isOwner)
                         }
                     }
-
-                    Spacer(Modifier.height(12.dp))
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color = colors.honeyGold.copy(alpha = 0.18f)
-                    ) {
-                        Text(
-                            text = "${estate.memberCount} member${if (estate.memberCount != 1) "s" else ""}",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colors.darkGray.copy(alpha = 0.8f),
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
-                        )
-                    }
+                    Text(
+                        text = "${estate.memberCount} member${if (estate.memberCount != 1) "s" else ""}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
                 }
 
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ActionRow(
+                    icon = Icons.Outlined.AccountBalanceWallet,
+                    title = "Dues & expenses",
+                    subtitle = if (estate.isTreasurer) "Manage levies and log spending" else "What you owe and where the money goes",
+                    colors = colors,
+                    onClick = onFinances
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 72.dp))
+                ActionRow(
+                    icon = Icons.Outlined.HowToVote,
+                    title = "Polls",
+                    subtitle = if (isAdmin) "Ask the estate a question" else "Vote on estate decisions",
+                    colors = colors,
+                    onClick = onPolls
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 72.dp))
+                ActionRow(
+                    icon = Icons.Outlined.Bolt,
+                    title = "Light & water",
+                    subtitle = "Is there light? See and report it",
+                    colors = colors,
+                    onClick = onUtilities
+                )
                 if (isAdmin) {
-                    HorizontalDivider(color = colors.darkGray.copy(alpha = 0.07f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     ActionRow(
                         icon = Icons.Default.Share,
                         title = "Share invite code",
@@ -508,7 +437,7 @@ private fun ViewContent(
                         onClick = onShowInviteCode
                     )
                     HorizontalDivider(
-                        color = colors.darkGray.copy(alpha = 0.07f),
+                        color = MaterialTheme.colorScheme.outlineVariant,
                         modifier = Modifier.padding(start = 72.dp)
                     )
                     ActionRow(
@@ -517,28 +446,6 @@ private fun ViewContent(
                         subtitle = "Manage your estate",
                         colors = colors,
                         onClick = { onAdminPanel(estate.id) }
-                    )
-                }
-                HorizontalDivider(color = colors.darkGray.copy(alpha = 0.07f))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(onClick = onLeave)
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ExitToApp,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(horizontal = 8.dp).size(22.dp)
-                    )
-                    Spacer(Modifier.width(16.dp))
-                    Text(
-                        "Leave estate",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.error
                     )
                 }
             }
@@ -557,7 +464,7 @@ private fun ViewContent(
                 contactRows.forEachIndexed { index, (icon, label, value) ->
                     if (index > 0) {
                         HorizontalDivider(
-                            color = colors.darkGray.copy(alpha = 0.07f),
+                            color = MaterialTheme.colorScheme.outlineVariant,
                             modifier = Modifier.padding(start = 72.dp)
                         )
                     }
@@ -677,15 +584,13 @@ private fun EditContent(
 @Composable
 private fun SectionLabel(text: String, colors: ProfileColors) {
     Text(
-        text = text.uppercase(),
-        style = MaterialTheme.typography.labelMedium,
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.SemiBold,
-        letterSpacing = 1.2.sp,
-        color = colors.darkGray.copy(alpha = 0.5f),
-        textAlign = TextAlign.Start,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 28.dp, end = 20.dp, bottom = 8.dp)
+            .padding(start = 16.dp, end = 16.dp, bottom = 4.dp)
     )
 }
 
@@ -694,26 +599,14 @@ private fun SectionCard(
     colors: ProfileColors,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-        border = BorderStroke(1.dp, colors.darkGray.copy(alpha = 0.06f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        content = content
-    )
+    // A plain group of rows, as in system settings, rather than a floating card.
+    Column(modifier = Modifier.fillMaxWidth(), content = content)
 }
 
 @Composable
 private fun IconBadge(icon: ImageVector, colors: ProfileColors, size: Dp = 40.dp) {
-    Box(
-        modifier = Modifier
-            .size(size)
-            .clip(RoundedCornerShape(12.dp))
-            .background(colors.hiveGreen.copy(alpha = 0.1f)),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(icon, contentDescription = null, tint = colors.hiveGreen, modifier = Modifier.size(20.dp))
+    Box(modifier = Modifier.size(size), contentAlignment = Alignment.Center) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
     }
 }
 
@@ -728,13 +621,12 @@ private fun InfoRow(icon: ImageVector, label: String, value: String, colors: Pro
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = colors.darkGray.copy(alpha = 0.5f)
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
                 text = value,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.bodyLarge,
                 color = colors.darkGray
             )
         }
@@ -762,7 +654,6 @@ private fun ActionRow(
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
                 color = colors.darkGray
             )
             Text(

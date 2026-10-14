@@ -98,7 +98,7 @@ async function leaveEstateWrites(db, uid, estateId) {
     const successor = admins.find((id) => id !== uid);
     if (successor) {
       return [
-        { update: estatePath, fields: { ownerId: successor } },
+        { update: estatePath, fields: { ownerId: successor, ...(estate.treasurerId === uid ? { treasurerId: "" } : {}) } },
         { transform: estatePath, increment: { memberCount: -1 }, arrayRemove: { adminIds: [uid] } },
       ];
     }
@@ -120,7 +120,9 @@ async function leaveEstateWrites(db, uid, estateId) {
 
   const change = { transform: estatePath, increment: { memberCount: -1 } };
   if (admins.includes(uid)) change.arrayRemove = { adminIds: [uid] };
-  return [change];
+  // The estate is left without a treasurer until an admin appoints another.
+  const handOver = estate.treasurerId === uid ? [{ update: estatePath, fields: { treasurerId: "" } }] : [];
+  return [...handOver, change];
 }
 
 /** Rejects a delete unless the password was entered in the last few minutes. */

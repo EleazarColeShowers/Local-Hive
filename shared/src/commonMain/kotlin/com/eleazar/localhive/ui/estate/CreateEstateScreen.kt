@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -66,7 +66,7 @@ fun CreateEstateScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .statusBarsPadding()
+            .systemBarsPadding()
             .background(Brush.verticalGradient(listOf(gold, colors.surfaceGradientEnd)))
     ) {
         Row(
@@ -76,7 +76,7 @@ fun CreateEstateScreen(
             IconButton(onClick = onBack) {
                 Icon(Icons.Default.ArrowBack, "Back", tint = dark)
             }
-            Text("Create Estate", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = dark)
+            Text("Create estate", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = dark)
         }
 
         Column(
@@ -117,7 +117,7 @@ fun CreateEstateScreen(
             )
 
             Text(
-                "Estate Name",
+                "Estate name",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = dark.copy(alpha = 0.7f),
@@ -180,7 +180,7 @@ fun CreateEstateScreen(
                 if (isLoading) {
                     CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                 } else {
-                    Text("Create Estate", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("Create estate", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
 

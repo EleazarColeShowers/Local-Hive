@@ -1,0 +1,12 @@
+// Your Apple developer team, for signing builds that run on a device or go to the App Store.
+// Find it at developer.apple.com > Membership. Simulator builds don't need it.
+TEAM_ID = XN89R23K57
+
+BUNDLE_ID = com.eleazar.localhive
+APP_NAME = LocalHive
+
+// Push notifications need the paid Apple Developer Program: a free Apple ID can't sign an app
+// that asks for them. Set this to YES once you've joined and uploaded an APNs key to Firebase.
+ENABLE_PUSH = NO
+PUSH_ENTITLEMENTS_YES = iosApp/iosApp.entitlements
+PUSH_ENTITLEMENTS_NO =

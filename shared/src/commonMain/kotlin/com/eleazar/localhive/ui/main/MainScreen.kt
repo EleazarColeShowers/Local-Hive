@@ -4,25 +4,20 @@ package com.eleazar.localhive.ui.main
 // SHARED MODULE  (bare UI: no Hilt, no NavController, no R.* resources)
 // ───────────────────────────────────────────────────────────────────────────
 
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.ScaffoldDefaults
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.AddBox
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -34,7 +29,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -131,8 +125,8 @@ private fun NotificationsBell(
 }
 
 /**
- * Bottom bar with the "create post" button docked in the centre gap,
- * instead of floating over the content as a separate FAB.
+ * Standard tab bar with "Post" in the middle. Unlike the tabs it opens the composer over
+ * everything rather than switching tab, so it's never shown as selected.
  */
 @Composable
 private fun MainBottomBar(
@@ -142,15 +136,28 @@ private fun MainBottomBar(
     onTabSelected: (MainTab) -> Unit,
     onCreatePostClick: () -> Unit
 ) {
-    val gapIndex = tabs.size / 2
+    val postIndex = tabs.size / 2
+    val inactive = MaterialTheme.colorScheme.onSurfaceVariant
 
-    Box(contentAlignment = Alignment.Center) {
+    Column {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         NavigationBar(
             containerColor = MaterialTheme.colorScheme.surface,
-            tonalElevation = 3.dp
+            tonalElevation = 0.dp
         ) {
             tabs.forEachIndexed { index, tab ->
-                if (index == gapIndex) Spacer(Modifier.weight(1f))
+                if (index == postIndex) {
+                    NavigationBarItem(
+                        selected = false,
+                        onClick = onCreatePostClick,
+                        icon = { Icon(Icons.Outlined.AddBox, contentDescription = null) },
+                        label = { Text("Post", fontWeight = FontWeight.Normal, style = MaterialTheme.typography.labelMedium) },
+                        colors = NavigationBarItemDefaults.colors(
+                            unselectedIconColor = inactive,
+                            unselectedTextColor = inactive
+                        )
+                    )
+                }
                 MainNavItem(
                     tab = tab,
                     selected = currentRoute == tab.route,
@@ -158,20 +165,6 @@ private fun MainBottomBar(
                     onClick = { onTabSelected(tab) }
                 )
             }
-        }
-
-        FloatingActionButton(
-            onClick = onCreatePostClick,
-            shape = CircleShape,
-            containerColor = colors.accent,
-            contentColor = colors.onAccent,
-            elevation = FloatingActionButtonDefaults.elevation(
-                defaultElevation = 2.dp,
-                pressedElevation = 4.dp
-            ),
-            modifier = Modifier.size(52.dp)
-        ) {
-            Icon(Icons.Default.Add, contentDescription = "Create post")
         }
     }
 }
@@ -183,7 +176,7 @@ private fun RowScope.MainNavItem(
     colors: MainScreenColors,
     onClick: () -> Unit
 ) {
-    val inactive = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+    val inactive = MaterialTheme.colorScheme.onSurfaceVariant
 
     NavigationBarItem(
         selected = selected,
@@ -209,7 +202,7 @@ private fun RowScope.MainNavItem(
         colors = NavigationBarItemDefaults.colors(
             selectedIconColor = colors.accent,
             selectedTextColor = colors.accent,
-            indicatorColor = colors.accent.copy(alpha = 0.12f),
+            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
             unselectedIconColor = inactive,
             unselectedTextColor = inactive
         )

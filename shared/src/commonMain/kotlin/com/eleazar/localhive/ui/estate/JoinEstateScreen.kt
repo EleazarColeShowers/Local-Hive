@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.estate
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,7 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -83,7 +84,7 @@ fun JoinEstateScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .statusBarsPadding()
+            .systemBarsPadding()
             .background(Brush.verticalGradient(listOf(gold, colors.surfaceGradientEnd)))
     ) {
         Row(
@@ -94,7 +95,7 @@ fun JoinEstateScreen(
                 Icon(Icons.Default.ArrowBack, "Back", tint = dark)
             }
             Text(
-                "Join Estate",
+                "Join estate",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = dark
@@ -118,7 +119,7 @@ fun JoinEstateScreen(
                 onClick = { selectedTab = 0 },
                 text = {
                     Text(
-                        "Search Estates",
+                        "Search estates",
                         fontWeight = if (selectedTab == 0) FontWeight.SemiBold else FontWeight.Normal,
                         color = if (selectedTab == 0) green else dark.copy(alpha = 0.5f)
                     )
@@ -129,7 +130,7 @@ fun JoinEstateScreen(
                 onClick = { selectedTab = 1 },
                 text = {
                     Text(
-                        "Invite Code",
+                        "Invite code",
                         fontWeight = if (selectedTab == 1) FontWeight.SemiBold else FontWeight.Normal,
                         color = if (selectedTab == 1) green else dark.copy(alpha = 0.5f)
                     )
@@ -255,7 +256,8 @@ private fun EstateSearchCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = cardBg),
-        elevation = CardDefaults.cardElevation(2.dp)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -351,7 +353,7 @@ private fun InviteCodeTab(
         OutlinedTextField(
             value = code,
             onValueChange = onCodeChange,
-            label = { Text("Invite Code") },
+            label = { Text("Invite code") },
             placeholder = { Text("ABC123") },
             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
             shape = RoundedCornerShape(16.dp),
@@ -388,7 +390,7 @@ private fun InviteCodeTab(
             if (isLoading) {
                 CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
             } else {
-                Text("Join Estate", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                Text("Join estate", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
             }
         }
     }

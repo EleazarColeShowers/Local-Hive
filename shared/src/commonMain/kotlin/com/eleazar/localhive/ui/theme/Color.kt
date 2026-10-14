@@ -20,6 +20,10 @@ val Plum = Color(0xFF7A4E8C)
 val HoneyGold = Color(0xFFF4B400)
 val SoftLeaf = Color(0xFF4CAF50)
 val BackgroundGold = Color(0xFFF6E7B2)
+/** Emergencies only, so the one red in the app always means "someone needs help". */
+val AlertRed = Color(0xFFC62828)
+/** Security reports: serious, but not an emergency. */
+val Slate = Color(0xFF3F5A7A)
 
 // Material 3 color schemes
 val Purple80 = Color(0xFFD0BCFF)
