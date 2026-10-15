@@ -4,6 +4,7 @@ import com.eleazar.localhive.data.remote.LocalHiveApi
 import com.eleazar.localhive.domain.FinanceRepository
 import com.eleazar.localhive.domain.NotificationRepository
 import com.eleazar.localhive.domain.model.AppNotification
+import com.eleazar.localhive.domain.model.BankDetails
 import com.eleazar.localhive.domain.model.Expense
 import com.eleazar.localhive.domain.model.Levy
 import com.eleazar.localhive.domain.model.LevyPayment
@@ -112,7 +113,8 @@ class FinanceRepositoryImpl(
         userId: String,
         userName: String,
         status: PaymentStatus,
-        existing: LevyPayment?
+        existing: LevyPayment?,
+        treasurerName: String
     ): Result<Unit> = runCatching {
         val now = nowMillis()
         payments(estateId, levy.id).document(userId).set(
@@ -124,14 +126,15 @@ class FinanceRepositoryImpl(
                 "status" to status.key,
                 "proofUrl" to existing?.proofUrl,
                 "submittedAt" to (existing?.submittedAt?.takeIf { it > 0 } ?: now),
-                "reviewedAt" to now
+                "reviewedAt" to now,
+                "confirmedByName" to if (status == PaymentStatus.PAID) treasurerName else ""
             )
         )
         val (type, title, message) = when (status) {
             PaymentStatus.PAID -> Triple(
                 NotificationType.PAYMENT_CONFIRMED,
                 "Payment confirmed",
-                "Your ${formatNaira(levy.amount)} for ${levy.title} has been received. Thank you!"
+                "Your ${formatNaira(levy.amount)} for ${levy.title} has been received. Your receipt is on the levy. Thank you!"
             )
             PaymentStatus.REJECTED -> Triple(
                 NotificationType.PAYMENT_REJECTED,
@@ -181,6 +184,39 @@ class FinanceRepositoryImpl(
         expenses(estateId).document(expenseId).delete()
     }
 
+    override fun observeBankDetails(estateId: String): Flow<BankDetails?> =
+        bankRef(estateId).snapshots
+            .map { snapshot ->
+                snapshot.takeIf { it.exists }?.let {
+                    BankDetails(
+                        bankName = it.string("bankName").orEmpty(),
+                        accountNumber = it.string("accountNumber").orEmpty(),
+                        accountName = it.string("accountName").orEmpty(),
+                        updatedByName = it.string("updatedByName").orEmpty(),
+                        updatedAt = it.long("updatedAt") ?: 0L
+                    )
+                }
+            }
+
+    override suspend fun setBankDetails(estateId: String, details: BankDetails?, updatedBy: String): Result<Unit> = runCatching {
+        if (details == null) {
+            bankRef(estateId).delete()
+            return@runCatching
+        }
+        bankRef(estateId).set(
+            mapOf(
+                "bankName" to details.bankName,
+                "accountNumber" to details.accountNumber,
+                "accountName" to details.accountName,
+                "updatedBy" to updatedBy,
+                "updatedByName" to details.updatedByName,
+                "updatedAt" to details.updatedAt
+            )
+        )
+    }
+
+    private fun bankRef(estateId: String) = estate(estateId).collection("private").document("bank")
+
     private fun DocumentSnapshot.toLevy(): Levy? = runCatching {
         Levy(
             id = id,
@@ -202,7 +238,8 @@ class FinanceRepositoryImpl(
             status = string("status").orEmpty(),
             proofUrl = string("proofUrl"),
             submittedAt = long("submittedAt") ?: 0L,
-            reviewedAt = long("reviewedAt") ?: 0L
+            reviewedAt = long("reviewedAt") ?: 0L,
+            confirmedByName = string("confirmedByName").orEmpty()
         )
     }.getOrNull()
 

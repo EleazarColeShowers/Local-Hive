@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -174,6 +175,7 @@ private fun NotificationCard(
         NotificationType.PAYMENT_CONFIRMED -> Icons.Default.CheckCircle to green
         NotificationType.PAYMENT_REJECTED -> Icons.Default.Close to Color(0xFFE53935)
         NotificationType.POST_REMOVED -> Icons.Outlined.Delete to Color(0xFFE53935)
+        NotificationType.OWNERSHIP_TRANSFERRED -> Icons.Default.Star to green
     }
 
     // Unread rows get a faint brand tint, as most apps' notification lists do.

@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -14,6 +15,10 @@ import platform.CoreGraphics.CGImageRelease
 import platform.CoreMedia.CMTimeMake
 import platform.Foundation.NSBundle
 import platform.Foundation.NSFileManager
+import platform.Foundation.NSString
+import platform.Foundation.NSUTF8StringEncoding
+import platform.Foundation.create
+import platform.Foundation.writeToFile
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSURL
 import platform.Foundation.NSUUID
@@ -144,6 +149,18 @@ private object IosPlatformActions : PlatformActions {
         val presenter = topViewController() ?: return
         val sheet = UIActivityViewController(activityItems = listOf(text), applicationActivities = null)
         // On iPad the sheet is a popover and needs something to point at.
+        sheet.popoverPresentationController?.sourceView = presenter.view
+        presenter.presentViewController(sheet, animated = true, completion = null)
+    }
+
+    @OptIn(BetaInteropApi::class, ExperimentalForeignApi::class)
+    override fun shareFile(fileName: String, mimeType: String, content: String, title: String) {
+        val presenter = topViewController() ?: return
+        val path = NSTemporaryDirectory() + fileName
+        val written = NSString.create(string = content)
+            .writeToFile(path, atomically = true, encoding = NSUTF8StringEncoding, error = null)
+        if (!written) return
+        val sheet = UIActivityViewController(activityItems = listOf(NSURL.fileURLWithPath(path)), applicationActivities = null)
         sheet.popoverPresentationController?.sourceView = presenter.view
         presenter.presentViewController(sheet, animated = true, completion = null)
     }

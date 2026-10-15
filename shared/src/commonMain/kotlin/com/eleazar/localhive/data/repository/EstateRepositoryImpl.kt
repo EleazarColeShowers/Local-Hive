@@ -5,6 +5,7 @@ import com.eleazar.localhive.domain.NotificationRepository
 import com.eleazar.localhive.domain.OwnerMustHandOverException
 import com.eleazar.localhive.domain.model.AppNotification
 import com.eleazar.localhive.domain.model.Estate
+import com.eleazar.localhive.domain.model.JoinMode
 import com.eleazar.localhive.domain.model.JoinRequest
 import com.eleazar.localhive.domain.model.NotificationType
 import com.eleazar.localhive.ui.util.nowMillis
@@ -59,6 +60,9 @@ class EstateRepositoryImpl(
         val lookup = inviteCodes.document(code).get()
         val estateId = lookup.takeIf { it.exists }?.string("estateId") ?: throw Exception("That invite code isn't valid")
         val estate = mapDocToEstate(estates.document(estateId).get()) ?: throw Exception("Estate not found")
+        if (!estate.joinMode.acceptsCodes) {
+            throw Exception("${estate.name} isn't taking invite codes right now. Find it and ask to join instead.")
+        }
 
         // The approved request carrying the code is what the rules accept as permission
         // to set estateId, so all three writes must land together.
@@ -146,6 +150,9 @@ class EstateRepositoryImpl(
         userPhotoUrl: String
     ): Result<Unit> = runCatching {
         val estate = getEstate(estateId).getOrThrow()
+        if (!estate.joinMode.acceptsRequests) {
+            throw Exception("${estate.name} is invite only. Ask a member for the invite code.")
+        }
         requestRef(estateId, userId).set(
             mapOf(
                 "id" to "${estateId}_${userId}",
@@ -264,6 +271,54 @@ class EstateRepositoryImpl(
         estates.document(estateId).update("treasurerId" to userId.orEmpty())
     }
 
+    override suspend fun updateEstateDetails(estateId: String, name: String, address: String): Result<Unit> = runCatching {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) throw Exception("Give the estate a name")
+        estates.document(estateId).update("name" to trimmed, "address" to address.trim())
+    }
+
+    override suspend fun setJoinMode(estateId: String, mode: JoinMode): Result<Unit> = runCatching {
+        estates.document(estateId).update("joinMode" to mode.key)
+    }
+
+    override fun observeInviteCode(estateId: String): Flow<String?> =
+        inviteRef(estateId).snapshots
+            .map { snapshot -> snapshot.takeIf { it.exists }?.string("code") }
+            .catch { emit(null) }
+
+    override suspend fun regenerateInviteCode(estateId: String): Result<String> = runCatching {
+        val old = runCatching { inviteRef(estateId).get(Source.SERVER).string("code") }.getOrNull()
+        val code = unusedInviteCode()
+        // The new lookup and the estate's copy of it land together, and the old lookup goes in
+        // the same batch, so there's never a moment with two working codes or none.
+        val batch = firestore.batch()
+            .set(inviteRef(estateId), mapOf("code" to code))
+            .set(inviteCodes.document(code), mapOf("estateId" to estateId))
+        if (!old.isNullOrBlank()) batch.delete(inviteCodes.document(old))
+        batch.commit()
+        code
+    }
+
+    override suspend fun transferOwnership(estateId: String, newOwnerId: String): Result<Unit> = runCatching {
+        val estate = estates.document(estateId).get(Source.SERVER).takeIf { it.exists }?.let { mapDocToEstate(it) }
+            ?: throw Exception("Estate not found")
+        if (estate.isOwner(newOwnerId)) return@runCatching
+        estates.document(estateId).update(
+            "ownerId" to newOwnerId,
+            "adminIds" to FieldValue.arrayUnion(newOwnerId)
+        )
+        notificationRepository.createNotification(
+            AppNotification(
+                recipientId = newOwnerId,
+                type = NotificationType.OWNERSHIP_TRANSFERRED,
+                title = "You now own ${estate.name}",
+                message = "Ownership of ${estate.name} was handed to you. You're an admin for as long as you stay, " +
+                    "and only you can hand it on.",
+                estateId = estateId
+            )
+        )
+    }
+
     private fun mapDocToEstate(doc: DocumentSnapshot): Estate? = runCatching {
         val adminIds = doc.stringList("adminIds") ?: listOfNotNull(doc.string("adminId"))
         Estate(
@@ -276,7 +331,8 @@ class EstateRepositoryImpl(
             treasurerId = doc.string("treasurerId").orEmpty(),
             inviteCode = doc.string("inviteCode").orEmpty(),
             memberCount = doc.long("memberCount")?.toInt() ?: 0,
-            createdAt = doc.long("createdAt") ?: 0L
+            createdAt = doc.long("createdAt") ?: 0L,
+            joinMode = JoinMode.fromKey(doc.string("joinMode"))
         )
     }.getOrNull()
 
@@ -320,6 +376,7 @@ class EstateRepositoryImpl(
         "adminIds" to adminIds,
         "ownerId" to ownerId,
         "memberCount" to memberCount,
-        "createdAt" to createdAt
+        "createdAt" to createdAt,
+        "joinMode" to joinMode.key
     )
 }

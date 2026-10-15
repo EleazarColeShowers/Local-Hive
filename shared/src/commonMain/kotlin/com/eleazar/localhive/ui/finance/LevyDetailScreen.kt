@@ -19,9 +19,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.eleazar.localhive.domain.model.LevyPayment
 import com.eleazar.localhive.domain.model.PaymentStatus
 import com.eleazar.localhive.ui.components.Avatar
 import com.eleazar.localhive.ui.util.formatDate
@@ -54,6 +55,8 @@ fun LevyDetailScreen(
     onMarkPaid: (MemberPayment) -> Unit,
     onRemind: () -> Unit,
     onDelete: () -> Unit,
+    onCopyAccount: (String) -> Unit,
+    onShareReceipt: (text: String) -> Unit,
     onMessageShown: () -> Unit,
     onErrorShown: () -> Unit,
 ) {
@@ -63,6 +66,8 @@ fun LevyDetailScreen(
     var markingPaid by remember { mutableStateOf<MemberPayment?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    /** Whose receipt is open, with the name it's made out to. */
+    var receipt by remember { mutableStateOf<Pair<LevyPayment, String>?>(null) }
 
     LaunchedEffect(uiState.message) {
         uiState.message?.let { snackbar.showSnackbar(it); onMessageShown() }
@@ -102,6 +107,19 @@ fun LevyDetailScreen(
             confirmButton = { Button(onClick = { onMarkPaid(member); markingPaid = null }) { Text("Mark paid") } },
             dismissButton = { TextButton(onClick = { markingPaid = null }) { Text("Cancel") } }
         )
+    }
+
+    receipt?.let { (payment, payer) ->
+        if (levy != null) {
+            ReceiptDialog(
+                estateName = uiState.estateName,
+                levy = levy,
+                payment = payment,
+                payerName = payer,
+                onShare = onShareReceipt,
+                onDismiss = { receipt = null }
+            )
+        }
     }
 
     if (confirmDelete && levy != null) {
@@ -176,14 +194,24 @@ fun LevyDetailScreen(
                 if (!uiState.isTreasurer) {
                     item(key = "mine") {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(top = 12.dp))
-                        MyPayment(uiState, onSendProof)
+                        MyPayment(
+                            uiState,
+                            onSendProof,
+                            onCopyAccount,
+                            onViewReceipt = { payment -> receipt = payment to payment.userName.ifBlank { "You" } }
+                        )
                     }
                 } else {
                     item(key = "progress") {
                         TreasurerSummary(uiState, onRemind)
                     }
                     item(key = "members") {
-                        MemberFilterRow(uiState, onReview = { reviewing = it }, onMarkPaid = { markingPaid = it })
+                        MemberFilterRow(
+                            uiState,
+                            onReview = { reviewing = it },
+                            onMarkPaid = { markingPaid = it },
+                            onViewReceipt = { member -> member.payment?.let { receipt = it to member.name } }
+                        )
                     }
                 }
             }
@@ -192,7 +220,12 @@ fun LevyDetailScreen(
 }
 
 @Composable
-private fun MyPayment(uiState: FinanceUiState, onSendProof: () -> Unit) {
+private fun MyPayment(
+    uiState: FinanceUiState,
+    onSendProof: () -> Unit,
+    onCopyAccount: (String) -> Unit,
+    onViewReceipt: (LevyPayment) -> Unit
+) {
     val payment = uiState.myPayment
     val status = payment?.paymentStatus
     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -208,6 +241,15 @@ private fun MyPayment(uiState: FinanceUiState, onSendProof: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 14.sp
         )
+        if (payment != null && status == PaymentStatus.PAID) {
+            OutlinedButton(onClick = { onViewReceipt(payment) }, shape = RoundedCornerShape(12.dp)) {
+                Icon(Icons.Outlined.ReceiptLong, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("View receipt")
+            }
+        } else {
+            BankDetailsCard(bank = uiState.bank, isTreasurer = false, onCopyAccount = onCopyAccount, onEdit = {})
+        }
         payment?.proofUrl?.let { ProofImage(url = it, contentDescription = "Your proof of payment") }
         if (status != PaymentStatus.PAID) {
             if (uiState.isSaving) {
@@ -268,7 +310,8 @@ private fun TreasurerSummary(uiState: FinanceUiState, onRemind: () -> Unit) {
 private fun MemberFilterRow(
     uiState: FinanceUiState,
     onReview: (MemberPayment) -> Unit,
-    onMarkPaid: (MemberPayment) -> Unit
+    onMarkPaid: (MemberPayment) -> Unit,
+    onViewReceipt: (MemberPayment) -> Unit
 ) {
     var filter by rememberSaveable { mutableStateOf(MemberFilter.ALL) }
     Column {
@@ -300,7 +343,13 @@ private fun MemberFilterRow(
             )
         }
         shown.forEach { member ->
-            MemberPaymentRow(member, isMe = member.userId == uiState.currentUserId, onReview = onReview, onMarkPaid = onMarkPaid)
+            MemberPaymentRow(
+                member,
+                isMe = member.userId == uiState.currentUserId,
+                onReview = onReview,
+                onMarkPaid = onMarkPaid,
+                onViewReceipt = onViewReceipt
+            )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 68.dp))
         }
     }
@@ -311,12 +360,15 @@ private fun MemberPaymentRow(
     member: MemberPayment,
     isMe: Boolean,
     onReview: (MemberPayment) -> Unit,
-    onMarkPaid: (MemberPayment) -> Unit
+    onMarkPaid: (MemberPayment) -> Unit,
+    onViewReceipt: (MemberPayment) -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = member.status == PaymentStatus.PENDING) { onReview(member) }
+            .clickable(enabled = member.status == PaymentStatus.PENDING || member.status == PaymentStatus.PAID) {
+                if (member.status == PaymentStatus.PAID) onViewReceipt(member) else onReview(member)
+            }
             .padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -328,12 +380,9 @@ private fun MemberPaymentRow(
         }
         when (member.status) {
             PaymentStatus.PENDING -> FilledTonalButton(onClick = { onReview(member) }) { Text("Review") }
-            PaymentStatus.PAID -> Icon(
-                Icons.Default.CheckCircle,
-                contentDescription = "Paid",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(end = 12.dp)
-            )
+            PaymentStatus.PAID -> IconButton(onClick = { onViewReceipt(member) }) {
+                Icon(Icons.Outlined.ReceiptLong, contentDescription = "Receipt", tint = MaterialTheme.colorScheme.primary)
+            }
             else -> TextButton(onClick = { onMarkPaid(member) }) { Text("Mark paid") }
         }
     }

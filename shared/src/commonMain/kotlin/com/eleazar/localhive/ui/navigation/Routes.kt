@@ -46,6 +46,7 @@ sealed class Screen(val route: String) {
         fun createRoute(levyId: String) = "levy/$levyId"
     }
     object CreateLevy : Screen("create_levy")
+    object Statement : Screen("finance_statement")
     object AddExpense : Screen("add_expense")
 
     object Polls : Screen("polls")

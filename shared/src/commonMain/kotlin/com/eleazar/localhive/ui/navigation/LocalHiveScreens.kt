@@ -77,11 +77,16 @@ interface LocalHiveScreens {
         onBack: () -> Unit,
         onLevyClick: (levyId: String) -> Unit,
         onCreateLevy: () -> Unit,
-        onAddExpense: () -> Unit
+        onAddExpense: () -> Unit,
+        onStatement: () -> Unit
     )
 
     @Composable
     fun LevyDetail(levyId: String, onBack: () -> Unit)
+
+    /** The treasurer's books: balance, month by month, exportable. */
+    @Composable
+    fun Statement(onBack: () -> Unit)
 
     @Composable
     fun CreateLevy(onBack: () -> Unit)
@@ -106,7 +111,7 @@ interface LocalHiveScreens {
     @Composable
     fun CreatePoll(onBack: () -> Unit)
 
-    /** "Is there light?": power and water status. */
+    /** "Is there light?": the estate's power status. */
     @Composable
     fun Utilities(onBack: () -> Unit)
 }

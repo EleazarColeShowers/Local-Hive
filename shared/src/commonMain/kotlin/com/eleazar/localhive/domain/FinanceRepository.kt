@@ -1,5 +1,6 @@
 package com.eleazar.localhive.domain
 
+import com.eleazar.localhive.domain.model.BankDetails
 import com.eleazar.localhive.domain.model.Expense
 import com.eleazar.localhive.domain.model.Levy
 import com.eleazar.localhive.domain.model.LevyPayment
@@ -35,7 +36,8 @@ interface FinanceRepository {
 
     /**
      * The treasurer setting where a resident stands: confirming proof, rejecting it, or
-     * recording a cash payment that came with no proof. Tells the resident.
+     * recording a cash payment that came with no proof. Tells the resident. [treasurerName]
+     * goes on the receipt of a confirmed payment.
      */
     suspend fun setPaymentStatus(
         estateId: String,
@@ -43,7 +45,8 @@ interface FinanceRepository {
         userId: String,
         userName: String,
         status: PaymentStatus,
-        existing: LevyPayment?
+        existing: LevyPayment?,
+        treasurerName: String
     ): Result<Unit>
 
     /** Pushes a reminder to everyone yet to pay; returns how many it reached. At most once a day. */
@@ -53,4 +56,9 @@ interface FinanceRepository {
     fun observeExpenses(estateId: String): Flow<List<Expense>>
     suspend fun addExpense(estateId: String, expense: Expense): Result<Unit>
     suspend fun deleteExpense(estateId: String, expenseId: String): Result<Unit>
+
+    /** Where to pay; null until the treasurer adds them. Members only. */
+    fun observeBankDetails(estateId: String): Flow<BankDetails?>
+    /** The treasurer setting where to pay; null removes them. */
+    suspend fun setBankDetails(estateId: String, details: BankDetails?, updatedBy: String): Result<Unit>
 }

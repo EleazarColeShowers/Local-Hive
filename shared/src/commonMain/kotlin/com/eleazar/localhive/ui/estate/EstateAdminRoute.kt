@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import org.koin.compose.viewmodel.koinViewModel
+import com.eleazar.localhive.ui.platform.rememberPlatformActions
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
@@ -20,7 +21,9 @@ fun EstateAdminRoute(
         viewModel.loadEstate(estateId)
         viewModel.loadPendingRequests(estateId)
         viewModel.loadMembers(estateId)
+        viewModel.loadInviteCode(estateId)
     }
+    val platform = rememberPlatformActions()
 
     val colors = rememberEstateColors()
 
@@ -30,6 +33,9 @@ fun EstateAdminRoute(
         members = uiState.members,
         currentUserId = currentUserId,
         error = uiState.error,
+        inviteCode = uiState.inviteCode,
+        isSaving = uiState.isSaving,
+        message = uiState.message,
         colors = colors,
         onBack = onBack,
         onApproveRequest = { userId -> viewModel.approveRequest(estateId, userId) },
@@ -38,6 +44,12 @@ fun EstateAdminRoute(
         onRemoveAdmin = { userId -> viewModel.removeAdmin(estateId, userId) },
         onRemoveMember = { userId -> viewModel.removeMember(estateId, userId) },
         onSetTreasurer = { userId -> viewModel.setTreasurer(estateId, userId) },
+        onTransferOwnership = { userId -> viewModel.transferOwnership(estateId, userId) },
+        onSaveDetails = { name, address -> viewModel.updateEstateDetails(estateId, name, address) },
+        onSetJoinMode = { mode -> viewModel.setJoinMode(estateId, mode) },
+        onRegenerateCode = { viewModel.regenerateInviteCode(estateId) },
+        onCopyCode = { code -> platform.copyToClipboard("Invite Code", code, "Code copied!") },
+        onMessageShown = { viewModel.consumeMessage() },
         onClearError = { viewModel.clearError() }
     )
 }

@@ -108,7 +108,7 @@ fun FeedScreen(
                 onUtilities = onUtilities,
                 onPolls = onPolls,
                 onDues = onDues,
-                modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 8.dp)
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)
             )
         }
         item(key = "compose") {
@@ -172,7 +172,7 @@ fun FeedScreen(
                         onEdit = { onEditPost(post.id) }.takeIf { post.authorId == uiState.currentUserId },
                         onDelete = { reason: String -> onDeletePost(post.id, reason) }.takeIf { post.authorId == uiState.currentUserId || uiState.isAdmin }
                     )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
                 }
                 // A filtered list can be too short to scroll, so it offers older posts itself.
                 if (filter != FeedFilter.ALL && uiState.hasMorePosts && !uiState.isLoadingMore) {
@@ -235,7 +235,7 @@ private fun FeedFilterRow(selected: FeedFilter, onSelect: (FeedFilter) -> Unit) 
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         FeedFilter.entries.forEach { option ->
@@ -243,10 +243,13 @@ private fun FeedFilterRow(selected: FeedFilter, onSelect: (FeedFilter) -> Unit) 
                 selected = option == selected,
                 onClick = { onSelect(option) },
                 label = { Text(option.label) },
-                leadingIcon = option.categories.firstOrNull()?.let { category ->
-                    { Icon(category.icon, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                },
-                shape = RoundedCornerShape(50)
+                shape = RoundedCornerShape(50),
+                // Unselected chips are text only, so the row reads as a quiet control, not a second toolbar.
+                border = if (option == selected) null else FilterChipDefaults.filterChipBorder(
+                    enabled = true,
+                    selected = false,
+                    borderColor = MaterialTheme.colorScheme.outlineVariant
+                )
             )
         }
     }

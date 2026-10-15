@@ -5,7 +5,7 @@ import com.eleazar.localhive.domain.model.UtilityReport
 import com.eleazar.localhive.domain.model.UtilityStatus
 import kotlinx.coroutines.flow.Flow
 
-/** "Is there light?": power and water as the estate's members report them. */
+/** "Is there light?": the light as the estate's members report them. */
 interface UtilityRepository {
     /** The latest status of each supply anyone has reported on. */
     fun observeStatuses(estateId: String): Flow<Map<UtilityKind, UtilityStatus>>

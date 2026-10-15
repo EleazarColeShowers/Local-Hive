@@ -10,6 +10,7 @@ import com.eleazar.localhive.domain.model.Estate
 import com.eleazar.localhive.domain.model.User
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -50,16 +51,12 @@ class ProfileViewModel(
 
     private fun loadEstate(estateId: String) {
         viewModelScope.launch {
-            estateRepository.getEstate(estateId).onSuccess { estate ->
-                _uiState.update { it.copy(estate = estate) }
-            }
-            // Stay current with admin changes; the invite code only comes from getEstate.
-            estateRepository.observeEstate(estateId).collect { live ->
-                if (live != null) {
-                    _uiState.update { state ->
-                        state.copy(estate = live.copy(inviteCode = state.estate?.inviteCode.orEmpty()))
-                    }
-                }
+            // Stay current with admin changes, including a new invite code.
+            combine(
+                estateRepository.observeEstate(estateId),
+                estateRepository.observeInviteCode(estateId)
+            ) { live, code -> live?.copy(inviteCode = code.orEmpty()) }.collect { live ->
+                if (live != null) _uiState.update { it.copy(estate = live) }
             }
         }
     }

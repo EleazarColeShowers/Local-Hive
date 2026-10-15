@@ -93,7 +93,9 @@ data class ProfileEstateUi(
     val memberCount: Int,
     val isAdmin: Boolean,
     val isOwner: Boolean = false,
-    val isTreasurer: Boolean = false
+    val isTreasurer: Boolean = false,
+    /** False while the estate takes requests only, when there's no code worth sharing. */
+    val acceptsCodes: Boolean = true
 )
 
 private val AvatarSize = 96.dp
@@ -422,24 +424,26 @@ private fun ViewContent(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 72.dp))
                 ActionRow(
                     icon = Icons.Outlined.Bolt,
-                    title = "Light & water",
+                    title = "Light",
                     subtitle = "Is there light? See and report it",
                     colors = colors,
                     onClick = onUtilities
                 )
                 if (isAdmin) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    ActionRow(
-                        icon = Icons.Default.Share,
-                        title = "Share invite code",
-                        subtitle = "Let neighbours join ${estate.name}",
-                        colors = colors,
-                        onClick = onShowInviteCode
-                    )
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                        modifier = Modifier.padding(start = 72.dp)
-                    )
+                    if (estate.acceptsCodes) {
+                        ActionRow(
+                            icon = Icons.Default.Share,
+                            title = "Share invite code",
+                            subtitle = "Let neighbours join ${estate.name}",
+                            colors = colors,
+                            onClick = onShowInviteCode
+                        )
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                            modifier = Modifier.padding(start = 72.dp)
+                        )
+                    }
                     ActionRow(
                         icon = Icons.Default.Lock,
                         title = "Admin panel",

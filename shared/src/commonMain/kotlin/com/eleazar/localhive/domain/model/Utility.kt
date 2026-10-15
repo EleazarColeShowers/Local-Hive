@@ -1,9 +1,11 @@
 package com.eleazar.localhive.domain.model
 
-/** A supply neighbours report on. [key] is the document id it's stored under. */
+/**
+ * A supply neighbours report on. [key] is the document id it's stored under. Only the light:
+ * water is per house, so one neighbour's tap says nothing about the estate's.
+ */
 enum class UtilityKind(val key: String, val label: String) {
-    POWER("power", "Light"),
-    WATER("water", "Water");
+    POWER("power", "Light");
 
     companion object {
         fun fromKey(key: String?): UtilityKind? = entries.firstOrNull { it.key == key }

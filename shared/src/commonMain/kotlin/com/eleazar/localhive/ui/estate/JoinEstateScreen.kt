@@ -302,6 +302,18 @@ private fun EstateSearchCard(
                     Spacer(Modifier.width(4.dp))
                     Text("Sent", color = green, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }
+            } else if (!estate.joinMode.acceptsRequests) {
+                // Its admins only let people in by code, so there's nothing to ask for.
+                Text(
+                    "Invite only",
+                    color = dark.copy(alpha = 0.55f),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(dark.copy(alpha = 0.06f))
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                )
             } else {
                 Button(
                     onClick = onRequest,

@@ -32,6 +32,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         guard Bundle.main.object(forInfoDictionaryKey: "LocalHivePushEnabled") as? String == "YES" else { return true }
         UNUserNotificationCenter.current().delegate = self
         Messaging.messaging().delegate = self
+        // Once Apple approves critical alerts (see iosApp.entitlements), use
+        // [.alert, .badge, .sound, .criticalAlert] so the SOS siren can sound on silent.
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { _, _ in }
         // Firebase picks up the APNs token itself and answers with an FCM token below.
         application.registerForRemoteNotifications()

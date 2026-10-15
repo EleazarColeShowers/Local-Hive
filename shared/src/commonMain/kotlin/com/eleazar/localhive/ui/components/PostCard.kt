@@ -121,7 +121,7 @@ fun PostCard(
                 }
             )
             .clickable(onClick = onClick)
-            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 6.dp)
     ) {
         if (isAnnouncement) {
             // Lined up like the rest of the post: icon over the avatar, words over the text.
@@ -228,7 +228,7 @@ fun PostCard(
                         linkColor = MaterialTheme.colorScheme.primary,
                         mentions = post.mentions,
                         onMentionClick = onMentionClick,
-                        modifier = Modifier.padding(top = 4.dp)
+                        modifier = Modifier.padding(top = 6.dp)
                     )
                 }
 
@@ -237,7 +237,7 @@ fun PostCard(
                         model = imageUrl,
                         contentDescription = null,
                         modifier = Modifier
-                            .padding(top = 10.dp)
+                            .padding(top = 12.dp)
                             .fillMaxWidth()
                             .aspectRatio(4f / 3f)
                             .clip(MediaShape)
@@ -247,7 +247,7 @@ fun PostCard(
                 }
 
                 post.videoUrl?.takeIf { it.isNotBlank() }?.let { videoUrl ->
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     if (playVideo) {
                         VideoPlayer(
                             url = videoUrl,
@@ -261,7 +261,7 @@ fun PostCard(
 
                 // Pulled in by the action's own padding so the icons sit on the text's left edge.
                 Row(
-                    modifier = Modifier.padding(top = 2.dp).offset(x = -ActionPadding),
+                    modifier = Modifier.padding(top = 4.dp).offset(x = -ActionPadding),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {

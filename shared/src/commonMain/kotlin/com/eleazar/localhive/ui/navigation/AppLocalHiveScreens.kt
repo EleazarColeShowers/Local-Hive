@@ -20,6 +20,7 @@ import com.eleazar.localhive.ui.finance.AddExpenseRoute
 import com.eleazar.localhive.ui.finance.CreateLevyRoute
 import com.eleazar.localhive.ui.finance.FinancesRoute
 import com.eleazar.localhive.ui.finance.LevyDetailRoute
+import com.eleazar.localhive.ui.finance.StatementRoute
 import com.eleazar.localhive.ui.feed.PostDetailRoute
 import com.eleazar.localhive.ui.main.MainRoute
 import com.eleazar.localhive.ui.messages.ChatDetailRoute
@@ -119,8 +120,18 @@ object AppLocalHiveScreens : LocalHiveScreens {
         onBack: () -> Unit,
         onLevyClick: (levyId: String) -> Unit,
         onCreateLevy: () -> Unit,
-        onAddExpense: () -> Unit
-    ) = FinancesRoute(onBack = onBack, onLevyClick = onLevyClick, onCreateLevy = onCreateLevy, onAddExpense = onAddExpense)
+        onAddExpense: () -> Unit,
+        onStatement: () -> Unit
+    ) = FinancesRoute(
+        onBack = onBack,
+        onLevyClick = onLevyClick,
+        onCreateLevy = onCreateLevy,
+        onAddExpense = onAddExpense,
+        onStatement = onStatement
+    )
+
+    @Composable
+    override fun Statement(onBack: () -> Unit) = StatementRoute(onBack = onBack)
 
     @Composable
     override fun LevyDetail(levyId: String, onBack: () -> Unit) = LevyDetailRoute(levyId = levyId, onBack = onBack)

@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.finance
 
+import com.eleazar.localhive.domain.model.BankDetails
 import com.eleazar.localhive.domain.model.Expense
 import com.eleazar.localhive.domain.model.Levy
 import com.eleazar.localhive.domain.model.LevyPayment
@@ -29,6 +30,10 @@ data class FinanceUiState(
     val isLoading: Boolean = true,
     val currentUserId: String? = null,
     val estateId: String? = null,
+    /** For receipts. */
+    val estateName: String = "",
+    /** Where to pay; null until the treasurer adds them. */
+    val bank: BankDetails? = null,
     val isTreasurer: Boolean = false,
     /** Blank when the estate has no treasurer. */
     val treasurerName: String? = null,
@@ -43,6 +48,9 @@ data class FinanceUiState(
     val myPayment: LevyPayment? = null,
     /** Treasurer only: every member, those with proof to check first. */
     val memberPayments: List<MemberPayment> = emptyList(),
+
+    /** Treasurer only: every confirmed payment and expense, newest first, for the statement. */
+    val statement: List<StatementEntry> = emptyList(),
 
     val isSaving: Boolean = false,
     val error: String? = null,

@@ -53,7 +53,8 @@ fun ProfileRoute(
             memberCount = it.memberCount,
             isAdmin = it.isAdmin(user?.id),
             isOwner = it.isOwner(user?.id),
-            isTreasurer = it.isTreasurer(user?.id)
+            isTreasurer = it.isTreasurer(user?.id),
+            acceptsCodes = it.joinMode.acceptsCodes
         )
     }
 

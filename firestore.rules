@@ -108,6 +108,7 @@ service cloud.firestore {
       allow update: if isSignedIn() && (
         (uid() in resource.data.adminIds
           && !('inviteCode' in request.resource.data)
+          && detailsValid()
           && ownerKept())
         // Joining or leaving moves the tally by one and touches nothing else — in
         // particular a member cannot write themselves into adminIds.
@@ -122,16 +123,29 @@ service cloud.firestore {
       );
       allow delete: if isSignedIn() && uid() in resource.data.adminIds;
 
+      // An estate always has a name, and lets people in in one of the known ways.
+      function detailsValid() {
+        let data = request.resource.data;
+        return data.name is string
+               && data.name.size() > 0
+               && data.name.size() <= 80
+               && data.get('address', '') is string
+               && data.get('address', '').size() <= 200
+               && data.get('joinMode', 'both') in ['both', 'code', 'request'];
+      }
+
       // The owner stays an admin no matter what other admins do. Only the owner can change
-      // that, by handing ownership to another admin as they leave.
+      // that, by handing ownership to another member, who becomes an admin with it. The
+      // owner may stay on as an admin, or drop admin as they leave.
       function ownerKept() {
         let owner = resource.data.get('ownerId', null);
         let next = request.resource.data.get('ownerId', null);
         return (next == owner && (owner == null || owner in request.resource.data.adminIds))
                || (uid() == owner
                    && next is string
+                   && next != owner
                    && next in request.resource.data.adminIds
-                   && !(uid() in request.resource.data.adminIds));
+                   && get(/databases/$(database)/documents/users/$(next)).data.get('estateId', null) == estateId);
       }
 
       // Dues: the treasurer sets them; every member can see what's owed.
@@ -173,10 +187,21 @@ service cloud.firestore {
         allow delete: if isTreasurerOf(estateId);
       }
 
-      // The estate's current invite code, for its members to share.
+      // Members-only details: the current invite code, which admins set, and where to pay
+      // dues, which the treasurer sets.
       match /private/{docId} {
         allow read: if isMemberOf(estateId) || isEstateAdmin(estateId);
-        allow write: if isEstateAdminAfter(estateId);
+        allow create, update: if (docId != 'bank' && isEstateAdminAfter(estateId))
+                              || (docId == 'bank'
+                                  && isTreasurerOf(estateId)
+                                  && request.resource.data.keys().hasOnly(
+                                       ['bankName', 'accountNumber', 'accountName', 'updatedBy', 'updatedByName', 'updatedAt'])
+                                  && request.resource.data.updatedBy == uid()
+                                  && request.resource.data.accountNumber is string
+                                  && request.resource.data.accountNumber.size() > 0
+                                  && request.resource.data.accountNumber.size() <= 20);
+        allow delete: if (docId != 'bank' && isEstateAdminAfter(estateId))
+                      || (docId == 'bank' && isTreasurerOf(estateId));
       }
 
       // Polls: admins ask, every member votes once. The tallies live on the poll for all to see;
@@ -250,7 +275,7 @@ service cloud.firestore {
       match /utilities/{kind} {
         allow read: if isMemberOf(estateId);
         allow create, update: if isMemberOf(estateId)
-                              && kind in ['power', 'water']
+                              && kind == 'power'
                               && request.resource.data.keys().hasOnly(['isOn', 'since', 'updatedAt', 'updatedBy', 'updatedByName'])
                               && request.resource.data.isOn is bool
                               && request.resource.data.updatedBy == uid();
@@ -261,7 +286,7 @@ service cloud.firestore {
         allow read: if isMemberOf(estateId);
         allow create: if isMemberOf(estateId)
                       && request.resource.data.keys().hasOnly(['kind', 'isOn', 'by', 'byName', 'at'])
-                      && request.resource.data.kind in ['power', 'water']
+                      && request.resource.data.kind == 'power'
                       && request.resource.data.isOn is bool
                       && request.resource.data.by == uid();
         allow update, delete: if false;
@@ -283,14 +308,18 @@ service cloud.firestore {
         return isSignedIn() && resource.data.userId == uid();
       }
 
-      // A requester may file a pending request, or an approved one carrying a valid code.
+      // A requester may file a pending request, or an approved one carrying a valid code, as
+      // far as the estate's join mode allows each.
       function validRequest() {
         let data = request.resource.data;
+        let mode = get(/databases/$(database)/documents/estates/$(data.estateId)).data.get('joinMode', 'both');
         return data.userId == uid()
                && data.estateId is string
                && requestId == data.estateId + '_' + uid()
-               && (data.status == 'pending'
-                   || (data.status == 'approved' && inviteCodeOpens(data.get('inviteCode', null), data.estateId)));
+               && ((data.status == 'pending' && mode != 'code')
+                   || (data.status == 'approved'
+                       && mode != 'request'
+                       && inviteCodeOpens(data.get('inviteCode', null), data.estateId)));
       }
 
       allow read: if isRequester() || isEstateAdmin(resource.data.estateId);

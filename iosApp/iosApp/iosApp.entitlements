@@ -1,8 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Used only when ENABLE_PUSH = YES in Configuration/Config.xcconfig, which needs the paid Apple
+  Developer Program. Until then the app is signed without any of this.
+
+  aps-environment stays "development": archiving for the App Store switches it to production.
+-->
 <plist version="1.0">
 <dict>
 	<key>aps-environment</key>
 	<string>development</string>
+	<!-- Lets an SOS break through Focus modes. The Worker marks SOS pushes time-sensitive. -->
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
+	<!--
+	  Critical alerts would let the SOS siren sound even on silent, but Apple must approve the app
+	  for them first (developer.apple.com/contact/request/notifications-critical-alerts-entitlement).
+	  Once approved, uncomment this, add .criticalAlert to the authorization options in iOSApp.swift,
+	  and send "critical": 1 with the sound in worker/src/push.js.
+	<key>com.apple.developer.usernotifications.critical-alerts</key>
+	<true/>
+	-->
 </dict>
 </plist>

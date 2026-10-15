@@ -65,6 +65,10 @@ import com.eleazar.localhive.ui.components.RoleBadge
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.layout.navigationBarsPadding
 import com.eleazar.localhive.domain.model.Estate
+import com.eleazar.localhive.domain.model.JoinMode
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.LaunchedEffect
 import com.eleazar.localhive.domain.model.JoinRequest
 import com.eleazar.localhive.domain.model.User
 
@@ -79,6 +83,9 @@ fun EstateAdminScreen(
     currentUserId: String,
     error: String?,
     colors: EstateColors,
+    inviteCode: String = "",
+    isSaving: Boolean = false,
+    message: String? = null,
     onBack: () -> Unit,
     onApproveRequest: (userId: String) -> Unit,
     onDenyRequest: (userId: String) -> Unit,
@@ -87,6 +94,12 @@ fun EstateAdminScreen(
     onRemoveMember: (userId: String) -> Unit = {},
     /** Null leaves the estate without a treasurer. */
     onSetTreasurer: (userId: String?) -> Unit = {},
+    onTransferOwnership: (userId: String) -> Unit = {},
+    onSaveDetails: (name: String, address: String) -> Unit = { _, _ -> },
+    onSetJoinMode: (JoinMode) -> Unit = {},
+    onRegenerateCode: () -> Unit = {},
+    onCopyCode: (code: String) -> Unit = {},
+    onMessageShown: () -> Unit = {},
     onClearError: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -97,118 +110,156 @@ fun EstateAdminScreen(
     val gold = colors.backgroundGold
     val dark = colors.darkGray
     val cardBg = colors.cardBackground
+    val snackbar = remember { SnackbarHostState() }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(gold)
-            // Drawn edge to edge, so keep the header clear of the status bar and the list of the nav bar.
-            .statusBarsPadding()
-            .navigationBarsPadding()
-    ) {
-        Row(
-            modifier = Modifier.padding(top = 8.dp, start = 4.dp, end = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, "Back", tint = dark)
-            }
-            Column {
-                Text("Estate admin", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = dark)
-                Text("Manage your community", fontSize = 12.sp, color = dark.copy(alpha = 0.5f))
-            }
+    LaunchedEffect(message) {
+        message?.let {
+            snackbar.showSnackbar(it)
+            onMessageShown()
         }
+    }
 
-        TabRow(
-            selectedTabIndex = selectedTab,
-            containerColor = Color.Transparent,
-            contentColor = green,
-            indicator = { tabPositions ->
-                TabRowDefaults.SecondaryIndicator(
-                    modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                    color = green
-                )
-            },
-            modifier = Modifier.padding(horizontal = 16.dp)
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(gold)
+                // Drawn edge to edge, so keep the header clear of the status bar and the list of the nav bar.
+                .statusBarsPadding()
+                .navigationBarsPadding()
         ) {
-            Tab(
-                selected = selectedTab == 0,
-                onClick = { selectedTab = 0; onClearError() },
-                text = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "Requests",
-                            fontWeight = if (selectedTab == 0) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (selectedTab == 0) green else dark.copy(alpha = 0.5f)
-                        )
-                        if (pendingRequests.isNotEmpty()) {
-                            Spacer(Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .size(18.dp)
-                                    .clip(CircleShape)
-                                    .background(green),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    "${pendingRequests.size}",
-                                    color = Color.White,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+            Row(
+                modifier = Modifier.padding(top = 8.dp, start = 4.dp, end = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Default.ArrowBack, "Back", tint = dark)
+                }
+                Column {
+                    Text("Estate admin", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = dark)
+                    Text("Manage your community", fontSize = 12.sp, color = dark.copy(alpha = 0.5f))
+                }
+            }
+
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = Color.Transparent,
+                contentColor = green,
+                indicator = { tabPositions ->
+                    TabRowDefaults.SecondaryIndicator(
+                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                        color = green
+                    )
+                },
+                modifier = Modifier.padding(horizontal = 16.dp)
+            ) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0; onClearError() },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Requests",
+                                fontWeight = if (selectedTab == 0) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (selectedTab == 0) green else dark.copy(alpha = 0.5f)
+                            )
+                            if (pendingRequests.isNotEmpty()) {
+                                Spacer(Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(18.dp)
+                                        .clip(CircleShape)
+                                        .background(green),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        "${pendingRequests.size}",
+                                        color = Color.White,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }
-                }
-            )
-            Tab(
-                selected = selectedTab == 1,
-                onClick = { selectedTab = 1; onClearError() },
-                text = {
-                    Text(
-                        "Members",
-                        fontWeight = if (selectedTab == 1) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (selectedTab == 1) green else dark.copy(alpha = 0.5f)
-                    )
-                }
-            )
-        }
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1; onClearError() },
+                    text = {
+                        Text(
+                            "Members",
+                            fontWeight = if (selectedTab == 1) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (selectedTab == 1) green else dark.copy(alpha = 0.5f)
+                        )
+                    }
+                )
+                Tab(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2; onClearError() },
+                    text = {
+                        Text(
+                            "Settings",
+                            fontWeight = if (selectedTab == 2) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (selectedTab == 2) green else dark.copy(alpha = 0.5f)
+                        )
+                    }
+                )
+            }
 
-        HorizontalDivider(color = dark.copy(alpha = 0.08f))
+            HorizontalDivider(color = dark.copy(alpha = 0.08f))
 
-        error?.let {
-            Text(
-                text = it,
-                color = MaterialTheme.colorScheme.error,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
-            )
-        }
+            error?.let {
+                Text(
+                    text = it,
+                    color = MaterialTheme.colorScheme.error,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                )
+            }
 
-        when (selectedTab) {
-            0 -> RequestsTab(
-                requests = pendingRequests,
-                onApprove = onApproveRequest,
-                onDeny = onDenyRequest,
-                dark = dark,
-                green = green,
-                cardBg = cardBg
-            )
-            1 -> MembersTab(
-                members = members,
-                adminIds = adminIds,
-                ownerId = estate?.ownerId.orEmpty(),
-                treasurerId = estate?.treasurerId.orEmpty(),
-                currentUserId = currentUserId,
-                onPromote = onPromoteToAdmin,
-                onRemoveAdmin = onRemoveAdmin,
-                onRemoveMember = onRemoveMember,
-                onSetTreasurer = onSetTreasurer,
-                dark = dark,
-                green = green,
-                cardBg = cardBg
-            )
+            when (selectedTab) {
+                0 -> RequestsTab(
+                    requests = pendingRequests,
+                    onApprove = onApproveRequest,
+                    onDeny = onDenyRequest,
+                    dark = dark,
+                    green = green,
+                    cardBg = cardBg
+                )
+                1 -> MembersTab(
+                    members = members,
+                    adminIds = adminIds,
+                    ownerId = estate?.ownerId.orEmpty(),
+                    treasurerId = estate?.treasurerId.orEmpty(),
+                    currentUserId = currentUserId,
+                    onPromote = onPromoteToAdmin,
+                    onRemoveAdmin = onRemoveAdmin,
+                    onRemoveMember = onRemoveMember,
+                    onSetTreasurer = onSetTreasurer,
+                    onTransferOwnership = onTransferOwnership,
+                    dark = dark,
+                    green = green,
+                    cardBg = cardBg
+                )
+                2 -> EstateSettingsTab(
+                    estate = estate,
+                    inviteCode = inviteCode,
+                    isSaving = isSaving,
+                    onSaveDetails = onSaveDetails,
+                    onSetJoinMode = onSetJoinMode,
+                    onRegenerateCode = onRegenerateCode,
+                    onCopyCode = onCopyCode,
+                    dark = dark,
+                    green = green,
+                    cardBg = cardBg
+                )
+            }
         }
+        SnackbarHost(
+            snackbar,
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
+        )
     }
 }
 
@@ -346,6 +397,7 @@ private fun MembersTab(
     onRemoveAdmin: (String) -> Unit,
     onRemoveMember: (String) -> Unit,
     onSetTreasurer: (String?) -> Unit,
+    onTransferOwnership: (String) -> Unit,
     dark: Color,
     green: Color,
     cardBg: Color
@@ -358,6 +410,7 @@ private fun MembersTab(
     }
 
     val viewerIsAdmin = currentUserId in adminIds
+    val viewerIsOwner = currentUserId == ownerId
     // Owner first, then admins, then everyone else, each alphabetical.
     val sorted = members.sortedWith(
         compareBy<User>({ it.id != ownerId }, { it.id !in adminIds }, { (it.displayName ?: it.username ?: "").lowercase() })
@@ -370,6 +423,7 @@ private fun MembersTab(
             Text(
                 "Admins can approve requests, post announcements, make others admins and remove members. " +
                     "The owner always stays an admin, and an admin has to lose admin before they can be removed. " +
+                    "The owner can hand ownership to any member from that member's menu. " +
                     "The treasurer, who can be anyone, sets dues, confirms payments and logs expenses.",
                 fontSize = 13.sp,
                 lineHeight = 18.sp,
@@ -396,6 +450,7 @@ private fun MembersTab(
                     // Anyone can hold the treasurer role, the admin making the change included.
                     add(if (isTreasurer) MemberAction.REMOVE_TREASURER else MemberAction.MAKE_TREASURER)
                     if (member.id == currentUserId || isOwner) return@buildList
+                    if (viewerIsOwner) add(MemberAction.MAKE_OWNER)
                     if (isAdmin) add(MemberAction.REMOVE_ADMIN)
                     else addAll(listOf(MemberAction.MAKE_ADMIN, MemberAction.REMOVE_MEMBER))
                 },
@@ -406,6 +461,7 @@ private fun MembersTab(
                         MemberAction.REMOVE_MEMBER -> onRemoveMember(member.id)
                         MemberAction.MAKE_TREASURER -> onSetTreasurer(member.id)
                         MemberAction.REMOVE_TREASURER -> onSetTreasurer(null)
+                        MemberAction.MAKE_OWNER -> onTransferOwnership(member.id)
                     }
                 },
                 dark = dark,
@@ -422,6 +478,7 @@ private enum class MemberAction(val label: String, val destructive: Boolean) {
     REMOVE_ADMIN("Remove admin", true),
     MAKE_TREASURER("Make treasurer", false),
     REMOVE_TREASURER("Remove as treasurer", true),
+    MAKE_OWNER("Make owner", false),
     REMOVE_MEMBER("Remove from estate", true)
 }
 
@@ -509,6 +566,11 @@ private fun MemberCard(
             )
             MemberAction.REMOVE_TREASURER -> "Remove $name as treasurer?" to
                 "The estate will have no treasurer until you appoint another. Existing dues and expenses stay."
+            MemberAction.MAKE_OWNER -> "Make $name the owner?" to (
+                (if (role == MemberRole.MEMBER) "They'll be made an admin too. " else "") +
+                    "They'll own the estate: nobody can remove their admin, and only they can hand ownership on. " +
+                    "You'll stay an admin, but another admin could then remove your admin role."
+            )
             MemberAction.REMOVE_MEMBER -> "Remove $name from the estate?" to
                 "They'll lose access to the feed, the directory and estate announcements, and get a notification. " +
                 "To come back they'll have to ask to join again or use an invite code."

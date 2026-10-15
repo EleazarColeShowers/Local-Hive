@@ -10,9 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.FlashOff
-import androidx.compose.material.icons.filled.FormatColorReset
 import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -35,7 +33,6 @@ private const val DAY_MILLIS = 24 * 60 * 60 * 1000L
 
 fun UtilityKind.icon(isOn: Boolean?): ImageVector = when (this) {
     UtilityKind.POWER -> if (isOn == false) Icons.Filled.FlashOff else Icons.Filled.Bolt
-    UtilityKind.WATER -> if (isOn == false) Icons.Filled.FormatColorReset else Icons.Filled.WaterDrop
 }
 
 /** Green for on, clay for off, grey when nobody has said. */
@@ -78,7 +75,7 @@ fun UtilitiesScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("Light & water", fontWeight = FontWeight.SemiBold) },
+                title = { Text("Light", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -235,14 +232,14 @@ private fun UtilityCard(
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ReportButton(
-                    label = if (kind == UtilityKind.POWER) "Light is on" else "Water is on",
+                    label = "${kind.label} is on",
                     color = readable(HiveGreen),
                     enabled = !reporting,
                     onClick = { onReport(true) },
                     modifier = Modifier.weight(1f)
                 )
                 ReportButton(
-                    label = if (kind == UtilityKind.POWER) "Light is off" else "Water is off",
+                    label = "${kind.label} is off",
                     color = readable(Clay),
                     enabled = !reporting,
                     onClick = { onReport(false) },

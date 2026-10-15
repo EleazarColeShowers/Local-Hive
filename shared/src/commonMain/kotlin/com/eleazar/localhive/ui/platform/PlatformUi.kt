@@ -26,6 +26,9 @@ interface PlatformActions {
     /** Opens the system share sheet for [text]. */
     fun shareText(text: String, title: String)
 
+    /** Saves [content] as a file called [fileName] and opens the share sheet for it, e.g. a CSV to email. */
+    fun shareFile(fileName: String, mimeType: String, content: String, title: String)
+
     /** The installed version, as shown to people, e.g. "1.0". */
     val appVersion: String
 }

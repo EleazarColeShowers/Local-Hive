@@ -31,7 +31,9 @@ fun NotificationRoute(
             if (!notification.isRead) viewModel.markAsRead(notification.id)
             val estateId = notification.estateId
             val postId = notification.postId
-            if (notification.type == NotificationType.JOIN_REQUEST && estateId != null) {
+            val opensAdminPanel = notification.type == NotificationType.JOIN_REQUEST ||
+                notification.type == NotificationType.OWNERSHIP_TRANSFERRED
+            if (opensAdminPanel && estateId != null) {
                 onNavigateToEstateAdmin(estateId)
             } else if (notification.type == NotificationType.MENTION && postId != null) {
                 onNavigateToPost(postId)

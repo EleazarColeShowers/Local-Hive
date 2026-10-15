@@ -1,6 +1,7 @@
 package com.eleazar.localhive.domain
 
 import com.eleazar.localhive.domain.model.Estate
+import com.eleazar.localhive.domain.model.JoinMode
 import com.eleazar.localhive.domain.model.JoinRequest
 import kotlinx.coroutines.flow.Flow
 
@@ -35,6 +36,19 @@ interface EstateRepository {
      * leaves the estate without one.
      */
     suspend fun setTreasurer(estateId: String, userId: String?): Result<Unit>
+
+    /** An admin renaming the estate or correcting its address. */
+    suspend fun updateEstateDetails(estateId: String, name: String, address: String): Result<Unit>
+    suspend fun setJoinMode(estateId: String, mode: JoinMode): Result<Unit>
+    /** The current invite code, live; null for anyone who isn't a member or admin. */
+    fun observeInviteCode(estateId: String): Flow<String?>
+    /** Retires the current invite code, so anyone holding it can no longer join, and returns the new one. */
+    suspend fun regenerateInviteCode(estateId: String): Result<String>
+    /**
+     * The owner making [newOwnerId], who must be a member, the owner. They're made an admin if
+     * they aren't one; the old owner stays an admin.
+     */
+    suspend fun transferOwnership(estateId: String, newOwnerId: String): Result<Unit>
 }
 
 /** The owner tried to leave while other members remain but no other admin can take over. */

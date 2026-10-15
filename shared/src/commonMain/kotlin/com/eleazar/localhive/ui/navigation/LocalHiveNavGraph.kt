@@ -303,8 +303,13 @@ fun LocalHiveNavGraph(
                 onBack = { navController.navigateUp() },
                 onLevyClick = { levyId -> navController.navigate(Screen.LevyDetail.createRoute(levyId)) },
                 onCreateLevy = { navController.navigate(Screen.CreateLevy.route) },
-                onAddExpense = { navController.navigate(Screen.AddExpense.route) }
+                onAddExpense = { navController.navigate(Screen.AddExpense.route) },
+                onStatement = { navController.navigate(Screen.Statement.route) }
             )
+        }
+
+        composable(Screen.Statement.route) {
+            screens.Statement(onBack = { navController.navigateUp() })
         }
 
         composable(

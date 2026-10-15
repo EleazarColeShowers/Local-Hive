@@ -14,7 +14,9 @@ enum class NotificationType {
     /** The treasurer didn't accept the recipient's proof of payment. */
     PAYMENT_REJECTED,
     /** An admin deleted the recipient's post; [AppNotification.message] says why, if they gave a reason. */
-    POST_REMOVED
+    POST_REMOVED,
+    /** The estate's owner handed ownership to the recipient. */
+    OWNERSHIP_TRANSFERRED
 }
 
 data class AppNotification(

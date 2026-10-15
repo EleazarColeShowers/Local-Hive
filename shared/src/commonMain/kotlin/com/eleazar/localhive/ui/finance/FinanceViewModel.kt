@@ -7,6 +7,7 @@ import com.eleazar.localhive.domain.EstateRepository
 import com.eleazar.localhive.domain.FinanceRepository
 import com.eleazar.localhive.domain.StorageRepository
 import com.eleazar.localhive.domain.UserRepository
+import com.eleazar.localhive.domain.model.BankDetails
 import com.eleazar.localhive.domain.model.Expense
 import com.eleazar.localhive.domain.model.Levy
 import com.eleazar.localhive.domain.model.LevyPayment
@@ -75,12 +76,19 @@ class FinanceViewModel(
             estateRepository.observeEstate(estate).collect { e ->
                 treasurerId = e?.treasurerId.orEmpty()
                 isTreasurer.value = e?.isTreasurer(userId) == true
-                _uiState.update { it.copy(isTreasurer = isTreasurer.value, memberCount = e?.memberCount ?: 0) }
+                _uiState.update {
+                    it.copy(isTreasurer = isTreasurer.value, memberCount = e?.memberCount ?: 0, estateName = e?.name.orEmpty())
+                }
                 val name = treasurerId.takeIf { it.isNotBlank() }?.let { id ->
                     if (id == userId) "You" else userRepository.getUser(id, cacheFirst = true).getOrNull()?.displayLabel()
                 }
                 _uiState.update { it.copy(treasurerName = name) }
             }
+        }
+        viewModelScope.launch {
+            financeRepository.observeBankDetails(estate)
+                .catch { /* Not readable yet; there's nothing to show. */ }
+                .collect { bank -> _uiState.update { it.copy(bank = bank) } }
         }
     }
 
@@ -121,6 +129,67 @@ class FinanceViewModel(
             financeRepository.observeExpenses(estate)
                 .catch { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
                 .collect { expenses -> _uiState.update { it.copy(expenses = expenses, isLoading = false) } }
+        }
+    }
+
+    /**
+     * The statement: every confirmed payment on every levy, and every expense. Only the treasurer
+     * can read every payment, so for anyone else it stays empty.
+     */
+    fun loadStatement() {
+        viewModelScope.launch {
+            val estate = estateId.filterNotNull().first()
+            val income = combine(isTreasurer, financeRepository.observeLevies(estate)) { treasurer, levies -> treasurer to levies }
+                .flatMapLatest { (treasurer, levies) ->
+                    if (!treasurer || levies.isEmpty()) flowOf(emptyList())
+                    else combine(levies.map { levy ->
+                        financeRepository.observePayments(estate, levy.id)
+                            .map { payments ->
+                                payments.filter { it.paymentStatus == PaymentStatus.PAID }.map { StatementEntry.income(levy, it) }
+                            }
+                            .catch { emit(emptyList()) }
+                    }) { it.toList().flatten() }
+                }
+            combine(income, financeRepository.observeExpenses(estate)) { paid, spent ->
+                (paid + spent.map(StatementEntry::expense)).sortedByDescending { it.at }
+            }
+                .catch { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
+                .collect { entries -> _uiState.update { it.copy(statement = entries, isLoading = false) } }
+        }
+    }
+
+    // ───────────── Bank details ─────────────
+
+    fun saveBankDetails(bankName: String, accountNumber: String, accountName: String) {
+        val estate = _uiState.value.estateId ?: return
+        val user = me ?: return
+        val number = accountNumber.filter { it.isDigit() }
+        if (bankName.isBlank() || accountName.isBlank() || number.length !in 6..20) {
+            _uiState.update { it.copy(error = "Fill in the bank, the account number and the name on the account") }
+            return
+        }
+        val details = BankDetails(
+            bankName = bankName.trim(),
+            accountNumber = number,
+            accountName = accountName.trim(),
+            updatedByName = user.displayLabel(),
+            updatedAt = nowMillis()
+        )
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSaving = true, error = null) }
+            financeRepository.setBankDetails(estate, details, user.id)
+                .onSuccess { _uiState.update { it.copy(isSaving = false, message = "Bank details saved. Every member can see them.") } }
+                .onFailure { e -> _uiState.update { it.copy(isSaving = false, error = e.message ?: "Couldn't save the bank details") } }
+        }
+    }
+
+    fun removeBankDetails() {
+        val estate = _uiState.value.estateId ?: return
+        val user = me ?: return
+        viewModelScope.launch {
+            financeRepository.setBankDetails(estate, null, user.id)
+                .onSuccess { _uiState.update { it.copy(message = "Bank details removed") } }
+                .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
         }
     }
 
@@ -207,7 +276,8 @@ class FinanceViewModel(
         val estate = state.estateId ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, error = null) }
-            financeRepository.setPaymentStatus(estate, levy, member.userId, member.name, status, member.payment)
+            val treasurerName = me?.displayLabel().orEmpty()
+            financeRepository.setPaymentStatus(estate, levy, member.userId, member.name, status, member.payment, treasurerName)
                 .onSuccess { _uiState.update { it.copy(isSaving = false, message = done) } }
                 .onFailure { e -> _uiState.update { it.copy(isSaving = false, error = e.message) } }
         }

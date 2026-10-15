@@ -13,6 +13,8 @@
 		A10000000000000000000004 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = A70000000000000000000001 /* FirebaseAuth */; };
 		A10000000000000000000005 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = A70000000000000000000002 /* FirebaseFirestore */; };
 		A10000000000000000000006 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = A70000000000000000000003 /* FirebaseMessaging */; };
+		A10000000000000000000007 /* sos_alarm.wav in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* sos_alarm.wav */; };
+		A10000000000000000000008 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -23,6 +25,8 @@
 		A20000000000000000000005 /* iosApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = iosApp.entitlements; sourceTree = "<group>"; };
 		A20000000000000000000006 /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
 		A20000000000000000000007 /* LocalHive.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LocalHive.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000008 /* sos_alarm.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = sos_alarm.wav; sourceTree = "<group>"; };
+		A20000000000000000000009 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -64,6 +68,8 @@
 				A20000000000000000000003 /* Assets.xcassets */,
 				A20000000000000000000004 /* Info.plist */,
 				A20000000000000000000005 /* iosApp.entitlements */,
+				A20000000000000000000008 /* sos_alarm.wav */,
+				A20000000000000000000009 /* PrivacyInfo.xcprivacy */,
 			);
 			path = iosApp;
 			sourceTree = "<group>";
@@ -145,6 +151,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000003 /* Assets.xcassets in Resources */,
+				A10000000000000000000007 /* sos_alarm.wav in Resources */,
+				A10000000000000000000008 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -290,7 +298,7 @@
 				PRODUCT_NAME = "$(APP_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -323,7 +331,7 @@
 				PRODUCT_NAME = "$(APP_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};

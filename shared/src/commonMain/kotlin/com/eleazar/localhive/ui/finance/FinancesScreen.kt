@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.Assessment
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -47,11 +48,16 @@ fun FinancesScreen(
     onCreateLevy: () -> Unit,
     onAddExpense: () -> Unit,
     onDeleteExpense: (Expense) -> Unit,
+    onStatement: () -> Unit,
+    onCopyAccount: (String) -> Unit,
+    onSaveBank: (bankName: String, accountNumber: String, accountName: String) -> Unit,
+    onRemoveBank: () -> Unit,
     onMessageShown: () -> Unit,
     onErrorShown: () -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var openExpense by remember { mutableStateOf<Expense?>(null) }
+    var editingBank by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(uiState.message) {
@@ -80,6 +86,16 @@ fun FinancesScreen(
         )
     }
 
+    if (editingBank) {
+        BankDetailsDialog(
+            bank = uiState.bank,
+            isSaving = uiState.isSaving,
+            onSave = onSaveBank,
+            onRemove = onRemoveBank,
+            onDismiss = { editingBank = false }
+        )
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
@@ -89,6 +105,16 @@ fun FinancesScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    // Only the treasurer can read every payment, so only they get the full books.
+                    if (uiState.isTreasurer) {
+                        TextButton(onClick = onStatement) {
+                            Icon(Icons.Outlined.Assessment, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Statement")
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
@@ -106,6 +132,13 @@ fun FinancesScreen(
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             TreasurerLine(uiState)
+            BankDetailsCard(
+                bank = uiState.bank,
+                isTreasurer = uiState.isTreasurer,
+                onCopyAccount = onCopyAccount,
+                onEdit = { editingBank = true },
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+            )
             TabRow(
                 selectedTabIndex = tab,
                 containerColor = MaterialTheme.colorScheme.background

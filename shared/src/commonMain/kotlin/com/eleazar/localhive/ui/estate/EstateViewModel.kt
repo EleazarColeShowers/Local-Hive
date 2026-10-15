@@ -6,6 +6,7 @@ import com.eleazar.localhive.domain.AuthRepository
 import com.eleazar.localhive.domain.EstateRepository
 import com.eleazar.localhive.domain.UserRepository
 import com.eleazar.localhive.domain.model.Estate
+import com.eleazar.localhive.domain.model.JoinMode
 import com.eleazar.localhive.domain.model.JoinRequest
 import com.eleazar.localhive.domain.model.User
 import kotlinx.coroutines.FlowPreview
@@ -26,7 +27,13 @@ data class EstateUiState(
     val pendingRequest: JoinRequest? = null,
     val pendingRequests: List<JoinRequest> = emptyList(),
     val members: List<User> = emptyList(),
-    val isApproved: Boolean = false
+    val isApproved: Boolean = false,
+    /** The estate's current invite code, for the admin panel; blank until loaded. */
+    val inviteCode: String = "",
+    /** An admin-panel change is being saved. */
+    val isSaving: Boolean = false,
+    /** A one-off confirmation for the admin panel, e.g. "Estate details saved". */
+    val message: String? = null
 )
 
 @OptIn(FlowPreview::class)
@@ -221,6 +228,47 @@ class EstateViewModel(
             }
         }
     }
+
+    fun loadInviteCode(estateId: String) {
+        viewModelScope.launch {
+            estateRepository.observeInviteCode(estateId).collect { code ->
+                _uiState.update { it.copy(inviteCode = code.orEmpty()) }
+            }
+        }
+    }
+
+    fun updateEstateDetails(estateId: String, name: String, address: String) =
+        adminChange("Estate details saved") { estateRepository.updateEstateDetails(estateId, name, address) }
+
+    fun setJoinMode(estateId: String, mode: JoinMode) =
+        adminChange("New members now join by: ${mode.label.lowercase()}") { estateRepository.setJoinMode(estateId, mode) }
+
+    fun regenerateInviteCode(estateId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSaving = true, error = null) }
+            estateRepository.regenerateInviteCode(estateId).fold(
+                onSuccess = { code ->
+                    _uiState.update { it.copy(isSaving = false, message = "New invite code: $code. The old one no longer works.") }
+                },
+                onFailure = { e -> _uiState.update { it.copy(isSaving = false, error = e.message) } }
+            )
+        }
+    }
+
+    fun transferOwnership(estateId: String, userId: String) =
+        adminChange("Ownership handed over") { estateRepository.transferOwnership(estateId, userId) }
+
+    private fun adminChange(done: String, change: suspend () -> Result<Unit>) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSaving = true, error = null) }
+            change().fold(
+                onSuccess = { _uiState.update { it.copy(isSaving = false, message = done) } },
+                onFailure = { e -> _uiState.update { it.copy(isSaving = false, error = e.message) } }
+            )
+        }
+    }
+
+    fun consumeMessage() = _uiState.update { it.copy(message = null) }
 
     fun getCurrentUserId(): String? = authRepository.getCurrentUserId()
 

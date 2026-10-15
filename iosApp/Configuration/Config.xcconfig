@@ -7,6 +7,7 @@ APP_NAME = LocalHive
 
 // Push notifications need the paid Apple Developer Program: a free Apple ID can't sign an app
 // that asks for them. Set this to YES once you've joined and uploaded an APNs key to Firebase.
+// It also turns on the time-sensitive SOS entitlement. See APP_STORE.md for the full list.
 ENABLE_PUSH = NO
 PUSH_ENTITLEMENTS_YES = iosApp/iosApp.entitlements
 PUSH_ENTITLEMENTS_NO =

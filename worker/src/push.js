@@ -1,6 +1,9 @@
 import { serviceAccessToken } from "./google.js";
 
 /** FCM reports these for tokens that will never work again; we drop them from the profile. */
+/** The siren bundled with the iOS app; it must stay under 30 seconds for iOS to play it. */
+const EMERGENCY_SOUND = "sos_alarm.wav";
+
 const DEAD_TOKEN_ERRORS = new Set(["UNREGISTERED", "INVALID_ARGUMENT"]);
 
 /**
@@ -9,6 +12,9 @@ const DEAD_TOKEN_ERRORS = new Set(["UNREGISTERED", "INVALID_ARGUMENT"]);
  * with a `notification` block would be drawn by the system tray instead, bypassing it. iOS only
  * shows a push that carries an alert, so Apple devices get one; there the app honours the toggle
  * by taking its token off the profile instead.
+ *
+ * An SOS (`channel: "emergency"`) sounds the siren bundled in both apps: Android picks it by
+ * channel, and iOS plays the named sound, marked time-sensitive so it breaks through Focus.
  */
 export async function sendToUsers(db, env, userIds, { title, body, deepLink, tag, channel }) {
   const recipients = [...new Set(userIds)].filter(Boolean);
@@ -35,8 +41,16 @@ export async function sendToUsers(db, env, userIds, { title, body, deepLink, tag
             data: { title, body: truncate(body, 300), deepLink, tag, ...(channel ? { channel } : {}) },
             android: { priority: "HIGH" },
             apns: {
+              headers: channel === "emergency" ? { "apns-priority": "10", "apns-push-type": "alert" } : undefined,
               payload: {
-                aps: { alert: { title, body: truncate(body, 300) }, sound: "default", "thread-id": tag },
+                aps: {
+                  alert: { title, body: truncate(body, 300) },
+                  // With Apple's critical-alerts approval, an SOS could play on silent instead:
+                  // sound: channel === "emergency" ? { critical: 1, name: EMERGENCY_SOUND, volume: 1.0 } : "default",
+                  sound: channel === "emergency" ? EMERGENCY_SOUND : "default",
+                  "thread-id": tag,
+                  ...(channel === "emergency" ? { "interruption-level": "time-sensitive" } : {}),
+                },
               },
             },
           },
