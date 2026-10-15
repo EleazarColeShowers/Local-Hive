@@ -11,5 +11,7 @@ data class DirectoryUiState(
     val currentUserId: String? = null,
     val adminIds: Set<String> = emptySet(),
     val isLoading: Boolean = false,
+    /** A pull to refresh is fetching the members from the server. */
+    val isRefreshing: Boolean = false,
     val error: String? = null
 )

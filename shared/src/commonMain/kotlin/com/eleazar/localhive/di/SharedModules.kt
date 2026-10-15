@@ -42,6 +42,8 @@ import com.eleazar.localhive.ui.utilities.UtilitiesViewModel
 import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.auth.auth
 import dev.gitlive.firebase.firestore.firestore
+import dev.gitlive.firebase.firestore.firestoreSettings
+import dev.gitlive.firebase.firestore.persistentCacheSettings
 import dev.gitlive.firebase.messaging.messaging
 import org.koin.core.context.startKoin
 import org.koin.core.module.Module
@@ -54,13 +56,25 @@ import org.koin.dsl.module
 /** What each platform supplies: a [com.eleazar.localhive.data.platform.MediaReader] and a [com.eleazar.localhive.data.platform.KeyValueStore]. */
 expect val platformModule: Module
 
+/** Room for a few estates' feeds, members and chats; the oldest is dropped beyond this. */
+private const val FIRESTORE_CACHE_BYTES = 200L * 1024 * 1024
+
 /**
  * @param apiBaseUrl the Cloudflare Worker that signs uploads and sends pushes; blank runs the
  *   app without either.
  */
 fun dataModule(apiBaseUrl: String) = module {
     single { Firebase.auth }
-    single { Firebase.firestore }
+    single {
+        Firebase.firestore.apply {
+            // Set out explicitly so both platforms keep the same on-disk copy across restarts:
+            // screens open from it at once, and a listener that resumes within 30 minutes is only
+            // charged for documents that changed.
+            settings = firestoreSettings {
+                cacheSettings = persistentCacheSettings { sizeBytes = FIRESTORE_CACHE_BYTES }
+            }
+        }
+    }
     single { Firebase.messaging }
     single { LocalHiveApi(get(), LocalHiveApi.defaultClient(), apiBaseUrl) }
     singleOf(::PushTokenSync)

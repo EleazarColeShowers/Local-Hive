@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,10 +21,12 @@ import com.eleazar.localhive.ui.components.ScreenGutter
 import com.eleazar.localhive.ui.components.ScreenHeader
 import com.eleazar.localhive.ui.components.UserCard
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DirectoryScreen(
     uiState: DirectoryUiState,
     onSearch: (query: String) -> Unit,
+    onRefresh: () -> Unit = {},
     onUserClick: (String) -> Unit,
     onMessageUser: (String) -> Unit,
 ) {
@@ -68,40 +71,47 @@ fun DirectoryScreen(
             )
         )
 
-        when {
-            uiState.isLoading -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = accent)
+        // The list opens from the phone's saved copy; pulling down fetches it fresh.
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            when {
+                uiState.isLoading -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = accent)
+                    }
                 }
-            }
-            uiState.filteredMembers.isEmpty() && uiState.searchQuery.isBlank() -> EmptyState(
-                icon = Icons.Outlined.Groups,
-                title = "No neighbours yet",
-                message = "Members of your estate will appear here once they join."
-            )
-            uiState.filteredMembers.isEmpty() -> EmptyState(
-                icon = Icons.Outlined.SearchOff,
-                title = "No matches",
-                message = "Nobody matches \"${uiState.searchQuery}\". Try a different name."
-            )
-            else -> {
-                LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
-                    // Admins first, so residents can see who runs the estate.
-                    val ordered = uiState.filteredMembers.sortedBy { it.id !in uiState.adminIds }
-                    itemsIndexed(ordered, key = { _, user -> user.id }) { index, user ->
-                        if (index > 0) {
-                            // Inset to the text, as list dividers usually are.
-                            HorizontalDivider(
-                                color = MaterialTheme.colorScheme.outlineVariant,
-                                modifier = Modifier.padding(start = 76.dp)
+                uiState.filteredMembers.isEmpty() && uiState.searchQuery.isBlank() -> EmptyState(
+                    icon = Icons.Outlined.Groups,
+                    title = "No neighbours yet",
+                    message = "Members of your estate will appear here once they join."
+                )
+                uiState.filteredMembers.isEmpty() -> EmptyState(
+                    icon = Icons.Outlined.SearchOff,
+                    title = "No matches",
+                    message = "Nobody matches \"${uiState.searchQuery}\". Try a different name."
+                )
+                else -> {
+                    LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
+                        // Admins first, so residents can see who runs the estate.
+                        val ordered = uiState.filteredMembers.sortedBy { it.id !in uiState.adminIds }
+                        itemsIndexed(ordered, key = { _, user -> user.id }) { index, user ->
+                            if (index > 0) {
+                                // Inset to the text, as list dividers usually are.
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outlineVariant,
+                                    modifier = Modifier.padding(start = 76.dp)
+                                )
+                            }
+                            UserCard(
+                                user = user,
+                                onClick = { onUserClick(user.id) },
+                                onMessageClick = { onMessageUser(user.id) },
+                                isAdmin = user.id in uiState.adminIds
                             )
                         }
-                        UserCard(
-                            user = user,
-                            onClick = { onUserClick(user.id) },
-                            onMessageClick = { onMessageUser(user.id) },
-                            isAdmin = user.id in uiState.adminIds
-                        )
                     }
                 }
             }

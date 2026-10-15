@@ -11,7 +11,14 @@ interface UserRepository {
      */
     suspend fun getUser(userId: String, cacheFirst: Boolean = false): Result<User>
     fun observeUser(userId: String): Flow<User?>
+    /** Every member, live. Each time it starts it reads them all from the server; prefer [observeDirectory]. */
     fun getEstateMembers(estateId: String): Flow<List<User>>
+    /**
+     * Every member, from this phone's saved copy when there is one, refreshed from the server only
+     * when the copy is over a few hours old, looks incomplete, or [forceRefresh] is set. Slightly
+     * stale is fine for browsing neighbours, and it saves reading the whole estate on every visit.
+     */
+    fun observeDirectory(estateId: String, forceRefresh: Boolean = false): Flow<List<User>>
     suspend fun updateUser(user: User): Result<Unit>
     suspend fun updateFcmToken(userId: String, token: String): Result<Unit>
     /** Whether the user gets a push when a neighbour reports the light is back. */

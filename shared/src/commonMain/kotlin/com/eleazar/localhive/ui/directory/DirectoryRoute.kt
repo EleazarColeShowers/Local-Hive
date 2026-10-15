@@ -16,6 +16,7 @@ fun DirectoryRoute(
     DirectoryScreen(
         uiState = uiState,
         onSearch = viewModel::search,
+        onRefresh = viewModel::refresh,
         onUserClick = onUserClick,
         onMessageUser = onMessageUser
     )
