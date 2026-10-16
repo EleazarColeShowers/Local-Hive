@@ -21,7 +21,8 @@ import { deleteAccount, requireRecentLogin } from "./account.js";
  *                           { type: "levy_reminder", estateId, levyId } -> sends the push
  *   POST /delete-account    {}                                       -> deletes the caller's account
  *
- * Once an hour (a cron trigger) it also reminds members about polls closing within a day.
+ * Once an hour (a cron trigger) it also reminds members about polls closing within a day, and
+ * fills in the lowercase name estate search runs on for estates that lack it.
  *
  * Every request needs a Firebase ID token. /notify never trusts the request body for content:
  * it reads the message, notification or post itself, checks the caller is its sender, and
@@ -48,8 +49,27 @@ export default {
 
   async scheduled(event, env, ctx) {
     ctx.waitUntil(sendPollReminders(env, event.scheduledTime));
+    ctx.waitUntil(fillEstateNameLower(env));
   },
 };
+
+/**
+ * Estate search runs on nameLower, so an estate without it can't be found. Estates from before
+ * it existed, or created by an older app, get it here. Matches what the app and rules write.
+ */
+export async function estateNameLowerUpdates(db) {
+  return (await db.query("estates"))
+    .filter(({ data }) => typeof data.name === "string" && data.nameLower !== data.name.toLowerCase())
+    .map(({ path, data }) => ({ update: path, fields: { nameLower: data.name.toLowerCase() } }));
+}
+
+async function fillEstateNameLower(env) {
+  const db = new Firestore(env.FIREBASE_PROJECT_ID, await serviceAccessToken(env.FIREBASE_SERVICE_ACCOUNT));
+  const writes = await estateNameLowerUpdates(db);
+  if (writes.length === 0) return;
+  await db.commit(writes);
+  console.log(`nameLower: filled in for ${writes.length} estates`);
+}
 
 async function sendPollReminders(env, now) {
   const db = new Firestore(env.FIREBASE_PROJECT_ID, await serviceAccessToken(env.FIREBASE_SERVICE_ACCOUNT));

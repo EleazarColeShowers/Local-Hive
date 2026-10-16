@@ -137,7 +137,7 @@ service cloud.firestore {
       }
 
       // Search runs on nameLower, so it can't be set to anything but the name in lowercase.
-      // Estates from before it existed may lack it until the backfill fills it in.
+      // Estates from before it existed may lack it until the worker's hourly job fills it in.
       function nameLowerMatches() {
         let data = request.resource.data;
         return data.get('nameLower', data.name.lower()) == data.name.lower();

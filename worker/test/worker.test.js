@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { buildPush, pollReminders } from "../src/index.js";
+import { buildPush, estateNameLowerUpdates, pollReminders } from "../src/index.js";
 import { signUpload } from "../src/cloudinary.js";
 import { decodeValue } from "../src/firestore.js";
 
@@ -270,6 +270,19 @@ test("poll reminders go to non-voters, once a poll is half a day old and within 
   assert.equal(reminders[0].key, "poll_reminder_due");
   assert.deepEqual(reminders[0].recipients.sort(), ["admin", "third"]);
   assert.equal(reminders[0].payload.body, "Raise the levy?");
+});
+
+test("estates missing or mismatching nameLower get it filled in", async () => {
+  const db = fakeDb({
+    "estates/old": { name: "Sunrise Estate" },
+    "estates/done": { name: "Amali", nameLower: "amali" },
+    "estates/stale": { name: "Green Valley", nameLower: "old name" },
+    "estates/broken": { adminIds: [] },
+  });
+  assert.deepEqual(await estateNameLowerUpdates(db), [
+    { update: "estates/old", fields: { nameLower: "sunrise estate" } },
+    { update: "estates/stale", fields: { nameLower: "green valley" } },
+  ]);
 });
 
 test("Cloudinary signature matches the documented algorithm", async () => {
