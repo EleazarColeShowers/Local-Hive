@@ -74,7 +74,8 @@ fun JoinEstateScreen(
     onJoinWithCode: (inviteCode: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) }
+    // An invite link brings its code, so it opens on the code tab, ready to join.
+    var selectedTab by remember { mutableIntStateOf(if (initialCode.isNotBlank()) 1 else 0) }
     var searchQuery by remember { mutableStateOf("") }
     var inviteCode by remember { mutableStateOf(initialCode.uppercase().take(6)) }
 
