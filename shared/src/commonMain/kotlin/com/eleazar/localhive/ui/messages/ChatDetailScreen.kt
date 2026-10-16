@@ -366,7 +366,7 @@ private fun MessageBubble(
             modifier = Modifier.widthIn(min = 64.dp, max = 296.dp)
         ) {
             Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 6.dp)) {
-                LinkifiedText(text = message.content, fontSize = 15.sp, lineHeight = 21.sp)
+                LinkifiedText(text = message.content, fontSize = 15.sp, lineHeight = 21.sp, selectable = true)
                 Text(
                     text = clockTime(message.timestamp),
                     fontSize = 11.sp,

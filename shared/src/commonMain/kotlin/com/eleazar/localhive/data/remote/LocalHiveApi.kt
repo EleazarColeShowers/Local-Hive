@@ -60,6 +60,12 @@ class LocalHiveApi(
 
     val isConfigured: Boolean get() = baseUrl.isNotBlank()
 
+    /**
+     * The web link for an invite code: opens the app's join screen, or the Play Store first for
+     * someone without the app (see the Worker's links.js). Null when no API URL is set.
+     */
+    fun inviteLink(code: String): String? = if (isConfigured) "$baseUrl/join/$code" else null
+
     suspend fun uploadSignature(kind: String): UploadSignature {
         val body = post("/upload-signature", mapOf("kind" to kind))
         return UploadSignature(

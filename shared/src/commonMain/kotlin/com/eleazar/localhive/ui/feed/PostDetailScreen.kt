@@ -38,6 +38,8 @@ import com.eleazar.localhive.ui.components.RoleBadge
 import com.eleazar.localhive.ui.components.ScreenGutter
 import com.eleazar.localhive.ui.util.relativeTime
 
+private const val MAX_COMMENT_LENGTH = 1000
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PostDetailScreen(
@@ -91,7 +93,8 @@ fun PostDetailScreen(
                     ) {
                         TextField(
                             value = draft,
-                            onValueChange = { draft = it },
+                            // Matches the comment rule in firestore.rules.
+                            onValueChange = { if (it.text.length <= MAX_COMMENT_LENGTH) draft = it },
                             placeholder = { Text("Add a comment") },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(24.dp),
@@ -157,7 +160,8 @@ fun PostDetailScreen(
                         playVideo = true,
                         onMentionClick = onUserClick,
                         onEdit = onEditPost.takeIf { isMine },
-                        onDelete = onDeletePost.takeIf { isMine || uiState.isAdmin }
+                        onDelete = onDeletePost.takeIf { isMine || uiState.isAdmin },
+                        selectableText = true
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
@@ -238,7 +242,8 @@ fun PostDetailScreen(
                                 color = MaterialTheme.colorScheme.onSurface,
                                 linkColor = accent,
                                 mentions = comment.mentions,
-                                onMentionClick = onUserClick
+                                onMentionClick = onUserClick,
+                                selectable = true
                             )
                         }
                     }

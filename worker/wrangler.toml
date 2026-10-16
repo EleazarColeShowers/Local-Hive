@@ -17,6 +17,11 @@ CLOUDINARY_CLOUD_NAME = "bsgju3dx"
 FIREBASE_PROJECT_NUMBER = "1044932675647"
 # Set to "true" once every installed app sends App Check tokens; then other callers are refused.
 APP_CHECK_REQUIRED = "false"
+# Invite links (src/links.js). The fingerprints are the signing certificates Android trusts to
+# open /join links in the app: this Mac's debug key, then (add it) Play Console's app-signing key
+# from Test and release > App integrity.
+ANDROID_PACKAGE = "com.eleazar.localhive"
+ANDROID_CERT_SHA256 = "D8:6C:7A:53:43:FE:E6:9E:81:A3:A6:27:85:0C:99:04:A1:6F:1B:DB:10:E5:A9:BA:6E:3E:19:07:46:FD:14:C8"
 
 # Hourly: reminds members about polls closing within a day (see pollReminders in src/index.js),
 # and fills in estate nameLower where it's missing.

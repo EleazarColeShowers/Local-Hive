@@ -94,7 +94,9 @@ fun PostCard(
      * Offered to the author and the estate's admins; asks before deleting. An admin removing
      * someone else's post can give a reason, which is passed on to its author.
      */
-    onDelete: ((reason: String) -> Unit)? = null
+    onDelete: ((reason: String) -> Unit)? = null,
+    /** The text can be long-pressed and copied; off in the feed, where a tap opens the post. */
+    selectableText: Boolean = false
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -228,6 +230,7 @@ fun PostCard(
                         linkColor = MaterialTheme.colorScheme.primary,
                         mentions = post.mentions,
                         onMentionClick = onMentionClick,
+                        selectable = selectableText,
                         modifier = Modifier.padding(top = 6.dp)
                     )
                 }

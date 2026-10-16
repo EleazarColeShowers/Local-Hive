@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.components
 
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,6 +30,9 @@ private const val TrailingPunctuation = ".,!?;:'\""
  *
  * Each `@Name` in [mentions] (user id to name) is drawn bold in [linkColor] and, given
  * [onMentionClick], opens that member.
+ *
+ * [selectable] text can be long-pressed to select and copy; leave it off where a tap on the text
+ * should reach a clickable parent, such as a post card in the feed.
  */
 @Composable
 fun LinkifiedText(
@@ -40,21 +44,28 @@ fun LinkifiedText(
     lineHeight: TextUnit = TextUnit.Unspecified,
     fontWeight: FontWeight? = null,
     mentions: Map<String, String> = emptyMap(),
-    onMentionClick: ((userId: String) -> Unit)? = null
+    onMentionClick: ((userId: String) -> Unit)? = null,
+    selectable: Boolean = false
 ) {
     val resolvedLink = linkColor.takeOrElse { color.takeOrElse { LocalContentColor.current } }
     val currentOnMention by rememberUpdatedState(onMentionClick)
     val annotated = remember(text, resolvedLink, mentions, onMentionClick != null) {
         linkify(text, resolvedLink, mentions) { userId -> currentOnMention?.invoke(userId) }
     }
-    Text(
-        text = annotated,
-        modifier = modifier,
-        color = color,
-        fontSize = fontSize,
-        lineHeight = lineHeight,
-        fontWeight = fontWeight
-    )
+    if (selectable) {
+        SelectionContainer(modifier) {
+            Text(text = annotated, color = color, fontSize = fontSize, lineHeight = lineHeight, fontWeight = fontWeight)
+        }
+    } else {
+        Text(
+            text = annotated,
+            modifier = modifier,
+            color = color,
+            fontSize = fontSize,
+            lineHeight = lineHeight,
+            fontWeight = fontWeight
+        )
+    }
 }
 
 private inline fun Color.takeOrElse(fallback: () -> Color): Color = if (this != Color.Unspecified) this else fallback()

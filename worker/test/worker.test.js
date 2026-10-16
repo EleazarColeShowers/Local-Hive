@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { buildPush, estateNameLowerUpdates, pollReminders, tooManyEmergencies } from "../src/index.js";
 import { MAX_VIDEO_BYTES, oversizedVideoIds, signUpload } from "../src/cloudinary.js";
 import { decodeValue } from "../src/firestore.js";
+import { appIntentUrl, inviteCodeIn, playStoreUrl, publicResponse } from "../src/links.js";
 
 /** In-memory stand-in for the Firestore REST client. */
 function fakeDb(docs) {
@@ -350,4 +351,25 @@ test("only videos over the app's size limit are picked for deletion", () => {
     { public_id: "localhive/postVideos/u2/unknown" },
   ]);
   assert.deepEqual(ids, ["localhive/postVideos/u1/huge"]);
+});
+
+test("invite links: code parsing, Play Store referrer and app intent", () => {
+  assert.equal(inviteCodeIn("/join/abc123"), "ABC123");
+  assert.equal(inviteCodeIn("/join/ABC123/"), "ABC123");
+  assert.equal(inviteCodeIn("/join/<script>"), null);
+  assert.equal(inviteCodeIn("/join/"), null);
+  assert.equal(
+    playStoreUrl("com.eleazar.localhive", "ABC123"),
+    "https://play.google.com/store/apps/details?id=com.eleazar.localhive&referrer=invite%3DABC123"
+  );
+  assert.match(appIntentUrl("com.eleazar.localhive", "ABC123"), /^intent:\/\/join\/ABC123#Intent;scheme=localhive;package=com\.eleazar\.localhive;S\.browser_fallback_url=https%3A%2F%2Fplay/);
+});
+
+test("public GETs: join page and assetlinks, nothing else", async () => {
+  const env = { ANDROID_PACKAGE: "com.eleazar.localhive", ANDROID_CERT_SHA256: "AA:BB, CC:DD" };
+  const page = publicResponse(new Request("https://x.dev/join/ABC123"), env);
+  assert.match(await page.text(), /ABC123/);
+  const links = await publicResponse(new Request("https://x.dev/.well-known/assetlinks.json"), env).json();
+  assert.deepEqual(links[0].target.sha256_cert_fingerprints, ["AA:BB", "CC:DD"]);
+  assert.equal(publicResponse(new Request("https://x.dev/notify"), env), null);
 });

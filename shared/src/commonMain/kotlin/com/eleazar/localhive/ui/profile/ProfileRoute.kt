@@ -5,6 +5,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eleazar.localhive.ui.platform.MediaKind
 import com.eleazar.localhive.ui.platform.rememberMediaPicker
 import com.eleazar.localhive.ui.platform.rememberPlatformActions
+import com.eleazar.localhive.data.remote.LocalHiveApi
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
@@ -22,6 +24,7 @@ fun ProfileRoute(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val platform = rememberPlatformActions()
+    val api: LocalHiveApi = koinInject()
     var pickedImageUri by remember { mutableStateOf<String?>(null) }
 
     val pickPhoto = rememberMediaPicker(MediaKind.IMAGE) { pickedImageUri = it.uri }
@@ -72,7 +75,12 @@ fun ProfileRoute(
         },
         onCopyInviteCode = { code -> platform.copyToClipboard("Invite Code", code, "Code copied!") },
         onShareInviteCode = { code, estateName ->
-            platform.shareText("Join $estateName on LocalHive! Use code: $code", "Share Invite Code")
+            val link = api.inviteLink(code)
+            platform.shareText(
+                if (link != null) "Join $estateName on LocalHive, our estate app: $link\n\nInvite code: $code"
+                else "Join $estateName on LocalHive! Use code: $code",
+                "Share Invite Code"
+            )
         },
         onSettings = onSettings,
         onAdminPanel = onAdminPanel,

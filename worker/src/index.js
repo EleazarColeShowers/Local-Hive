@@ -3,6 +3,7 @@ import { Firestore } from "./firestore.js";
 import { oversizedVideoIds, signUpload, UPLOAD_KINDS } from "./cloudinary.js";
 import { sendToUsers } from "./push.js";
 import { deleteAccount, requireRecentLogin } from "./account.js";
+import { publicResponse } from "./links.js";
 
 /**
  * LocalHive's backend on Cloudflare's free tier, doing what Cloud Functions would on Firebase's
@@ -20,16 +21,18 @@ import { deleteAccount, requireRecentLogin } from "./account.js";
  *                           { type: "sos_safe", postId }
  *                           { type: "levy_reminder", estateId, levyId } -> sends the push
  *   POST /delete-account    {}                                       -> deletes the caller's account
+ *   GET  /join/{code}, /.well-known/assetlinks.json                  -> invite links (see links.js)
  *
  * Once an hour (a cron trigger) it also reminds members about polls closing within a day, and
  * fills in the lowercase name estate search runs on for estates that lack it.
  *
- * Every request needs a Firebase ID token. /notify never trusts the request body for content:
+ * Every POST needs a Firebase ID token. /notify never trusts the request body for content:
  * it reads the message, notification or post itself, checks the caller is its sender, and
  * sends each push at most once.
  */
 export default {
   async fetch(request, env) {
+    if (request.method === "GET") return publicResponse(request, env) ?? json({ error: "Not found" }, 404);
     if (request.method !== "POST") return json({ error: "Not found" }, 404);
     try {
       const { uid, authTime } = await verifyFirebaseUser(request, env.FIREBASE_PROJECT_ID);

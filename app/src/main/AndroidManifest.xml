@@ -34,6 +34,13 @@
                 <data android:scheme="localhive" android:host="post" />
                 <data android:scheme="localhive" android:host="levy" />
             </intent-filter>
+            <!-- Invite links, https://<worker>/join/CODE: verified against the Worker's assetlinks.json. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="${inviteHost}" android:pathPrefix="/join/" />
+            </intent-filter>
             <!-- Share sheet: a link or text, a photo or a video becomes a new post. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

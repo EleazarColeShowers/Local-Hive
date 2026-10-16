@@ -426,15 +426,23 @@ service cloud.firestore {
                        || data.get('emergencyType', '') in ['break_in', 'fire', 'medical', 'other']));
       }
 
+      // The composer stops at 2,000 characters (MAX_POST_LENGTH in CreatePostScreen).
+      function contentValid() {
+        return request.resource.data.get('content', '') is string
+               && request.resource.data.get('content', '').size() <= 2000;
+      }
+
       allow create: if isSignedIn()
                     && request.resource.data.authorId == uid()
                     && isMemberOf(request.resource.data.estateId)
                     && categoryAllowed()
-                    && incidentValid();
+                    && incidentValid()
+                    && contentValid();
       allow update: if isSignedIn() && (
         (resource.data.authorId == uid()
           && request.resource.data.authorId == resource.data.authorId
           && request.resource.data.estateId == resource.data.estateId
+          && contentValid()
           && (request.resource.data.get('category', '') == resource.data.get('category', '') || categoryAllowed())
           // An old post can't be turned into an emergency, which would pin it to everyone's feed.
           && (request.resource.data.get('category', '') != 'emergency'
@@ -472,7 +480,9 @@ service cloud.firestore {
         allow read: if isMemberOf(postEstate());
         allow create: if isSignedIn()
                       && request.resource.data.authorId == uid()
-                      && isMemberOf(postEstate());
+                      && isMemberOf(postEstate())
+                      && request.resource.data.content is string
+                      && request.resource.data.content.size() <= 1000;
         allow update: if false;
         // The comment's author, the author of the post being commented on, or an admin of its
         // estate (deleting a post takes its comments with it).

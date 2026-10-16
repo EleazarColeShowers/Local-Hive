@@ -1,3 +1,4 @@
+import java.net.URI
 import java.util.Properties
 
 plugins {
@@ -25,7 +26,13 @@ android {
         val localProps = Properties().apply {
             rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
         }
-        buildConfigField("String", "LOCALHIVE_API_URL", "\"${localProps.getProperty("localhive.apiUrl", "")}\"")
+        val apiUrl = localProps.getProperty("localhive.apiUrl", "")
+        buildConfigField("String", "LOCALHIVE_API_URL", "\"$apiUrl\"")
+        // Invite links (https://<this host>/join/CODE) open in the app; the Worker serves the
+        // assetlinks.json that lets Android verify that.
+        val inviteHost = runCatching { URI(apiUrl).host }.getOrNull() ?: "localhive.invalid"
+        buildConfigField("String", "INVITE_HOST", "\"$inviteHost\"")
+        manifestPlaceholders["inviteHost"] = inviteHost
     }
 
     buildTypes {
@@ -77,6 +84,8 @@ dependencies {
 
     // Prompts Play Store installs to update in place.
     implementation("com.google.android.play:app-update:2.1.0")
+    // Reads the invite code a /join link passed through a Play Store install.
+    implementation("com.android.installreferrer:installreferrer:2.2")
 
 
     // Core
