@@ -34,7 +34,9 @@ async function sha1Hex(text) {
  * so a signature can't be used to fill the account with other files or huge originals.
  */
 const PHOTO_LIMITS = { allowed_formats: "jpg,png,webp,heic", transformation: "c_limit,w_2000,h_2000" };
-// Cloudinary's plan caps a video at 100 MB; the app keeps them under 40 MB.
+// Cloudinary's plan caps a video at 100 MB; the app keeps them under 40 MB. Cloudinary can't
+// sign a size limit, so the hourly job deletes anything bigger (see oversizedVideoIds).
+export const MAX_VIDEO_BYTES = 40 * 1024 * 1024;
 const VIDEO_LIMITS = { allowed_formats: "mp4,mov,m4v,3gp,webm" };
 
 /** Each upload kind's folder, the Cloudinary resource type its files are stored as, and its limits. */
@@ -45,3 +47,8 @@ export const UPLOAD_KINDS = {
   // Proof of levy payments and receipts for estate expenses.
   receipt: { folder: "receipts", resourceType: "image", limits: PHOTO_LIMITS },
 };
+
+/** Public ids of uploaded videos over [MAX_VIDEO_BYTES], which only a modified app could send. */
+export function oversizedVideoIds(resources) {
+  return resources.filter((r) => Number(r.bytes) > MAX_VIDEO_BYTES).map((r) => r.public_id);
+}

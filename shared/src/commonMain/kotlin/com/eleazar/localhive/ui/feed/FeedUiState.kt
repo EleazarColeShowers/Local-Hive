@@ -30,6 +30,8 @@ data class FeedUiState(
     val uploadProgress: Float? = null,
     /** A post was published or an edit saved, so the composer can close. */
     val postCreated: Boolean = false,
+    /** An SOS was posted to the feed but its push was refused; why, to tell the sender. */
+    val emergencyNotPushed: String? = null,
     /** The open post doesn't exist, or has just been deleted by someone. */
     val postMissing: Boolean = false,
     /** The user deleted a post, so a screen showing only that post can close. */

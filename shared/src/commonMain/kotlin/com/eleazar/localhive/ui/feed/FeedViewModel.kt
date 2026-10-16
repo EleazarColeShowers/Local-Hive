@@ -239,7 +239,13 @@ class FeedViewModel(
                 incidentStatus = IncidentStatus.OPEN.key
             )
             postRepository.createPost(post)
-                .onSuccess { _uiState.update { it.copy(isPosting = false, postCreated = true) } }
+                .onSuccess { postId ->
+                    val refused = postRepository.alertEmergency(postId)
+                    _uiState.update {
+                        if (refused != null) it.copy(isPosting = false, emergencyNotPushed = refused)
+                        else it.copy(isPosting = false, postCreated = true)
+                    }
+                }
                 .onFailure { e ->
                     _uiState.update { it.copy(isPosting = false, error = e.message ?: "Couldn't send the alert") }
                 }
@@ -357,6 +363,10 @@ class FeedViewModel(
 
     fun consumePostDeleted() {
         _uiState.update { it.copy(postDeleted = false) }
+    }
+
+    fun consumeEmergencyNotPushed() {
+        _uiState.update { it.copy(emergencyNotPushed = null) }
     }
 
     fun consumePostCreated() {

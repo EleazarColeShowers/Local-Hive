@@ -1,6 +1,6 @@
 import { HttpError, serviceAccessToken, verifyAppCheck, verifyFirebaseUser } from "./google.js";
 import { Firestore } from "./firestore.js";
-import { signUpload, UPLOAD_KINDS } from "./cloudinary.js";
+import { oversizedVideoIds, signUpload, UPLOAD_KINDS } from "./cloudinary.js";
 import { sendToUsers } from "./push.js";
 import { deleteAccount, requireRecentLogin } from "./account.js";
 
@@ -51,6 +51,7 @@ export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(sendPollReminders(env, event.scheduledTime));
     ctx.waitUntil(fillEstateNameLower(env));
+    ctx.waitUntil(deleteOversizedVideos(env));
   },
 };
 
@@ -173,6 +174,32 @@ async function deleteCloudinaryFolders(env, uid) {
     );
     if (!response.ok) throw new Error(`Cloudinary delete ${folder}: ${response.status} ${await response.text()}`);
   }
+}
+
+/** Removes post videos over the app's size limit, which a signed upload can't refuse up front. */
+async function deleteOversizedVideos(env) {
+  if (!env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) return;
+  const auth = `Basic ${btoa(`${env.CLOUDINARY_API_KEY}:${env.CLOUDINARY_API_SECRET}`)}`;
+  const base = `https://api.cloudinary.com/v1_1/${env.CLOUDINARY_CLOUD_NAME}/resources/video/upload`;
+  const prefix = encodeURIComponent(`localhive/${UPLOAD_KINDS.video.folder}/`);
+  const tooBig = [];
+  let cursor = "";
+  do {
+    const response = await fetch(`${base}?prefix=${prefix}&max_results=500${cursor && `&next_cursor=${cursor}`}`, {
+      headers: { Authorization: auth },
+    });
+    if (!response.ok) throw new Error(`Cloudinary list videos: ${response.status} ${await response.text()}`);
+    const page = await response.json();
+    tooBig.push(...oversizedVideoIds(page.resources || []));
+    cursor = page.next_cursor ? encodeURIComponent(page.next_cursor) : "";
+  } while (cursor);
+  // The delete call takes up to 100 ids at a time.
+  for (let i = 0; i < tooBig.length; i += 100) {
+    const ids = tooBig.slice(i, i + 100).map((id) => `public_ids[]=${encodeURIComponent(id)}`).join("&");
+    const response = await fetch(`${base}?${ids}`, { method: "DELETE", headers: { Authorization: auth } });
+    if (!response.ok) throw new Error(`Cloudinary delete videos: ${response.status} ${await response.text()}`);
+  }
+  if (tooBig.length > 0) console.log(`videos: deleted ${tooBig.length} over the size limit`);
 }
 
 async function notify(env, uid, body) {

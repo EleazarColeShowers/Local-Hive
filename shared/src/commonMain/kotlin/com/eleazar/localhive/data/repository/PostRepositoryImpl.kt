@@ -1,5 +1,7 @@
 package com.eleazar.localhive.data.repository
 
+import com.eleazar.localhive.data.platform.logWarning
+import com.eleazar.localhive.data.remote.ApiException
 import com.eleazar.localhive.data.remote.LocalHiveApi
 import com.eleazar.localhive.domain.PostRepository
 import com.eleazar.localhive.domain.model.Comment
@@ -10,6 +12,7 @@ import com.eleazar.localhive.ui.util.nowMillis
 import dev.gitlive.firebase.firestore.Direction
 import dev.gitlive.firebase.firestore.FieldValue
 import dev.gitlive.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -45,13 +48,29 @@ class PostRepositoryImpl(
         val ref = posts.document
         ref.set(post.toMap())
         // Pushes for the categories that need one; the Worker re-reads the post to check it.
+        // An emergency's goes out from alertEmergency, so the sender hears if it's refused.
         when (PostCategory.fromKey(post.category)) {
             PostCategory.ANNOUNCEMENT -> api.notifyInBackground("type" to "announcement", "postId" to ref.id)
-            PostCategory.EMERGENCY -> api.notifyInBackground("type" to "emergency", "postId" to ref.id)
             PostCategory.SECURITY -> api.notifyInBackground("type" to "security_report", "postId" to ref.id)
             else -> Unit
         }
         ref.id
+    }
+
+    override suspend fun alertEmergency(postId: String): String? {
+        if (!api.isConfigured) return null
+        return try {
+            api.notifyNow("type" to "emergency", "postId" to postId)
+            null
+        } catch (e: ApiException) {
+            if (e.code == 429) return e.message
+            logWarning(TAG, "Emergency push failed for $postId", e)
+            null
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            logWarning(TAG, "Emergency push failed for $postId", e)
+            null
+        }
     }
 
     override suspend fun getPost(postId: String): Result<Post> = runCatching {
@@ -170,3 +189,5 @@ class PostRepositoryImpl(
         "createdAt" to createdAt, "mentions" to mentions
     )
 }
+
+private const val TAG = "PostRepository"

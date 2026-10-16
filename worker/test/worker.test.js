@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { buildPush, estateNameLowerUpdates, pollReminders, tooManyEmergencies } from "../src/index.js";
-import { signUpload } from "../src/cloudinary.js";
+import { MAX_VIDEO_BYTES, oversizedVideoIds, signUpload } from "../src/cloudinary.js";
 import { decodeValue } from "../src/firestore.js";
 
 /** In-memory stand-in for the Firestore REST client. */
@@ -341,4 +341,13 @@ test("Firestore values decode to plain JS", () => {
   assert.deepEqual(decodeValue({ arrayValue: { values: [{ stringValue: "a" }] } }), ["a"]);
   assert.deepEqual(decodeValue({ mapValue: { fields: { x: { booleanValue: true } } } }), { x: true });
   assert.deepEqual(decodeValue({ arrayValue: {} }), []);
+});
+
+test("only videos over the app's size limit are picked for deletion", () => {
+  const ids = oversizedVideoIds([
+    { public_id: "localhive/postVideos/u1/ok", bytes: MAX_VIDEO_BYTES },
+    { public_id: "localhive/postVideos/u1/huge", bytes: MAX_VIDEO_BYTES + 1 },
+    { public_id: "localhive/postVideos/u2/unknown" },
+  ]);
+  assert.deepEqual(ids, ["localhive/postVideos/u1/huge"]);
 });

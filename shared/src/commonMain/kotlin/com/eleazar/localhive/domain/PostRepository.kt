@@ -8,8 +8,13 @@ import kotlinx.coroutines.flow.Flow
 interface PostRepository {
     fun getPostsForEstate(estateId: String, limit: Long = 20): Flow<List<Post>>
     suspend fun getMorePostsForEstate(estateId: String, before: Long, limit: Long = 20): Result<List<Post>>
-    /** Returns the new post's id. */
+    /** Returns the new post's id. An emergency's push is sent separately, with [alertEmergency]. */
     suspend fun createPost(post: Post): Result<String>
+    /**
+     * Pushes a just-created emergency to the estate and waits for it to go out. Returns why it was
+     * refused (too many alerts in a short time), or null once sent or if it failed for another reason.
+     */
+    suspend fun alertEmergency(postId: String): String?
     suspend fun getPost(postId: String): Result<Post>
     /** The post as it changes; null once it's deleted. */
     fun observePost(postId: String): Flow<Post?>
