@@ -25,7 +25,15 @@ fun CreateEstateRoute(
         error = uiState.error,
         colors = colors,
         onCreateEstate = { name, address -> viewModel.createEstate(name, address) },
-        onBack = onBack
+        onBack = onBack,
+        similarEstate = uiState.similarEstate,
+        // Back on the estate screen, the sent request shows as pending.
+        onAskToJoin = { estate ->
+            viewModel.dismissSimilarEstate()
+            viewModel.requestToJoin(estate.id, onSent = onBack)
+        },
+        onCreateAnyway = { name, address -> viewModel.createEstate(name, address, allowDuplicate = true) },
+        onDismissSimilar = viewModel::dismissSimilarEstate
     )
 }
 

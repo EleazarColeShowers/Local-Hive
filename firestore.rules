@@ -104,6 +104,7 @@ service cloud.firestore {
                     && uid() in request.resource.data.adminIds
                     && request.resource.data.ownerId == uid()
                     && request.resource.data.memberCount == 1
+                    && nameLowerMatches()
                     && !('inviteCode' in request.resource.data);
       allow update: if isSignedIn() && (
         (uid() in resource.data.adminIds
@@ -131,7 +132,15 @@ service cloud.firestore {
                && data.name.size() <= 80
                && data.get('address', '') is string
                && data.get('address', '').size() <= 200
-               && data.get('joinMode', 'both') in ['both', 'code', 'request'];
+               && data.get('joinMode', 'both') in ['both', 'code', 'request']
+               && nameLowerMatches();
+      }
+
+      // Search runs on nameLower, so it can't be set to anything but the name in lowercase.
+      // Estates from before it existed may lack it until the backfill fills it in.
+      function nameLowerMatches() {
+        let data = request.resource.data;
+        return data.get('nameLower', data.name.lower()) == data.name.lower();
       }
 
       // The owner stays an admin no matter what other admins do. Only the owner can change

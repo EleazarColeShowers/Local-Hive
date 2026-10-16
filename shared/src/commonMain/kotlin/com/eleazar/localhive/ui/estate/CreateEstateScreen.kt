@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -28,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.eleazar.localhive.domain.model.Estate
 
 /**
  * Bare UI for creating an estate. No ViewModel or Android Context side effects.
@@ -53,7 +56,12 @@ fun CreateEstateScreen(
     colors: EstateColors = rememberEstateColors(),
     onCreateEstate: (name: String, address: String) -> Unit,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** An existing estate matching the name and address entered; shows the "already exists" prompt. */
+    similarEstate: Estate? = null,
+    onAskToJoin: (Estate) -> Unit = {},
+    onCreateAnyway: (name: String, address: String) -> Unit = { _, _ -> },
+    onDismissSimilar: () -> Unit = {}
 ) {
     var name by remember { mutableStateOf("") }
     var address by remember { mutableStateOf("") }
@@ -113,8 +121,19 @@ fun CreateEstateScreen(
                 color = dark.copy(alpha = 0.6f),
                 textAlign = TextAlign.Center,
                 lineHeight = 20.sp,
-                modifier = Modifier.padding(top = 8.dp, bottom = 36.dp)
+                modifier = Modifier.padding(top = 8.dp, bottom = 16.dp)
             )
+            Text(
+                "Free during early access",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = green,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(green.copy(alpha = 0.12f))
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            )
+            Spacer(Modifier.height(32.dp))
 
             Text(
                 "Estate name",
@@ -186,6 +205,36 @@ fun CreateEstateScreen(
 
             Spacer(Modifier.height(32.dp))
         }
+    }
+
+    similarEstate?.let { existing ->
+        val canAsk = existing.joinMode.acceptsRequests
+        AlertDialog(
+            onDismissRequest = onDismissSimilar,
+            containerColor = MaterialTheme.colorScheme.surface,
+            title = { Text("This estate may already exist", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    if (canAsk) "An estate called ${existing.name} at ${existing.address} already exists. Ask to join it instead?"
+                    else "An estate called ${existing.name} at ${existing.address} already exists. It's invite only, " +
+                        "so ask one of its members for the invite code."
+                )
+            },
+            confirmButton = {
+                if (canAsk) {
+                    TextButton(onClick = { onAskToJoin(existing) }) {
+                        Text("Ask to join", color = green, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    TextButton(onClick = onDismissSimilar) {
+                        Text("OK", color = green, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { onCreateAnyway(name.trim(), address.trim()) }) { Text("Create anyway") }
+            }
+        )
     }
 }
 

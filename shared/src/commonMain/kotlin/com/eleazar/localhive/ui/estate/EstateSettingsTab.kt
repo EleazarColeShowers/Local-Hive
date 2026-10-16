@@ -68,6 +68,17 @@ internal fun EstateSettingsTab(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        item(key = "plan") {
+            SettingsCard(title = "Plan", dark = dark, cardBg = cardBg) {
+                Text("Early access · Free", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = green)
+                Text(
+                    "LocalHive is free while it's in early access. We'll let you know well before any paid plans start.",
+                    fontSize = 13.sp,
+                    color = dark.copy(alpha = 0.6f)
+                )
+            }
+        }
+
         item(key = "details") {
             SettingsCard(title = "Estate details", dark = dark, cardBg = cardBg) {
                 // Keyed on the saved values, so the fields follow a change another admin makes.

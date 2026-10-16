@@ -51,9 +51,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.eleazar.localhive.domain.model.Estate
+import com.eleazar.localhive.ui.util.formatDate
 
 /**
  * Bare UI for joining an estate. No ViewModel or Android Context side effects.
@@ -278,10 +280,21 @@ private fun EstateSearchCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(estate.name, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = dark)
                 Spacer(Modifier.height(2.dp))
-                Text(estate.address, fontSize = 12.sp, color = dark.copy(alpha = 0.55f), maxLines = 1)
+                // Two lines and a start date, so estates with the same name can be told apart.
+                Text(
+                    estate.address,
+                    fontSize = 12.sp,
+                    color = dark.copy(alpha = 0.55f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 16.sp
+                )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "${estate.memberCount} member${if (estate.memberCount != 1) "s" else ""}",
+                    buildString {
+                        append("${estate.memberCount} member${if (estate.memberCount != 1) "s" else ""}")
+                        if (estate.createdAt > 0L) append(" · Started ${formatDate(estate.createdAt, "MMM yyyy")}")
+                    },
                     fontSize = 11.sp,
                     color = green,
                     fontWeight = FontWeight.Medium

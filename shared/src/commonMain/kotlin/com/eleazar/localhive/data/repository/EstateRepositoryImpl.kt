@@ -37,7 +37,7 @@ class EstateRepositoryImpl(
         val ref = estates.document
         val estate = Estate(
             id = ref.id,
-            name = name,
+            name = name.trim(),
             address = address,
             adminIds = listOf(adminId),
             ownerId = adminId,
@@ -134,13 +134,21 @@ class EstateRepositoryImpl(
     }
 
     override suspend fun searchEstates(query: String): Result<List<Estate>> = runCatching {
-        val snapshot = if (query.isBlank()) {
-            estates.orderBy("name").limit(20).get()
+        // Searches nameLower so "sunrise" finds "Sunrise Estate".
+        val prefix = query.trim().lowercase()
+        val snapshot = if (prefix.isEmpty()) {
+            estates.orderBy("nameLower").limit(20).get()
         } else {
-            val end = query.trimEnd() + ""
-            estates.orderBy("name").startAt(query).endAt(end).limit(20).get()
+            estates.orderBy("nameLower").startAt(prefix).endAt(prefix + "\uf8ff").limit(20).get()
         }
         snapshot.documents.mapNotNull { mapDocToEstate(it) }
+    }
+
+    override suspend fun findSimilarEstate(name: String, address: String): Result<Estate?> = runCatching {
+        val wanted = address.comparableAddress()
+        estates.where { "nameLower" equalTo name.trim().lowercase() }.limit(10).get()
+            .documents.mapNotNull { mapDocToEstate(it) }
+            .firstOrNull { it.address.comparableAddress().sameAddressAs(wanted) }
     }
 
     override suspend fun requestToJoin(
@@ -274,7 +282,11 @@ class EstateRepositoryImpl(
     override suspend fun updateEstateDetails(estateId: String, name: String, address: String): Result<Unit> = runCatching {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) throw Exception("Give the estate a name")
-        estates.document(estateId).update("name" to trimmed, "address" to address.trim())
+        estates.document(estateId).update(
+            "name" to trimmed,
+            "nameLower" to trimmed.lowercase(),
+            "address" to address.trim()
+        )
     }
 
     override suspend fun setJoinMode(estateId: String, mode: JoinMode): Result<Unit> = runCatching {
@@ -370,8 +382,18 @@ class EstateRepositoryImpl(
         return (1..6).map { chars.random() }.joinToString("")
     }
 
+    /** Lowercase words only, so "12, Admiralty Way." and "12 admiralty way" compare equal. */
+    private fun String.comparableAddress(): String =
+        lowercase().map { if (it.isLetterOrDigit()) it else ' ' }.joinToString("")
+            .split(' ').filter { it.isNotEmpty() }.joinToString(" ")
+
+    /** Equal, or one is the other with more detail ("12 admiralty way" vs "12 admiralty way lekki lagos"). */
+    private fun String.sameAddressAs(other: String): Boolean =
+        isNotEmpty() && other.isNotEmpty() && (" $this ".contains(" $other ") || " $other ".contains(" $this "))
+
     private fun Estate.toMap(): Map<String, Any?> = mapOf(
         "name" to name,
+        "nameLower" to name.lowercase(),
         "address" to address,
         "adminIds" to adminIds,
         "ownerId" to ownerId,

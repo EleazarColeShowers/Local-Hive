@@ -20,6 +20,8 @@ interface EstateRepository {
      */
     suspend fun leaveEstate(estateId: String, userId: String): Result<Unit>
     suspend fun searchEstates(query: String): Result<List<Estate>>
+    /** An existing estate with the same name (any case) at the same address, or null. */
+    suspend fun findSimilarEstate(name: String, address: String): Result<Estate?>
     suspend fun requestToJoin(estateId: String, userId: String, userName: String, userPhotoUrl: String): Result<Unit>
     suspend fun cancelRequest(estateId: String, userId: String): Result<Unit>
     fun getPendingRequests(estateId: String): Flow<List<JoinRequest>>

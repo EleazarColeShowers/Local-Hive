@@ -33,7 +33,9 @@ data class EstateUiState(
     /** An admin-panel change is being saved. */
     val isSaving: Boolean = false,
     /** A one-off confirmation for the admin panel, e.g. "Estate details saved". */
-    val message: String? = null
+    val message: String? = null,
+    /** An estate that looks like the one being created, so the creator can join it instead. */
+    val similarEstate: Estate? = null
 )
 
 @OptIn(FlowPreview::class)
@@ -71,10 +73,19 @@ class EstateViewModel(
         }
     }
 
-    fun createEstate(name: String, address: String) {
+    /** Stops to offer [EstateUiState.similarEstate] first, unless [allowDuplicate]. */
+    fun createEstate(name: String, address: String, allowDuplicate: Boolean = false) {
         val userId = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _uiState.update { it.copy(isLoading = true, error = null, similarEstate = null) }
+            if (!allowDuplicate) {
+                // A failed check shouldn't block creating, so only a found match stops here.
+                val similar = estateRepository.findSimilarEstate(name, address).getOrNull()
+                if (similar != null) {
+                    _uiState.update { it.copy(isLoading = false, similarEstate = similar) }
+                    return@launch
+                }
+            }
             estateRepository.createEstate(name, address, userId).fold(
                 onSuccess = { estate ->
                     _uiState.update { it.copy(isLoading = false, estate = estate, success = true) }
@@ -121,7 +132,11 @@ class EstateViewModel(
         )
     }
 
-    fun requestToJoin(estateId: String) {
+    fun dismissSimilarEstate() {
+        _uiState.update { it.copy(similarEstate = null) }
+    }
+
+    fun requestToJoin(estateId: String, onSent: () -> Unit = {}) {
         val userId = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             val user = userRepository.getUser(userId).getOrNull()
@@ -133,6 +148,7 @@ class EstateViewModel(
             ).fold(
                 onSuccess = {
                     _uiState.update { it.copy(requestedEstateIds = it.requestedEstateIds + estateId) }
+                    onSent()
                 },
                 onFailure = { e ->
                     _uiState.update { it.copy(error = e.message) }
