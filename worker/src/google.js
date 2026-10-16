@@ -25,6 +25,33 @@ export async function verifyFirebaseUser(request, projectId) {
   }
 }
 
+// App Check tokens prove a request came from the genuine LocalHive app on a real device.
+const APP_CHECK_JWKS = createRemoteJWKSet(new URL("https://firebaseappcheck.googleapis.com/v1/jwks"));
+
+/**
+ * Checks the request's App Check token. Only refuses requests once APP_CHECK_REQUIRED is "true",
+ * so it can be switched on after every installed app sends one; until then it reports what it saw.
+ */
+export async function verifyAppCheck(request, env) {
+  const required = env.APP_CHECK_REQUIRED === "true";
+  const token = request.headers.get("X-Firebase-AppCheck");
+  let valid = false;
+  if (token && env.FIREBASE_PROJECT_NUMBER) {
+    try {
+      await jwtVerify(token, APP_CHECK_JWKS, {
+        issuer: `https://firebaseappcheck.googleapis.com/${env.FIREBASE_PROJECT_NUMBER}`,
+        audience: `projects/${env.FIREBASE_PROJECT_NUMBER}`,
+        algorithms: ["RS256"],
+      });
+      valid = true;
+    } catch {
+      valid = false;
+    }
+  }
+  if (required && !valid) throw new HttpError(401, "This request didn't come from the LocalHive app");
+  return valid;
+}
+
 const SCOPES = [
   "https://www.googleapis.com/auth/datastore",
   "https://www.googleapis.com/auth/firebase.messaging",

@@ -116,8 +116,8 @@ class StorageRepositoryImpl(
 
     private fun FormBuilder.appendSignature(signed: UploadSignature) {
         append("api_key", signed.apiKey)
-        append("timestamp", signed.timestamp.toString())
-        append("folder", signed.folder)
+        // Cloudinary rejects the upload unless every signed field comes back unchanged.
+        signed.params.forEach { (name, value) -> append(name, value) }
         append("signature", signed.signature)
     }
 

@@ -13,7 +13,12 @@ preview_urls = false
 [vars]
 FIREBASE_PROJECT_ID = "localhive-4a645"
 CLOUDINARY_CLOUD_NAME = "bsgju3dx"
+# Not secret: it's in google-services.json. Needed to check App Check tokens.
+FIREBASE_PROJECT_NUMBER = "1044932675647"
+# Set to "true" once every installed app sends App Check tokens; then other callers are refused.
+APP_CHECK_REQUIRED = "false"
 
-# Hourly: reminds members about polls closing within a day (see pollReminders in src/index.js).
+# Hourly: reminds members about polls closing within a day (see pollReminders in src/index.js),
+# and fills in estate nameLower where it's missing.
 [triggers]
 crons = ["0 * * * *"]

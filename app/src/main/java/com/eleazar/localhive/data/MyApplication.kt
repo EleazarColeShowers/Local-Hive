@@ -9,6 +9,8 @@ class MyApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Before anything talks to Firebase, so every request carries an App Check token.
+        installAppCheck()
         initKoin(apiBaseUrl = BuildConfig.LOCALHIVE_API_URL) {
             androidContext(this@MyApplication)
         }

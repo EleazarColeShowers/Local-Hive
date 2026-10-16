@@ -1,4 +1,4 @@
-import { HttpError, serviceAccessToken, verifyFirebaseUser } from "./google.js";
+import { HttpError, serviceAccessToken, verifyAppCheck, verifyFirebaseUser } from "./google.js";
 import { Firestore } from "./firestore.js";
 import { signUpload, UPLOAD_KINDS } from "./cloudinary.js";
 import { sendToUsers } from "./push.js";
@@ -33,6 +33,7 @@ export default {
     if (request.method !== "POST") return json({ error: "Not found" }, 404);
     try {
       const { uid, authTime } = await verifyFirebaseUser(request, env.FIREBASE_PROJECT_ID);
+      await verifyAppCheck(request, env);
       const body = await request.json().catch(() => ({}));
       const path = new URL(request.url).pathname;
 
@@ -134,6 +135,7 @@ async function uploadSignature(env, uid, { kind }) {
     apiSecret: env.CLOUDINARY_API_SECRET,
     // Per-user folder, so an upload can always be traced back to who made it.
     folder: `localhive/${folder}/${uid}`,
+    limits: UPLOAD_KINDS[kind].limits,
   });
 }
 
@@ -181,9 +183,20 @@ async function notify(env, uid, body) {
   // Once-only: a retry, or someone replaying the request, can't send the same push again.
   if (!(await db.createOnce(`pushes/${push.key}`, { by: uid, at: Date.now() }))) return { sent: 0, duplicate: true };
 
+  if (push.inbox) await leaveInInbox(db, push.key, push.recipients, push.inbox);
   const sent = await sendToUsers(db, env, push.recipients, push.payload);
   console.log(`push ${push.key}: ${sent}/${push.recipients.length} delivered`);
   return { sent };
+}
+
+/** One notification document per recipient, for notices the app can't raise itself. */
+async function leaveInInbox(db, key, recipients, { type, title, message, estateId, senderId }) {
+  const createdAt = Date.now();
+  await Promise.all(recipients.map((recipientId) =>
+    db.createOnce(`notifications/${key}_${recipientId}`, {
+      recipientId, senderId, type, title, message, estateId, createdAt, isRead: false,
+    })
+  ));
 }
 
 /** Works out who to notify and with what, or returns null when there's nothing to send. */
@@ -257,6 +270,9 @@ export async function buildPush(db, uid, body) {
       const { post } = await incidentPost(db, uid, body.postId, "emergency");
       // Only a fresh SOS goes out, so an old one can't be dug up and sent again.
       if (!(Date.now() - Number(post.createdAt || 0) < EMERGENCY_MAX_AGE_MS)) throw new HttpError(410, "Too old to alert");
+      if (await tooManyEmergencies(db, uid)) {
+        throw new HttpError(429, "You've raised several emergencies in the last half hour. Call for help directly.");
+      }
       const members = await db.idsWhere("users", "estateId", post.estateId);
       const type = EMERGENCY_TYPES[post.emergencyType];
       const where = post.location ? ` at ${post.location}` : "";
@@ -397,9 +413,50 @@ export async function buildPush(db, uid, body) {
       };
     }
 
+    case "bank_changed": {
+      const { estateId } = body;
+      if (!isId(estateId)) throw new HttpError(400, "Bad estate reference");
+      const [estate, bank] = await Promise.all([db.get(`estates/${estateId}`), db.get(`estates/${estateId}/private/bank`)]);
+      if (!estate || !bank) throw new HttpError(404, "No bank details");
+      if (!estate.treasurerId || estate.treasurerId !== uid || bank.updatedBy !== uid) {
+        throw new HttpError(403, "Only the treasurer changes the bank details");
+      }
+      if (!(Date.now() - Number(bank.updatedAt || 0) < BANK_CHANGE_MAX_AGE_MS)) throw new HttpError(410, "Not a fresh change");
+      const members = await db.idsWhere("users", "estateId", estateId);
+      const ending = String(bank.accountNumber || "").slice(-4);
+      const title = `🏦 ${estate.name || "Your estate"}'s bank details changed`;
+      const message = `${bank.updatedByName || "The treasurer"} set dues to be paid to ${bank.bankName || "a new account"}` +
+        `${ending ? ` (account ending ${ending})` : ""}. If you weren't expecting this, check with your estate before paying.`;
+      return {
+        key: `bank_changed_${estateId}_${bank.updatedAt}`,
+        recipients: members.filter((id) => id !== uid),
+        payload: { title, body: message, deepLink: "localhive://notifications", tag: `bank-${estateId}` },
+        // Also left in everyone's notifications, so it's still there after the push is swiped away.
+        inbox: { type: "BANK_DETAILS_CHANGED", title, message, estateId, senderId: uid },
+      };
+    }
+
     default:
       throw new HttpError(400, "Unknown notify type");
   }
+}
+
+/** A bank change older than this is too stale to announce. */
+const BANK_CHANGE_MAX_AGE_MS = 60 * 60 * 1000;
+
+/**
+ * How many SOS alerts one person can raise in [EMERGENCY_WINDOW_MS]. Generous enough for a real
+ * emergency that needs a follow-up, but stops anyone setting off the estate's sirens on repeat.
+ */
+const EMERGENCY_LIMIT = 3;
+const EMERGENCY_WINDOW_MS = 30 * 60 * 1000;
+
+/** True once the caller's recent emergencies, counting the one being sent, go over the limit. */
+export async function tooManyEmergencies(db, uid, now = Date.now()) {
+  const mine = await db.query("posts", [["authorId", "EQUAL", uid], ["category", "EQUAL", "emergency"]]);
+  // The app stamps createdAt; a future one still counts, so it can't be used to dodge the limit.
+  const recent = mine.filter(({ data }) => Number(data.createdAt || 0) > now - EMERGENCY_WINDOW_MS);
+  return recent.length > EMERGENCY_LIMIT;
 }
 
 /** A "light is back" report older than this is too stale to push. */

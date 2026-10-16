@@ -122,7 +122,10 @@ service cloud.firestore {
             && request.resource.data.get('treasurerId', '') == ''
             && request.resource.data.memberCount == resource.data.memberCount - 1)
       );
-      allow delete: if isSignedIn() && uid() in resource.data.adminIds;
+      // Only the owner can delete the whole estate, so one rogue admin can't wipe it out.
+      // Estates from before ownership was tracked belong to their first admin.
+      allow delete: if isSignedIn()
+                    && resource.data.get('ownerId', resource.data.adminIds[0]) == uid();
 
       // An estate always has a name, and lets people in in one of the known ways.
       function detailsValid() {
@@ -206,6 +209,9 @@ service cloud.firestore {
                                   && request.resource.data.keys().hasOnly(
                                        ['bankName', 'accountNumber', 'accountName', 'updatedBy', 'updatedByName', 'updatedAt'])
                                   && request.resource.data.updatedBy == uid()
+                                  // Stamped with the real time, so a change can't be passed off as an old one.
+                                  && request.resource.data.updatedAt is int
+                                  && math.abs(request.resource.data.updatedAt - request.time.toMillis()) < 60 * 60 * 1000
                                   && request.resource.data.accountNumber is string
                                   && request.resource.data.accountNumber.size() > 0
                                   && request.resource.data.accountNumber.size() <= 20);
@@ -349,13 +355,46 @@ service cloud.firestore {
     }
 
     match /notifications/{notificationId} {
-      // Raised by whoever triggered the event (a join requester notifying an admin),
-      // so at create time the recipient is somebody other than the writer.
+      function estateOf(estateId) {
+        return get(/databases/$(database)/documents/estates/$(estateId)).data;
+      }
+
+      // Each kind of notice can only come from the person whose action it reports, and only go
+      // to someone it concerns, so nobody can drop a made-up notice into a stranger's inbox.
+      // The push Worker checks the same things again before it sends anything.
+      function senderMayRaise(data) {
+        let type = data.type;
+        let estateId = data.estateId;
+        return (type == 'JOIN_REQUEST'
+                && data.recipientId in estateOf(estateId).adminIds
+                && get(/databases/$(database)/documents/joinRequests/$(estateId + '_' + uid())).data.status == 'pending')
+            || (type in ['REQUEST_APPROVED', 'REQUEST_DENIED', 'MEMBER_REMOVED', 'POST_REMOVED']
+                && isEstateAdmin(estateId))
+            || (type == 'OWNERSHIP_TRANSFERRED'
+                && isEstateAdmin(estateId)
+                && estateOf(estateId).get('ownerId', '') == data.recipientId)
+            || (type == 'MENTION'
+                && isMemberOf(estateId)
+                && get(/databases/$(database)/documents/users/$(data.recipientId)).data.get('estateId', null) == estateId)
+            || (type == 'PAYMENT_SUBMITTED'
+                && isMemberOf(estateId)
+                && estateOf(estateId).get('treasurerId', '') == data.recipientId)
+            || (type in ['PAYMENT_CONFIRMED', 'PAYMENT_REJECTED']
+                && isTreasurerOf(estateId));
+      }
+
+      // Raised by whoever triggered the event (a join requester notifying an admin).
       // senderId must be the writer: the push Worker relies on it to tell who raised an alert.
       allow create: if isSignedIn()
                     && request.resource.data.recipientId is string
                     && request.resource.data.senderId == uid()
-                    && request.resource.data.isRead == false;
+                    && request.resource.data.isRead == false
+                    && request.resource.data.estateId is string
+                    && request.resource.data.get('title', '') is string
+                    && request.resource.data.get('title', '').size() <= 200
+                    && request.resource.data.get('message', '') is string
+                    && request.resource.data.get('message', '').size() <= 1000
+                    && senderMayRaise(request.resource.data);
       allow read, delete: if isSignedIn() && resource.data.recipientId == uid();
       allow update: if isSignedIn()
                     && resource.data.recipientId == uid()
@@ -458,11 +497,14 @@ service cloud.firestore {
         return ids[0] == uid() ? ids[1] : ids[0];
       }
 
-      // Nobody can message a deleted account, someone they've blocked, or someone who has
-      // blocked them.
+      // Messages only go between neighbours: nobody can message someone outside their estate
+      // (including someone removed from it), a deleted account, someone they've blocked, or
+      // someone who has blocked them.
       function canMessage() {
         let other = otherMember();
-        return exists(/databases/$(database)/documents/users/$(other))
+        let mine = myEstateId();
+        return mine != null
+               && get(/databases/$(database)/documents/users/$(other)).data.get('estateId', null) == mine
                && !exists(/databases/$(database)/documents/users/$(uid())/blocks/$(other))
                && !exists(/databases/$(database)/documents/users/$(other)/blocks/$(uid()));
       }

@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.eleazar.localhive.domain.model.BankDetails
 import com.eleazar.localhive.ui.util.formatDate
+import com.eleazar.localhive.ui.util.nowMillis
 
 /**
  * Where to send dues. The treasurer can edit it, or add it if there's none yet; for anyone else
@@ -97,10 +98,22 @@ fun BankDetailsCard(
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                // A new account number is how dues fraud usually starts, so say so while it's fresh.
+                if (nowMillis() - bank.updatedAt < RECENT_CHANGE_MS) {
+                    Text(
+                        "Changed recently. If you weren't expecting this, check with your estate committee before paying.",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
         }
     }
 }
+
+/** How long new bank details carry a warning. */
+private const val RECENT_CHANGE_MS = 14L * 24 * 60 * 60 * 1000
 
 @Composable
 fun BankDetailsDialog(

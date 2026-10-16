@@ -213,6 +213,8 @@ class FinanceRepositoryImpl(
                 "updatedAt" to details.updatedAt
             )
         )
+        // Every member hears about it, so a quietly swapped account number can't go unnoticed.
+        api.notifyInBackground("type" to "bank_changed", "estateId" to estateId)
     }
 
     private fun bankRef(estateId: String) = estate(estateId).collection("private").document("bank")

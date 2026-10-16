@@ -68,6 +68,9 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-messaging-ktx")
+    // App Check: Play Integrity in release builds, a registered debug token in debug builds.
+    implementation("com.google.firebase:firebase-appcheck-playintegrity")
+    debugImplementation("com.google.firebase:firebase-appcheck-debug")
 
     // Dependency injection, shared with iOS (the modules live in :shared).
     implementation(libs.koin.android)

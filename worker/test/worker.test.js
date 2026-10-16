@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { buildPush, estateNameLowerUpdates, pollReminders } from "../src/index.js";
+import { buildPush, estateNameLowerUpdates, pollReminders, tooManyEmergencies } from "../src/index.js";
 import { signUpload } from "../src/cloudinary.js";
 import { decodeValue } from "../src/firestore.js";
 
@@ -270,6 +270,49 @@ test("poll reminders go to non-voters, once a poll is half a day old and within 
   assert.equal(reminders[0].key, "poll_reminder_due");
   assert.deepEqual(reminders[0].recipients.sort(), ["admin", "third"]);
   assert.equal(reminders[0].payload.body, "Raise the levy?");
+});
+
+test("a fourth SOS in half an hour is refused", async () => {
+  const now = Date.UTC(2026, 9, 16, 12);
+  const minute = 60 * 1000;
+  const sos = (id, author, ago) => [`posts/${id}`, { authorId: author, category: "emergency", createdAt: now - ago * minute }];
+  const three = [sos("a", "u1", 1), sos("b", "u1", 10), sos("c", "u1", 20), sos("old", "u1", 45), sos("x", "u2", 1)];
+  assert.equal(await tooManyEmergencies(fakeDb(Object.fromEntries(three)), "u1", now), false);
+  const four = [...three, sos("d", "u1", 0)];
+  assert.equal(await tooManyEmergencies(fakeDb(Object.fromEntries(four)), "u1", now), true);
+  // A post stamped in the future still counts.
+  const future = [...three, sos("f", "u1", -60)];
+  assert.equal(await tooManyEmergencies(fakeDb(Object.fromEntries(future)), "u1", now), true);
+});
+
+test("only the treasurer's fresh bank change is announced, to everyone else", async () => {
+  const now = Date.now();
+  const db = fakeDb({
+    "estates/E1": { name: "Amali", adminIds: ["admin"], treasurerId: "treasurer" },
+    "estates/E1/private/bank": { bankName: "GTBank", accountNumber: "0123456789", updatedBy: "treasurer", updatedByName: "Ada", updatedAt: now - 1000 },
+    "users/admin": { estateId: "E1" },
+    "users/treasurer": { estateId: "E1" },
+    "users/member": { estateId: "E1" },
+  });
+  const push = await buildPush(db, "treasurer", { type: "bank_changed", estateId: "E1" });
+  assert.deepEqual(push.recipients.sort(), ["admin", "member"]);
+  assert.match(push.payload.body, /GTBank \(account ending 6789\)/);
+  assert.equal(push.inbox.type, "BANK_DETAILS_CHANGED");
+  await assert.rejects(buildPush(db, "admin", { type: "bank_changed", estateId: "E1" }), /Only the treasurer/);
+});
+
+test("upload signatures cover the kind's limits", async () => {
+  const now = Date.UTC(2026, 9, 13);
+  const s = await signUpload({
+    cloudName: "demo", apiKey: "k", apiSecret: "secret", folder: "f", now,
+    limits: { allowed_formats: "jpg,png", transformation: "c_limit,w_2000,h_2000" },
+  });
+  const t = Math.floor(now / 1000);
+  const expected = createHash("sha1")
+    .update(`allowed_formats=jpg,png&folder=f&timestamp=${t}&transformation=c_limit,w_2000,h_2000secret`)
+    .digest("hex");
+  assert.equal(s.signature, expected);
+  assert.deepEqual(s.params, { folder: "f", timestamp: String(t), allowed_formats: "jpg,png", transformation: "c_limit,w_2000,h_2000" });
 });
 
 test("estates missing or mismatching nameLower get it filled in", async () => {

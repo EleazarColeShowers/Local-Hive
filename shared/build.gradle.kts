@@ -49,6 +49,9 @@ kotlin {
 
     sourceSets {
         androidMain.dependencies {
+            // Reads the App Check token for Worker requests; the app installs the provider.
+            implementation(project.dependencies.platform("com.google.firebase:firebase-bom:33.7.0"))
+            implementation("com.google.firebase:firebase-appcheck")
             implementation(libs.androidx.compose.ui.tooling.preview)
             implementation(libs.androidx.compose.ui.tooling)
             implementation("io.coil-kt.coil3:coil-network-okhttp:3.0.4")

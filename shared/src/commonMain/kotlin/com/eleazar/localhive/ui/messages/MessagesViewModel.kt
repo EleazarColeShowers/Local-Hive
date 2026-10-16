@@ -225,10 +225,14 @@ class MessagesViewModel(
         )
         viewModelScope.launch {
             messageRepository.sendMessage(message, names).onFailure { e ->
-                // The rules refuse a message when either side has blocked the other.
+                // The rules refuse a message when either side has blocked the other, or when
+                // they're no longer in the same estate.
                 val refused = (e as? FirebaseFirestoreException)?.code == FirestoreExceptionCode.PERMISSION_DENIED
                 _uiState.update {
-                    it.copy(unsentDraft = text, unsentReason = if (refused) "You can't message this person." else null)
+                    it.copy(
+                        unsentDraft = text,
+                        unsentReason = if (refused) "You can't message this person. They may have left your estate." else null
+                    )
                 }
             }
         }

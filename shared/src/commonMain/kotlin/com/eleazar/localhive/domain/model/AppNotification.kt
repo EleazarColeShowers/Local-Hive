@@ -16,7 +16,9 @@ enum class NotificationType {
     /** An admin deleted the recipient's post; [AppNotification.message] says why, if they gave a reason. */
     POST_REMOVED,
     /** The estate's owner handed ownership to the recipient. */
-    OWNERSHIP_TRANSFERRED
+    OWNERSHIP_TRANSFERRED,
+    /** The treasurer changed where dues are paid. Raised by the Worker, never by the app. */
+    BANK_DETAILS_CHANGED
 }
 
 data class AppNotification(

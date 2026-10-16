@@ -1,5 +1,6 @@
 package com.eleazar.localhive.data.remote
 
+import com.eleazar.localhive.data.platform.appCheckToken
 import com.eleazar.localhive.data.platform.logWarning
 import dev.gitlive.firebase.auth.FirebaseAuth
 import io.ktor.client.HttpClient
@@ -33,7 +34,9 @@ data class UploadSignature(
     val apiKey: String,
     val folder: String,
     val timestamp: Long,
-    val signature: String
+    val signature: String,
+    /** Every field the signature covers (folder, timestamp, format and size limits), sent as-is. */
+    val params: Map<String, String> = mapOf("folder" to folder, "timestamp" to timestamp.toString())
 )
 
 /** The Worker refused a request; [message] is its reason. */
@@ -64,7 +67,9 @@ class LocalHiveApi(
             apiKey = body.string("apiKey"),
             folder = body.string("folder"),
             timestamp = body.getValue("timestamp").jsonPrimitive.long,
-            signature = body.string("signature")
+            signature = body.string("signature"),
+            params = body["params"]?.jsonObject?.mapValues { it.value.jsonPrimitive.content }
+                ?: mapOf("folder" to body.string("folder"), "timestamp" to body.getValue("timestamp").jsonPrimitive.long.toString())
         )
     }
 
@@ -102,8 +107,10 @@ class LocalHiveApi(
         val user = auth.currentUser ?: error("Not signed in")
         val token = user.getIdToken(freshToken) ?: error("No ID token")
         val json = JsonObject(fields.mapValues { JsonPrimitive(it.value) })
+        val appCheck = appCheckToken()
         val response = http.post(baseUrl + path) {
             header(HttpHeaders.Authorization, "Bearer $token")
+            appCheck?.let { header("X-Firebase-AppCheck", it) }
             setBody(TextContent(json.toString(), ContentType.Application.Json))
         }
         val text = response.bodyAsText()
