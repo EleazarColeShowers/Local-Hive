@@ -8,6 +8,7 @@ import kotlin.coroutines.resume
 actual suspend fun appCheckToken(): String? = suspendCancellableCoroutine { continuation ->
     FirebaseAppCheck.getInstance().getAppCheckToken(false).addOnCompleteListener { task ->
         if (!task.isSuccessful) logWarning("AppCheck", "No App Check token", task.exception)
-        continuation.resume(task.result?.token.takeIf { task.isSuccessful })
+        // task.result throws on a failed task, so only read it on success.
+        continuation.resume(if (task.isSuccessful) task.result?.token else null)
     }
 }
