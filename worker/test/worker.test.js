@@ -373,3 +373,12 @@ test("public GETs: join page and assetlinks, nothing else", async () => {
   assert.deepEqual(links[0].target.sha256_cert_fingerprints, ["AA:BB", "CC:DD"]);
   assert.equal(publicResponse(new Request("https://x.dev/notify"), env), null);
 });
+
+test("public GET: account deletion page carries the web API key", async () => {
+  const page = publicResponse(new Request("https://x.dev/delete-account"), { FIREBASE_WEB_API_KEY: "key-123" });
+  assert.match(page.headers.get("Content-Type"), /text\/html/);
+  assert.match(page.headers.get("Content-Security-Policy"), /connect-src 'self' https:\/\/identitytoolkit\.googleapis\.com/);
+  const html = await page.text();
+  assert.match(html, /const KEY = "key-123"/);
+  assert.match(html, /fetch\("\/delete-account"/);
+});

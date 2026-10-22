@@ -22,6 +22,7 @@ import { publicResponse } from "./links.js";
  *                           { type: "levy_reminder", estateId, levyId } -> sends the push
  *   POST /delete-account    {}                                       -> deletes the caller's account
  *   GET  /join/{code}, /.well-known/assetlinks.json                  -> invite links (see links.js)
+ *   GET  /delete-account                                             -> delete an account from the web
  *
  * Once an hour (a cron trigger) it also reminds members about polls closing within a day, and
  * fills in the lowercase name estate search runs on for estates that lack it.
@@ -36,9 +37,11 @@ export default {
     if (request.method !== "POST") return json({ error: "Not found" }, 404);
     try {
       const { uid, authTime } = await verifyFirebaseUser(request, env.FIREBASE_PROJECT_ID);
-      await verifyAppCheck(request, env);
-      const body = await request.json().catch(() => ({}));
       const path = new URL(request.url).pathname;
+      // The web deletion page can't get an App Check token. Deleting needs the password typed
+      // in the last few minutes anyway, which is the check that matters there.
+      if (path !== "/delete-account") await verifyAppCheck(request, env);
+      const body = await request.json().catch(() => ({}));
 
       if (path === "/upload-signature") return json(await uploadSignature(env, uid, body));
       if (path === "/notify") return json(await notify(env, uid, body));

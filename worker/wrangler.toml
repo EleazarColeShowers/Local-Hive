@@ -15,6 +15,9 @@ FIREBASE_PROJECT_ID = "localhive-4a645"
 CLOUDINARY_CLOUD_NAME = "bsgju3dx"
 # Not secret: it's in google-services.json. Needed to check App Check tokens.
 FIREBASE_PROJECT_NUMBER = "1044932675647"
+# Not secret either: the web API key from google-services.json. The /delete-account page signs
+# people in with it.
+FIREBASE_WEB_API_KEY = "AIzaSyBzlLfAgZrPvBlpnDMGePFGBENMcqCql3U"
 # Set to "true" once every installed app sends App Check tokens; then other callers are refused.
 APP_CHECK_REQUIRED = "false"
 # Invite links (src/links.js). The fingerprints are the signing certificates Android trusts to
