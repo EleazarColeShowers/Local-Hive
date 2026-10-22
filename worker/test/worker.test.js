@@ -382,3 +382,9 @@ test("public GET: account deletion page carries the web API key", async () => {
   assert.match(html, /const KEY = "key-123"/);
   assert.match(html, /fetch\("\/delete-account"/);
 });
+
+test("public GET: privacy policy links to account deletion", async () => {
+  const html = await publicResponse(new Request("https://x.dev/privacy"), {}).text();
+  assert.match(html, /<title>LocalHive Privacy Policy<\/title>/);
+  assert.match(html, /href="\/delete-account"/);
+});

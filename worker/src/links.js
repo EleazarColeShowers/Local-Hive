@@ -1,4 +1,5 @@
 import { deleteAccountPage } from "./deletePage.js";
+import { privacyPage } from "./privacyPage.js";
 
 /**
  * The public, signed-out side of the Worker: invite links people tap in WhatsApp or SMS.
@@ -6,6 +7,7 @@ import { deleteAccountPage } from "./deletePage.js";
  *   GET /join/{code}                   -> a page that opens the app, or the Play Store with the code
  *   GET /.well-known/assetlinks.json   -> lets Android open /join links straight in the app
  *   GET /delete-account                -> delete your account from the web (see deletePage.js)
+ *   GET /privacy                       -> the privacy policy (see privacyPage.js)
  *
  * The page never looks the code up, so it can't be used to test which codes exist; the app
  * checks the code once the person is signed in.
@@ -14,6 +16,7 @@ export function publicResponse(request, env) {
   const path = new URL(request.url).pathname;
   if (path === "/.well-known/assetlinks.json") return assetLinks(env);
   if (path === "/delete-account" || path === "/delete-account/") return deleteAccountPage(env);
+  if (path === "/privacy" || path === "/privacy/") return privacyPage();
   const code = inviteCodeIn(path);
   if (code) return new Response(joinPage(code, env.ANDROID_PACKAGE), { headers: PAGE_HEADERS });
   return null;
