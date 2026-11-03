@@ -84,7 +84,9 @@ fun PollsScreen(
                 title = "No polls yet",
                 message = if (uiState.isAdmin) "Ask the estate a question and see where everyone stands."
                 else "When an admin asks the estate something, it'll show up here.",
-                modifier = Modifier.padding(padding).padding(top = 48.dp)
+                modifier = Modifier.padding(padding).padding(top = 48.dp),
+                actionLabel = if (uiState.isAdmin) "Ask a question" else null,
+                onAction = onCreatePoll.takeIf { uiState.isAdmin }
             )
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),

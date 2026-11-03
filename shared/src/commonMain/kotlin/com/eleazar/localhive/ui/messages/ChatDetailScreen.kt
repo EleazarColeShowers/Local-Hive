@@ -68,7 +68,12 @@ import androidx.compose.ui.unit.sp
 import com.eleazar.localhive.domain.model.Message
 import kotlinx.coroutines.launch
 import com.eleazar.localhive.ui.blocking.BlockConfirmDialog
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.outlined.ContentCopy
 import com.eleazar.localhive.ui.components.Avatar
+import com.eleazar.localhive.ui.components.CharactersLeft
+import com.eleazar.localhive.ui.platform.rememberPlatformActions
 import com.eleazar.localhive.ui.components.LinkifiedText
 import com.eleazar.localhive.ui.theme.HiveGreen
 import com.eleazar.localhive.ui.util.clockTime
@@ -89,6 +94,9 @@ fun rememberChatDetailColors(): ChatDetailColors {
 
 /** Consecutive messages from one sender closer together than this read as one run. */
 private const val GROUP_WINDOW_MILLIS = 5 * 60_000L
+
+/** Matches the message rule in firestore.rules. */
+private const val MAX_MESSAGE_LENGTH = 5000
 
 /**
  * Bare UI for the chat detail screen.
@@ -118,6 +126,12 @@ fun ChatDetailScreen(
     otherDeleted: Boolean = false,
     onBlock: (() -> Unit)? = null,
     onUnblock: () -> Unit = {},
+    /** The other person is typing right now. */
+    otherTyping: Boolean = false,
+    /** The newest message the other person has seen, by its timestamp, for "Seen". */
+    seenUpTo: Long = 0L,
+    /** The composer's text changed, so the other person can be told the user is typing. */
+    onDraftChanged: (String) -> Unit = {},
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var confirmBlock by remember { mutableStateOf<Boolean?>(null) }
@@ -185,13 +199,18 @@ fun ChatDetailScreen(
                         ) {
                             Avatar(imageUrl = otherPhotoUrl, name = otherName, size = 36.dp)
                             Spacer(Modifier.width(12.dp))
-                            Text(
-                                otherName,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 17.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Column {
+                                Text(
+                                    otherName,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 17.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (otherTyping) {
+                                    Text("typing…", fontSize = 13.sp, color = colors.hiveGreen, maxLines = 1)
+                                }
+                            }
                         }
                     },
                     navigationIcon = {
@@ -236,7 +255,10 @@ fun ChatDetailScreen(
                 isBlocked -> ClosedComposer("You've blocked $otherName.", actionLabel = "Unblock") { confirmBlock = false }
                 else -> MessageComposer(
                 text = messageText,
-                onTextChange = { messageText = it },
+                onTextChange = {
+                    messageText = it.take(MAX_MESSAGE_LENGTH)
+                    onDraftChanged(messageText)
+                },
                 onSend = {
                     if (messageText.isNotBlank()) {
                         onSendMessage(messageText)
@@ -264,7 +286,8 @@ fun ChatDetailScreen(
                     currentUserId = currentUserId,
                     isLoadingMore = isLoadingMoreMessages,
                     listState = listState,
-                    colors = colors
+                    colors = colors,
+                    seenUpTo = seenUpTo
                 )
             }
         }
@@ -277,14 +300,33 @@ private fun MessageList(
     currentUserId: String?,
     isLoadingMore: Boolean,
     listState: LazyListState,
-    colors: ChatDetailColors
+    colors: ChatDetailColors,
+    seenUpTo: Long
 ) {
+    // "Sent" or "Seen" goes under the user's own message when it's the last thing said.
+    val newest = messages.firstOrNull()
+    val status = when {
+        newest == null || newest.senderId != currentUserId -> null
+        seenUpTo >= newest.timestamp -> "Seen"
+        else -> "Sent"
+    }
     LazyColumn(
         state = listState,
         reverseLayout = true,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp)
     ) {
+        if (status != null) {
+            item(key = "status") {
+                Text(
+                    status,
+                    fontSize = 12.sp,
+                    color = if (status == "Seen") colors.hiveGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp, end = 4.dp)
+                )
+            }
+        }
         messages.forEachIndexed { index, message ->
             // Reversed layout: index - 1 sits visually below this message, index + 1 above.
             val below = messages.getOrNull(index - 1)
@@ -325,6 +367,7 @@ private fun MessageList(
 private fun Message?.continuesInto(next: Message): Boolean =
     this != null && senderId == next.senderId && kotlin.math.abs(next.timestamp - timestamp) < GROUP_WINDOW_MILLIS
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageBubble(
     message: Message,
@@ -354,24 +397,48 @@ private fun MessageBubble(
     val container = if (isOwn) colors.hiveGreen else MaterialTheme.colorScheme.surfaceContainerHigh
     val content = if (isOwn) Color.White else MaterialTheme.colorScheme.onSurface
 
+    val platform = rememberPlatformActions()
+    var menuOpen by remember { mutableStateOf(false) }
+
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = if (isOwn) Arrangement.End else Arrangement.Start
     ) {
-        Surface(
-            shape = shape,
-            color = container,
-            contentColor = content,
-            tonalElevation = 0.dp,
-            modifier = Modifier.widthIn(min = 64.dp, max = 296.dp)
-        ) {
-            Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 6.dp)) {
-                LinkifiedText(text = message.content, fontSize = 15.sp, lineHeight = 21.sp, selectable = true)
-                Text(
-                    text = clockTime(message.timestamp),
-                    fontSize = 11.sp,
-                    color = content.copy(alpha = 0.7f),
-                    modifier = Modifier.align(Alignment.End).padding(top = 2.dp)
+        Box {
+            Surface(
+                shape = shape,
+                color = container,
+                contentColor = content,
+                tonalElevation = 0.dp,
+                modifier = Modifier
+                    .widthIn(min = 64.dp, max = 296.dp)
+                    .clip(shape)
+                    // A long press offers to copy, as in most messengers.
+                    .combinedClickable(
+                        onClickLabel = null,
+                        onLongClickLabel = "Message options",
+                        onClick = {},
+                        onLongClick = { menuOpen = true }
+                    )
+            ) {
+                Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 6.dp)) {
+                    LinkifiedText(text = message.content, fontSize = 15.sp, lineHeight = 21.sp)
+                    Text(
+                        text = clockTime(message.timestamp),
+                        fontSize = 11.sp,
+                        color = content.copy(alpha = 0.7f),
+                        modifier = Modifier.align(Alignment.End).padding(top = 2.dp)
+                    )
+                }
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text("Copy") },
+                    leadingIcon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null) },
+                    onClick = {
+                        menuOpen = false
+                        platform.copyToClipboard("Message", message.content, "Copied")
+                    }
                 )
             }
         }
@@ -453,6 +520,11 @@ private fun MessageComposer(
     Surface(color = MaterialTheme.colorScheme.surface) {
         Column {
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+            CharactersLeft(
+                text.length,
+                MAX_MESSAGE_LENGTH,
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 76.dp, top = 6.dp)
+            )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

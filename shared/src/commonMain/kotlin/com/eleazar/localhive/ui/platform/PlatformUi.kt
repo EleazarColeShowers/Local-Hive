@@ -29,6 +29,15 @@ interface PlatformActions {
     /** Saves [content] as a file called [fileName] and opens the share sheet for it, e.g. a CSV to email. */
     fun shareFile(fileName: String, mimeType: String, content: String, title: String)
 
+    /**
+     * Keeps the app icon's badge in step with what's unread. iOS shows [count]; Android launchers
+     * badge from the notifications in the tray, so at 0 the message and notification ones are cleared.
+     */
+    fun setAppBadge(count: Int)
+
+    /** Takes a conversation's notifications out of the tray once it has been read. */
+    fun clearChatNotifications(chatId: String)
+
     /** The installed version, as shown to people, e.g. "1.0". */
     val appVersion: String
 }

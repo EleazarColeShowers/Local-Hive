@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +43,7 @@ private const val PIN_WINDOW_MILLIS = 7 * 24 * 60 * 60 * 1000L
 /** An emergency nobody marks resolved stops being pinned after this. */
 private const val EMERGENCY_WINDOW_MILLIS = 24 * 60 * 60 * 1000L
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FeedScreen(
     uiState: FeedUiState,
@@ -59,6 +61,8 @@ fun FeedScreen(
     onUtilities: () -> Unit = {},
     onPolls: () -> Unit = {},
     onDues: () -> Unit = {},
+    onRefresh: () -> Unit = {},
+    onRefreshErrorShown: () -> Unit = {},
 ) {
     // Saved by name: an enum's name survives process death on every platform.
     var filterName by rememberSaveable { mutableStateOf(FeedFilter.ALL.name) }
@@ -78,119 +82,146 @@ fun FeedScreen(
             }
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 16.dp)
-    ) {
-        item(key = "header") {
-            ScreenHeader(title = uiState.estateName ?: "LocalHive", action = {
-                if (uiState.estateId != null) SosButton(onClick = onEmergency)
-            })
-        }
-        val emergencies = uiState.posts.filter {
-            it.category == PostCategory.EMERGENCY.key
-                && it.incidentStatus != IncidentStatus.RESOLVED.key
-                && nowMillis() - it.createdAt < EMERGENCY_WINDOW_MILLIS
-        }
-        items(emergencies, key = { "emergency-${it.id}" }) { post ->
-            EmergencyBanner(
-                post = post,
-                onClick = { onPostClick(post.id) },
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-            )
-        }
-        if (uiState.estateId != null) item(key = "glance") {
-            EstateGlance(
-                utilities = utilities,
-                polls = polls,
-                dues = dues,
-                onUtilities = onUtilities,
-                onPolls = onPolls,
-                onDues = onDues,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)
-            )
-        }
-        item(key = "compose") {
-            ComposePrompt(
-                name = uiState.currentUserName,
-                photoUrl = uiState.currentUserImageUrl,
-                onClick = onCreatePost
-            )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        }
-        if (uiState.posts.isNotEmpty() || filter != FeedFilter.ALL) item(key = "filters") {
-            FeedFilterRow(selected = filter, onSelect = { filterName = it.name })
-        }
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(uiState.refreshError) {
+        val error = uiState.refreshError ?: return@LaunchedEffect
+        onRefreshErrorShown()
+        snackbar.showSnackbar(error)
+    }
 
-        when {
-            uiState.isLoading && uiState.posts.isEmpty() -> item(key = "loading") {
-                Box(modifier = Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = accent)
+    Box(modifier = Modifier.fillMaxSize()) {
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 16.dp)
+            ) {
+                item(key = "header") {
+                    ScreenHeader(title = uiState.estateName ?: "LocalHive", action = {
+                        if (uiState.estateId != null) SosButton(onClick = onEmergency)
+                    })
                 }
-            }
-            uiState.posts.isEmpty() -> item(key = "empty") {
-                EmptyState(
-                    icon = Icons.Outlined.Forum,
-                    title = "No posts yet",
-                    message = "Be the first to share something with your neighbours.",
-                    modifier = Modifier.padding(top = 48.dp)
-                )
-            }
-            uiState.posts.none(filter::matches) -> item(key = "empty-filter") {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(top = 40.dp, start = 24.dp, end = 24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        "No ${filter.label.lowercase()} posts yet",
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    if (uiState.hasMorePosts) {
-                        TextButton(onClick = onLoadMore, enabled = !uiState.isLoadingMore) { Text("Look further back") }
-                    }
+                val emergencies = uiState.posts.filter {
+                    it.category == PostCategory.EMERGENCY.key
+                        && it.incidentStatus != IncidentStatus.RESOLVED.key
+                        && nowMillis() - it.createdAt < EMERGENCY_WINDOW_MILLIS
                 }
-            }
-            else -> {
-                val shown = uiState.posts.filter(filter::matches)
-                // The newest recent announcement sits above everything; the rest stay in date order.
-                val pinned = shown.firstOrNull {
-                    it.category == PostCategory.ANNOUNCEMENT.key && nowMillis() - it.createdAt < PIN_WINDOW_MILLIS
-                }
-                val ordered = listOfNotNull(pinned) + shown.filter { it.id != pinned?.id }
-                items(ordered, key = { it.id }) { post ->
-                    PostCard(
+                items(emergencies, key = { "emergency-${it.id}" }) { post ->
+                    EmergencyBanner(
                         post = post,
-                        currentUserId = uiState.currentUserId ?: "",
-                        onLike = { onLike(post.id) },
-                        onCommentClick = { onPostClick(post.id) },
                         onClick = { onPostClick(post.id) },
-                        authorIsAdmin = post.authorId in uiState.adminIds,
-                        pinned = post.id == pinned?.id,
-                        onMentionClick = onUserClick,
-                        onEdit = { onEditPost(post.id) }.takeIf { post.authorId == uiState.currentUserId },
-                        onDelete = { reason: String -> onDeletePost(post.id, reason) }.takeIf { post.authorId == uiState.currentUserId || uiState.isAdmin }
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                     )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
                 }
-                // A filtered list can be too short to scroll, so it offers older posts itself.
-                if (filter != FeedFilter.ALL && uiState.hasMorePosts && !uiState.isLoadingMore) {
-                    item(key = "older") {
-                        Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
-                            TextButton(onClick = onLoadMore) { Text("Load older posts") }
+                if (uiState.estateId != null) item(key = "glance") {
+                    EstateGlance(
+                        utilities = utilities,
+                        polls = polls,
+                        dues = dues,
+                        onUtilities = onUtilities,
+                        onPolls = onPolls,
+                        onDues = onDues,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)
+                    )
+                }
+                item(key = "compose") {
+                    ComposePrompt(
+                        name = uiState.currentUserName,
+                        photoUrl = uiState.currentUserImageUrl,
+                        onClick = onCreatePost
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+                if (uiState.posts.isNotEmpty() || filter != FeedFilter.ALL) item(key = "filters") {
+                    FeedFilterRow(selected = filter, onSelect = { filterName = it.name })
+                }
+
+                when {
+                    uiState.isLoading && uiState.posts.isEmpty() -> item(key = "loading") {
+                        Box(modifier = Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = accent)
                         }
                     }
-                }
-                if (uiState.isLoadingMore) {
-                    item(key = "more") {
-                        Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = accent, strokeWidth = 2.dp)
+                    uiState.posts.isEmpty() -> item(key = "empty") {
+                        EmptyState(
+                            icon = Icons.Outlined.Forum,
+                            title = "No posts yet",
+                            message = "Say hi to your neighbours, or share something happening around the estate.",
+                            modifier = Modifier.padding(top = 48.dp),
+                            actionLabel = "Write a post",
+                            onAction = onCreatePost
+                        )
+                    }
+                    uiState.posts.none(filter::matches) -> item(key = "empty-filter") {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(top = 40.dp, start = 24.dp, end = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                "No ${filter.label.lowercase()} posts yet",
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Text(
+                                if (uiState.hasMorePosts) "There may be some further back." else "Nothing in this category so far.",
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                                if (uiState.hasMorePosts) {
+                                    TextButton(onClick = onLoadMore, enabled = !uiState.isLoadingMore) { Text("Look further back") }
+                                }
+                                TextButton(onClick = { filterName = FeedFilter.ALL.name }) { Text("Show all posts") }
+                            }
+                        }
+                    }
+                    else -> {
+                        val shown = uiState.posts.filter(filter::matches)
+                        // The newest recent announcement sits above everything; the rest stay in date order.
+                        val pinned = shown.firstOrNull {
+                            it.category == PostCategory.ANNOUNCEMENT.key && nowMillis() - it.createdAt < PIN_WINDOW_MILLIS
+                        }
+                        val ordered = listOfNotNull(pinned) + shown.filter { it.id != pinned?.id }
+                        items(ordered, key = { it.id }) { post ->
+                            PostCard(
+                                post = post,
+                                currentUserId = uiState.currentUserId ?: "",
+                                onLike = { onLike(post.id) },
+                                onCommentClick = { onPostClick(post.id) },
+                                onClick = { onPostClick(post.id) },
+                                authorIsAdmin = post.authorId in uiState.adminIds,
+                                pinned = post.id == pinned?.id,
+                                onMentionClick = onUserClick,
+                                onEdit = { onEditPost(post.id) }.takeIf { post.authorId == uiState.currentUserId },
+                                onDelete = { reason: String -> onDeletePost(post.id, reason) }.takeIf { post.authorId == uiState.currentUserId || uiState.isAdmin }
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                        }
+                        // A filtered list can be too short to scroll, so it offers older posts itself.
+                        if (filter != FeedFilter.ALL && uiState.hasMorePosts && !uiState.isLoadingMore) {
+                            item(key = "older") {
+                                Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
+                                    TextButton(onClick = onLoadMore) { Text("Load older posts") }
+                                }
+                            }
+                        }
+                        if (uiState.isLoadingMore) {
+                            item(key = "more") {
+                                Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = accent, strokeWidth = 2.dp)
+                                }
+                            }
                         }
                     }
                 }
             }
         }
+        SnackbarHost(snackbar, modifier = Modifier.align(Alignment.BottomCenter))
     }
 }
 

@@ -23,6 +23,8 @@ data class MessagesUiState(
     /** Conversations with at least one message, most recent first. */
     val chats: List<Chat> = emptyList(),
     val isLoadingChats: Boolean = true,
+    /** Pull to refresh is reconnecting the chat list. */
+    val isRefreshingChats: Boolean = false,
     val chatsError: String? = null,
     /** Names and photos of the people the user talks to, keyed by user id. */
     val peers: Map<String, ChatPeer> = emptyMap(),
@@ -43,6 +45,9 @@ data class MessagesUiState(
 
 private const val MESSAGE_PAGE_SIZE = 30L
 
+/** While someone keeps typing, their "typing" mark is renewed this often. */
+const val TYPING_REFRESH_MILLIS = 4_000L
+
 class MessagesViewModel(
     private val messageRepository: MessageRepository,
     private val authRepository: AuthRepository,
@@ -57,6 +62,8 @@ class MessagesViewModel(
     private var messagesJob: Job? = null
     private var chatsJob: Job? = null
     private val requestedPeers = mutableSetOf<String>()
+    /** When this phone last told the other person the user is typing; 0 when it hasn't. */
+    private var typingSentAt = 0L
 
     init {
         val userId = authRepository.getCurrentUserId()
@@ -76,11 +83,11 @@ class MessagesViewModel(
     }
 
     /** Fetches the profile behind [userId] once, for names and avatars. */
-    fun loadPeer(userId: String) {
+    fun loadPeer(userId: String, fresh: Boolean = false) {
         if (userId.isBlank() || !requestedPeers.add(userId)) return
         viewModelScope.launch {
             // Names and photos change rarely; a cached copy beats waiting on the network.
-            userRepository.getUser(userId, cacheFirst = true)
+            userRepository.getUser(userId, cacheFirst = !fresh)
                 .onSuccess { user ->
                     val peer = ChatPeer(
                         name = user.displayName?.takeIf { it.isNotBlank() }
@@ -93,7 +100,7 @@ class MessagesViewModel(
         }
     }
 
-    private fun loadChats(userId: String) {
+    private fun loadChats(userId: String, freshPeers: Boolean = false) {
         chatsJob?.cancel()
         chatsJob = viewModelScope.launch {
             // Conversations with blocked people drop out of the list (and the unread badge).
@@ -104,7 +111,11 @@ class MessagesViewModel(
                 }
                 .catch { e ->
                     _uiState.update {
-                        it.copy(isLoadingChats = false, chatsError = e.message ?: "Couldn't load your messages")
+                        it.copy(
+                            isLoadingChats = false,
+                            isRefreshingChats = false,
+                            chatsError = e.message ?: "Couldn't load your messages"
+                        )
                     }
                 }
                 .collect { chats ->
@@ -114,13 +125,23 @@ class MessagesViewModel(
                         it.copy(
                             chats = started,
                             isLoadingChats = false,
+                            isRefreshingChats = false,
                             chatsError = null,
                             totalUnread = started.sumOf { chat -> chat.unreadFor(userId) }
                         )
                     }
-                    started.forEach { chat -> loadPeer(chat.otherParticipant(userId)) }
+                    started.forEach { chat -> loadPeer(chat.otherParticipant(userId), fresh = freshPeers) }
                 }
         }
+    }
+
+    /** Pull to refresh: reconnects the chat list and fetches names and photos afresh. */
+    fun refreshChats() {
+        val userId = _uiState.value.currentUserId ?: return
+        if (_uiState.value.isRefreshingChats) return
+        _uiState.update { it.copy(isRefreshingChats = true) }
+        requestedPeers.clear()
+        loadChats(userId, freshPeers = true)
     }
 
     fun retryChats() {
@@ -197,12 +218,41 @@ class MessagesViewModel(
      * badge does not reappear for a conversation the user is already reading.
      */
     fun markChatRead(chatId: String) {
-        val userId = _uiState.value.currentUserId ?: return
-        val chat = _uiState.value.chats.find { it.id == chatId } ?: return
-        if (chat.unreadFor(userId) == 0) return
+        val state = _uiState.value
+        val userId = state.currentUserId ?: return
+        val chat = state.chats.find { it.id == chatId } ?: return
+        val seen = chat.readUpTo[userId] ?: 0L
+        val newest = state.messages.firstOrNull { it.chatId == chatId }?.timestamp ?: 0L
+        if (chat.unreadFor(userId) == 0 && newest <= seen) return
         viewModelScope.launch {
-            messageRepository.markChatRead(chatId, userId)
+            messageRepository.markChatRead(chatId, userId, maxOf(newest, seen))
         }
+    }
+
+    /**
+     * The composer's text changed: tells the other person the user is typing, renewed every
+     * few seconds while they keep at it rather than on every key, or that they've stopped.
+     */
+    fun onDraftChanged(chatId: String, text: String) {
+        if (text.isBlank()) {
+            stopTyping(chatId)
+            return
+        }
+        val userId = _uiState.value.currentUserId ?: return
+        // A chat with no messages has no document to write to yet.
+        if (_uiState.value.chats.none { it.id == chatId }) return
+        val now = nowMillis()
+        if (now - typingSentAt < TYPING_REFRESH_MILLIS) return
+        typingSentAt = now
+        viewModelScope.launch { messageRepository.setTyping(chatId, userId, now) }
+    }
+
+    /** Clears the user's typing mark, e.g. when they empty the box or leave the chat. */
+    fun stopTyping(chatId: String) {
+        if (typingSentAt == 0L) return
+        typingSentAt = 0L
+        val userId = _uiState.value.currentUserId ?: return
+        viewModelScope.launch { messageRepository.setTyping(chatId, userId, 0L) }
     }
 
     fun sendMessage(chatId: String, content: String) {
@@ -217,6 +267,8 @@ class MessagesViewModel(
             (state.peers[otherUserId]?.name ?: state.chats.find { it.id == chatId }?.participantNames?.get(otherUserId))
                 ?.let { put(otherUserId, it) }
         }
+        // The send itself clears the typing mark.
+        typingSentAt = 0L
         val message = Message(
             chatId = chatId,
             senderId = userId,

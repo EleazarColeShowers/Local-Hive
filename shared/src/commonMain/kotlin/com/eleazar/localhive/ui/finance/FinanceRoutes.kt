@@ -39,7 +39,8 @@ fun FinancesRoute(
         onSaveBank = viewModel::saveBankDetails,
         onRemoveBank = viewModel::removeBankDetails,
         onMessageShown = viewModel::consumeMessage,
-        onErrorShown = viewModel::consumeError
+        onErrorShown = viewModel::consumeError,
+        onRefresh = viewModel::refresh
     )
 }
 

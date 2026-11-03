@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.Flow
 interface PostRepository {
     fun getPostsForEstate(estateId: String, limit: Long = 20): Flow<List<Post>>
     suspend fun getMorePostsForEstate(estateId: String, before: Long, limit: Long = 20): Result<List<Post>>
+    /** The newest posts straight from the server, skipping the phone's saved copy; fails offline. */
+    suspend fun fetchLatestPosts(estateId: String, limit: Long = 20): Result<List<Post>>
     /** Returns the new post's id. An emergency's push is sent separately, with [alertEmergency]. */
     suspend fun createPost(post: Post): Result<String>
     /**
@@ -25,6 +27,8 @@ interface PostRepository {
     fun getComments(postId: String): Flow<List<Comment>>
     /** Returns the new comment's id. */
     suspend fun addComment(comment: Comment): Result<String>
+    /** Removes a comment; open to its author, the post's author and the estate's admins. */
+    suspend fun deleteComment(postId: String, commentId: String): Result<Unit>
     suspend fun toggleLike(postId: String, userId: String, currentlyLiked: Boolean): Result<Unit>
     /** Moves a security report or emergency along; open to its reporter and the estate's admins. */
     /** The user is on their way to help with an emergency; tells the person who raised it. */

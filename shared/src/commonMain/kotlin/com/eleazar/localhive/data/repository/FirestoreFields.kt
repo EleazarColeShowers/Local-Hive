@@ -25,6 +25,8 @@ internal fun DocumentSnapshot.stringMap(field: String): Map<String, String>? = r
 
 internal fun DocumentSnapshot.intMap(field: String): Map<String, Int>? = read(field) { get<Map<String, Int>?>(it) }
 
+internal fun DocumentSnapshot.longMap(field: String): Map<String, Long>? = read(field) { get<Map<String, Long>?>(it) }
+
 private inline fun <T> DocumentSnapshot.read(field: String, reader: DocumentSnapshot.(String) -> T?): T? =
     if (!contains(field)) null else runCatching { reader(field) }.getOrNull()
 

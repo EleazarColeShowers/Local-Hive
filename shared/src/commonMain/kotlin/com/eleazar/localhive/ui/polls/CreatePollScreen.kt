@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.polls
 
+import com.eleazar.localhive.ui.components.charactersLeftSupport
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +19,8 @@ import androidx.compose.ui.unit.sp
 import com.eleazar.localhive.ui.components.ScreenGutter
 
 private const val DAY_MILLIS = 24 * 60 * 60 * 1000L
+
+private const val MAX_QUESTION_LENGTH = 200
 
 /** How long voting stays open; null runs until an admin closes it. */
 private enum class PollLength(val label: String, val millis: Long?) {
@@ -80,8 +83,9 @@ fun CreatePollScreen(
             Spacer(Modifier.height(16.dp))
             OutlinedTextField(
                 value = question,
-                onValueChange = { question = it.take(200) },
+                onValueChange = { question = it.take(MAX_QUESTION_LENGTH) },
                 label = { Text("Question") },
+                supportingText = charactersLeftSupport(question.length, MAX_QUESTION_LENGTH),
                 placeholder = { Text("e.g. Should we raise the security levy to ₦10,000?") },
                 minLines = 2,
                 enabled = !uiState.isSaving,

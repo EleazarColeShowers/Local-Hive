@@ -32,6 +32,7 @@ import coil3.compose.AsyncImage
 import com.eleazar.localhive.domain.model.PostCategory
 import com.eleazar.localhive.ui.components.Avatar
 import com.eleazar.localhive.ui.components.CategoryTag
+import com.eleazar.localhive.ui.components.CharactersLeft
 import com.eleazar.localhive.ui.components.MentionSuggestionList
 import com.eleazar.localhive.ui.components.ScreenGutter
 import com.eleazar.localhive.ui.components.activeMentionQuery
@@ -168,15 +169,7 @@ fun CreatePostScreen(
                             }
                         }
                         Spacer(Modifier.weight(1f))
-                        val remaining = MAX_POST_LENGTH - content.length
-                        if (remaining <= 200) {
-                            Text(
-                                "$remaining",
-                                fontSize = 13.sp,
-                                color = if (remaining <= 20) MaterialTheme.colorScheme.error else muted,
-                                modifier = Modifier.padding(end = 12.dp)
-                            )
-                        }
+                        CharactersLeft(content.length, MAX_POST_LENGTH, Modifier.padding(end = 12.dp))
                     }
                 }
             }

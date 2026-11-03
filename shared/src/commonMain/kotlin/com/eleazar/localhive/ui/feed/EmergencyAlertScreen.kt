@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.feed
 
+import com.eleazar.localhive.ui.components.charactersLeftSupport
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.selection.selectableGroup
@@ -49,6 +50,8 @@ private val HoldFill = Color(0xFF7F0000)
 
 /** Long enough that a pocket or a stray tap can't send it, short enough not to slow anyone down. */
 private const val HOLD_MILLIS = 1500
+
+private const val MAX_DETAILS_LENGTH = 500
 
 /**
  * The SOS screen: what's happening and where, then a press-and-hold button that alerts the whole
@@ -166,8 +169,9 @@ fun EmergencyAlertScreen(
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = details,
-                onValueChange = { details = it.take(500) },
+                onValueChange = { details = it.take(MAX_DETAILS_LENGTH) },
                 label = { Text("Anything else? (optional)") },
+                supportingText = charactersLeftSupport(details.length, MAX_DETAILS_LENGTH),
                 placeholder = { Text("e.g. Two men climbing the back fence") },
                 minLines = 2,
                 maxLines = 4,

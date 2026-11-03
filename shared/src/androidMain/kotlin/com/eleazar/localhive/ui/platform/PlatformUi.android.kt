@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.platform
 
+import android.app.NotificationManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -92,8 +93,28 @@ private class AndroidPlatformActions(private val context: Context) : PlatformAct
         context.startActivity(Intent.createChooser(intent, title))
     }
 
+    override fun setAppBadge(count: Int) {
+        if (count > 0) return
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        // An SOS and other estate-wide alerts stay until they're dealt with.
+        runCatching { manager.activeNotifications }.getOrNull().orEmpty()
+            .filter { it.tag?.startsWith(CHAT_TAG) == true || it.tag?.startsWith(NOTIFICATION_TAG) == true }
+            .forEach { manager.cancel(it.tag, it.id) }
+    }
+
+    override fun clearChatNotifications(chatId: String) {
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        // Tagged and numbered this way by the app's messaging service, from the Worker's tag.
+        val tag = "$CHAT_TAG$chatId"
+        manager.cancel(tag, tag.hashCode())
+    }
+
     override val appVersion: String
         get() = runCatching {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
         }.getOrNull() ?: "—"
 }
+
+/** Tag prefixes the Worker gives message and in-app notification pushes. */
+private const val CHAT_TAG = "chat-"
+private const val NOTIFICATION_TAG = "notification-"

@@ -19,6 +19,8 @@ import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -67,6 +69,7 @@ private val RowPadding = 12.dp
  * Bare UI for the messages list screen.
  * Free of ViewModel, Android Context, or navigation side effects.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessagesScreen(
     chats: List<Chat>,
@@ -79,7 +82,9 @@ fun MessagesScreen(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
     colors: MessagesColors = rememberMessagesColors(),
-    formatTime: (Long) -> String = { relativeTime(it) }
+    formatTime: (Long) -> String = { relativeTime(it) },
+    isRefreshing: Boolean = false,
+    onRefresh: () -> Unit = {}
 ) {
     Column(modifier = modifier.fillMaxSize()) {
         ScreenHeader(
@@ -92,45 +97,47 @@ fun MessagesScreen(
             }
         )
 
-        when {
-            isLoading && chats.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = colors.hiveGreen)
-            }
-            error != null && chats.isEmpty() -> EmptyState(
-                icon = Icons.Outlined.CloudOff,
-                title = "Couldn't load your messages",
-                message = "Check your connection and try again.",
-                actionLabel = "Try again",
-                onAction = onRetry
-            )
-            chats.isEmpty() -> EmptyState(
-                icon = Icons.AutoMirrored.Outlined.Chat,
-                title = "No conversations yet",
-                message = "Say hello to someone in your estate. Your chats will show up here.",
-                actionLabel = "Find neighbours",
-                onAction = onNewMessage
-            )
-            else -> LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 16.dp)
-            ) {
-                items(chats, key = { it.id }) { chat ->
-                    val otherId = chat.otherParticipant(currentUserId)
-                    ChatRow(
-                        chat = chat,
-                        // A cached profile would keep showing a deleted account's old name and photo.
-                        peer = peers[otherId].takeUnless { otherId in chat.deletedParticipants },
-                        fallbackName = chat.participantNames[otherId],
-                        currentUserId = currentUserId ?: "",
-                        colors = colors,
-                        formatTime = formatTime,
-                        onClick = { onChatClick(chat.id) }
-                    )
-                    // Inset to the text column so dividers line up under names, not avatars.
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = ScreenGutter + AVATAR_SIZE.dp + RowPadding),
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f)
-                    )
+        PullToRefreshBox(isRefreshing = isRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+            when {
+                isLoading && chats.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = colors.hiveGreen)
+                }
+                error != null && chats.isEmpty() -> EmptyState(
+                    icon = Icons.Outlined.CloudOff,
+                    title = "Couldn't load your messages",
+                    message = "Check your connection and try again.",
+                    actionLabel = "Try again",
+                    onAction = onRetry
+                )
+                chats.isEmpty() -> EmptyState(
+                    icon = Icons.AutoMirrored.Outlined.Chat,
+                    title = "No conversations yet",
+                    message = "Say hello to someone in your estate. Your chats will show up here.",
+                    actionLabel = "Find neighbours",
+                    onAction = onNewMessage
+                )
+                else -> LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 16.dp)
+                ) {
+                    items(chats, key = { it.id }) { chat ->
+                        val otherId = chat.otherParticipant(currentUserId)
+                        ChatRow(
+                            chat = chat,
+                            // A cached profile would keep showing a deleted account's old name and photo.
+                            peer = peers[otherId].takeUnless { otherId in chat.deletedParticipants },
+                            fallbackName = chat.participantNames[otherId],
+                            currentUserId = currentUserId ?: "",
+                            colors = colors,
+                            formatTime = formatTime,
+                            onClick = { onChatClick(chat.id) }
+                        )
+                        // Inset to the text column so dividers line up under names, not avatars.
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = ScreenGutter + AVATAR_SIZE.dp + RowPadding),
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f)
+                        )
+                    }
                 }
             }
         }

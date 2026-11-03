@@ -28,6 +28,8 @@ data class MemberPayment(
 /** Everything the dues, levy, and expense screens render. */
 data class FinanceUiState(
     val isLoading: Boolean = true,
+    /** Pull to refresh is reconnecting the lists. */
+    val isRefreshing: Boolean = false,
     val currentUserId: String? = null,
     val estateId: String? = null,
     /** For receipts. */

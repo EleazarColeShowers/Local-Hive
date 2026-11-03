@@ -49,6 +49,8 @@ class FinanceViewModel(
     private var me: User? = null
     private var treasurerId: String = ""
     private var levyJob: Job? = null
+    private var leviesJob: Job? = null
+    private var expensesJob: Job? = null
 
     /** Settles once the user and their estate are known; everything else waits on it. */
     private val estateId = MutableStateFlow<String?>(null)
@@ -96,7 +98,8 @@ class FinanceViewModel(
 
     /** Starts the levy list. Each levy carries the user's own standing, or totals for the treasurer. */
     fun loadLevies() {
-        viewModelScope.launch {
+        leviesJob?.cancel()
+        leviesJob = viewModelScope.launch {
             val estate = estateId.filterNotNull().first()
             val userId = _uiState.value.currentUserId ?: return@launch
             combine(isTreasurer, financeRepository.observeLevies(estate)) { treasurer, levies -> treasurer to levies }
@@ -104,8 +107,8 @@ class FinanceViewModel(
                     if (levies.isEmpty()) flowOf(emptyList())
                     else combine(levies.map { levyRow(estate, it, userId, treasurer) }) { it.toList() }
                 }
-                .catch { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
-                .collect { rows -> _uiState.update { it.copy(levies = rows, isLoading = false) } }
+                .catch { e -> _uiState.update { it.copy(isLoading = false, isRefreshing = false, error = e.message) } }
+                .collect { rows -> _uiState.update { it.copy(levies = rows, isLoading = false, isRefreshing = false) } }
         }
     }
 
@@ -124,12 +127,21 @@ class FinanceViewModel(
         }.catch { emit(LevyRow(levy)) }
 
     fun loadExpenses() {
-        viewModelScope.launch {
+        expensesJob?.cancel()
+        expensesJob = viewModelScope.launch {
             val estate = estateId.filterNotNull().first()
             financeRepository.observeExpenses(estate)
-                .catch { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
-                .collect { expenses -> _uiState.update { it.copy(expenses = expenses, isLoading = false) } }
+                .catch { e -> _uiState.update { it.copy(isLoading = false, isRefreshing = false, error = e.message) } }
+                .collect { expenses -> _uiState.update { it.copy(expenses = expenses, isLoading = false, isRefreshing = false) } }
         }
+    }
+
+    /** Pull to refresh: reconnects the dues and expenses lists. */
+    fun refresh() {
+        if (_uiState.value.isRefreshing || _uiState.value.estateId == null) return
+        _uiState.update { it.copy(isRefreshing = true) }
+        loadLevies()
+        loadExpenses()
     }
 
     /**

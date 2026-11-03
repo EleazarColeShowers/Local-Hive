@@ -152,6 +152,40 @@ class FeedViewModel(
         }
     }
 
+    /**
+     * Pull to refresh: the newest page straight from the server, dropping older pages so the feed
+     * starts over from the top. The live listener keeps it current from there.
+     */
+    fun refresh() {
+        val state = _uiState.value
+        val estateId = state.estateId ?: return
+        if (state.isRefreshing) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshing = true, refreshError = null) }
+            postRepository.fetchLatestPosts(estateId, POST_PAGE_SIZE)
+                .onSuccess { fresh ->
+                    livePosts = fresh
+                    olderPosts = emptyList()
+                    _uiState.update {
+                        it.copy(
+                            posts = mergePosts(),
+                            isRefreshing = false,
+                            hasMorePosts = fresh.size.toLong() == POST_PAGE_SIZE
+                        )
+                    }
+                }
+                .onFailure {
+                    _uiState.update {
+                        it.copy(isRefreshing = false, refreshError = "Couldn't refresh. Check your connection and try again.")
+                    }
+                }
+        }
+    }
+
+    fun consumeRefreshError() {
+        _uiState.update { it.copy(refreshError = null) }
+    }
+
     private fun mergePosts(): List<Post> {
         val merged = LinkedHashMap<String, Post>()
         livePosts.forEach { merged[it.id] = it }
@@ -411,6 +445,17 @@ class FeedViewModel(
             postRepository.addComment(comment).onSuccess { commentId ->
                 state.estateId?.let { notifyMentioned(mentions.keys, it, postId, commentId, content) }
             }
+        }
+    }
+
+    /**
+     * Removes a comment. Its author, the post's author and the estate's admins can; the comments
+     * listener drops it from the screen straight away.
+     */
+    fun deleteComment(postId: String, commentId: String) {
+        viewModelScope.launch {
+            postRepository.deleteComment(postId, commentId)
+                .onFailure { e -> _uiState.update { it.copy(error = e.message ?: "Couldn't delete the comment") } }
         }
     }
 

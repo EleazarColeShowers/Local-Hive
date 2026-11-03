@@ -12,6 +12,7 @@ import com.eleazar.localhive.ui.util.nowMillis
 import dev.gitlive.firebase.firestore.Direction
 import dev.gitlive.firebase.firestore.FieldValue
 import dev.gitlive.firebase.firestore.FirebaseFirestore
+import dev.gitlive.firebase.firestore.Source
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -41,6 +42,15 @@ class PostRepositoryImpl(
             .startAfter(before)
             .limit(limit)
             .get()
+            .documents.map { it.toPost() }
+    }
+
+    override suspend fun fetchLatestPosts(estateId: String, limit: Long): Result<List<Post>> = runCatching {
+        posts
+            .where { "estateId" equalTo estateId }
+            .orderBy("createdAt", Direction.DESCENDING)
+            .limit(limit)
+            .get(Source.SERVER)
             .documents.map { it.toPost() }
     }
 
@@ -125,6 +135,14 @@ class PostRepositoryImpl(
         ref.set(comment.toMap())
         posts.document(comment.postId).update("commentCount" to FieldValue.increment(1))
         ref.id
+    }
+
+    override suspend fun deleteComment(postId: String, commentId: String): Result<Unit> = runCatching {
+        val post = posts.document(postId)
+        firestore.batch()
+            .delete(post.collection("comments").document(commentId))
+            .update(post, "commentCount" to FieldValue.increment(-1))
+            .commit()
     }
 
     override suspend fun toggleLike(postId: String, userId: String, currentlyLiked: Boolean): Result<Unit> = runCatching {

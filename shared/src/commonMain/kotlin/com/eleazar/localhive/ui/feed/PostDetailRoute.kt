@@ -37,6 +37,7 @@ fun PostDetailRoute(
         onEditPost = { onEditPost(postId) },
         onDeletePost = { reason -> viewModel.deletePost(postId, reason) },
         onRespond = { viewModel.respondToEmergency(postId) },
-        onMarkSafe = { viewModel.markSafe(postId) }
+        onMarkSafe = { viewModel.markSafe(postId) },
+        onDeleteComment = { commentId -> viewModel.deleteComment(postId, commentId) }
     )
 }

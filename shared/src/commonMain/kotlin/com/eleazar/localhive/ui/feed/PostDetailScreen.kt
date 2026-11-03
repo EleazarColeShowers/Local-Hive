@@ -24,7 +24,15 @@ import androidx.compose.material.icons.filled.CheckCircle
 import com.eleazar.localhive.ui.components.readable
 import com.eleazar.localhive.ui.theme.AlertRed
 import com.eleazar.localhive.ui.theme.HiveGreen
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.ui.draw.clip
+import com.eleazar.localhive.domain.model.Comment
 import com.eleazar.localhive.ui.components.Avatar
+import com.eleazar.localhive.ui.components.CharactersLeft
+import com.eleazar.localhive.ui.platform.rememberPlatformActions
 import com.eleazar.localhive.ui.components.LinkifiedText
 import com.eleazar.localhive.ui.components.MentionSuggestionList
 import com.eleazar.localhive.ui.components.activeMentionQuery
@@ -53,6 +61,7 @@ fun PostDetailScreen(
     onDeletePost: (reason: String) -> Unit = {},
     onRespond: () -> Unit = {},
     onMarkSafe: () -> Unit = {},
+    onDeleteComment: (commentId: String) -> Unit = {},
 ) {
     var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
     val commentText = draft.text
@@ -78,6 +87,11 @@ fun PostDetailScreen(
             Surface(color = MaterialTheme.colorScheme.surface) {
                 Column(modifier = Modifier.navigationBarsPadding().imePadding()) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    CharactersLeft(
+                        commentText.length,
+                        MAX_COMMENT_LENGTH,
+                        Modifier.fillMaxWidth().padding(start = 16.dp, end = 76.dp, top = 6.dp)
+                    )
                     if (mentionQuery != null && suggestions.isNotEmpty()) {
                         MentionSuggestionList(suggestions, onPick = { member ->
                             draft = insertMention(draft, mentionQuery, member)
@@ -194,7 +208,7 @@ fun PostDetailScreen(
 
             item(key = "comments-header") {
                 Text(
-                    if (uiState.comments.isEmpty()) "No comments yet" else "Comments · ${uiState.comments.size}",
+                    if (uiState.comments.isEmpty()) "No comments yet. Be the first to reply." else "Comments · ${uiState.comments.size}",
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 15.sp,
                     color = if (uiState.comments.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onBackground,
@@ -202,54 +216,122 @@ fun PostDetailScreen(
                 )
             }
             items(uiState.comments, key = { it.id }) { comment ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenGutter, vertical = 6.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Avatar(imageUrl = null, name = comment.authorName, size = 34.dp)
-                    Spacer(Modifier.width(10.dp))
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        modifier = Modifier.weight(1f, fill = false)
-                    ) {
-                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    comment.authorName.ifBlank { "Neighbour" },
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                if (comment.authorId in uiState.adminIds) {
-                                    Spacer(Modifier.width(6.dp))
-                                    RoleBadge()
-                                }
-                                val time = relativeTime(comment.createdAt)
-                                if (time.isNotEmpty()) {
-                                    Text(
-                                        "  ·  $time",
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.height(2.dp))
-                            LinkifiedText(
-                                comment.content,
-                                fontSize = 14.sp,
-                                lineHeight = 20.sp,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                linkColor = accent,
-                                mentions = comment.mentions,
-                                onMentionClick = onUserClick,
-                                selectable = true
+                val me = uiState.currentUserId
+                CommentRow(
+                    comment = comment,
+                    authorIsAdmin = comment.authorId in uiState.adminIds,
+                    // Matches who the rules let delete a comment.
+                    canDelete = me != null && (
+                        comment.authorId == me || uiState.selectedPost?.authorId == me || uiState.isAdmin
+                    ),
+                    onUserClick = onUserClick,
+                    onDelete = { onDeleteComment(comment.id) }
+                )
+            }
+        }
+    }
+}
+
+/** One comment. A long press offers to copy it, and to delete it for those allowed to. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun CommentRow(
+    comment: Comment,
+    authorIsAdmin: Boolean,
+    canDelete: Boolean,
+    onUserClick: (userId: String) -> Unit,
+    onDelete: () -> Unit
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    val platform = rememberPlatformActions()
+    var menuOpen by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenGutter, vertical = 6.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Avatar(imageUrl = null, name = comment.authorName, size = 34.dp)
+        Spacer(Modifier.width(10.dp))
+        Box(modifier = Modifier.weight(1f, fill = false)) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .combinedClickable(
+                        onClickLabel = null,
+                        onLongClickLabel = "Comment options",
+                        onClick = {},
+                        onLongClick = { menuOpen = true }
+                    )
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            comment.authorName.ifBlank { "Neighbour" },
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (authorIsAdmin) {
+                            Spacer(Modifier.width(6.dp))
+                            RoleBadge()
+                        }
+                        val time = relativeTime(comment.createdAt)
+                        if (time.isNotEmpty()) {
+                            Text(
+                                "  ·  $time",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                             )
                         }
                     }
+                    Spacer(Modifier.height(2.dp))
+                    LinkifiedText(
+                        comment.content,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        linkColor = accent,
+                        mentions = comment.mentions,
+                        onMentionClick = onUserClick
+                    )
+                }
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text("Copy") },
+                    leadingIcon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null) },
+                    onClick = {
+                        menuOpen = false
+                        platform.copyToClipboard("Comment", comment.content, "Copied")
+                    }
+                )
+                if (canDelete) {
+                    DropdownMenuItem(
+                        text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                        onClick = {
+                            menuOpen = false
+                            confirmDelete = true
+                        }
+                    )
                 }
             }
         }
+    }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete this comment?") },
+            text = { Text("It'll be removed for everyone. This can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = { confirmDelete = false; onDelete() }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } }
+        )
     }
 }
 

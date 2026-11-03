@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.Assessment
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -54,6 +55,7 @@ fun FinancesScreen(
     onRemoveBank: () -> Unit,
     onMessageShown: () -> Unit,
     onErrorShown: () -> Unit,
+    onRefresh: () -> Unit = {},
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var openExpense by remember { mutableStateOf<Expense?>(null) }
@@ -147,12 +149,14 @@ fun FinancesScreen(
                 Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Dues") }, unselectedContentColor = idle)
                 Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Expenses") }, unselectedContentColor = idle)
             }
-            when {
-                uiState.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+            PullToRefreshBox(isRefreshing = uiState.isRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+                when {
+                    uiState.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                    tab == 0 -> LevyList(uiState, onLevyClick)
+                    else -> ExpenseList(uiState, onExpenseClick = { openExpense = it })
                 }
-                tab == 0 -> LevyList(uiState, onLevyClick)
-                else -> ExpenseList(uiState, onExpenseClick = { openExpense = it })
             }
         }
     }

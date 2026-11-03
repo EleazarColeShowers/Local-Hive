@@ -9,6 +9,10 @@ data class FeedUiState(
     val posts: List<Post> = emptyList(),
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
+    /** Pull to refresh is fetching the newest posts from the server. */
+    val isRefreshing: Boolean = false,
+    /** Why the last pull to refresh failed, shown once. */
+    val refreshError: String? = null,
     val hasMorePosts: Boolean = true,
     val error: String? = null,
     val currentUserId: String? = null,

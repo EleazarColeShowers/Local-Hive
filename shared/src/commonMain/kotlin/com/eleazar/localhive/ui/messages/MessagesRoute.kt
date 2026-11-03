@@ -23,6 +23,8 @@ fun MessagesRoute(
         onChatClick = onChatClick,
         onNewMessage = onNewMessage,
         onRetry = viewModel::retryChats,
+        isRefreshing = uiState.isRefreshingChats,
+        onRefresh = viewModel::refreshChats,
         colors = MessagesColors(hiveGreen = MaterialTheme.colorScheme.primary)
     )
 }

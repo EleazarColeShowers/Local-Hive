@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.notifications
 
+import com.eleazar.localhive.ui.components.EmptyState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -126,18 +127,11 @@ fun NotificationScreen(
         }
 
         if (notifications.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.Notifications,
-                        null,
-                        tint = dark.copy(alpha = 0.2f),
-                        modifier = Modifier.size(56.dp)
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text("No notifications yet", color = dark.copy(alpha = 0.4f), fontSize = 15.sp)
-                }
-            }
+            EmptyState(
+                icon = Icons.Default.Notifications,
+                title = "You're all caught up",
+                message = "When a neighbour tags you, a payment is confirmed or something needs you, it'll show up here."
+            )
             return
         }
 

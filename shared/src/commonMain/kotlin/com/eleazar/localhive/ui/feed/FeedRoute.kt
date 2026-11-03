@@ -54,6 +54,8 @@ fun FeedRoute(
         dues = if (finance.isLoading || finance.estateId == null) null else duesSummary(finance.levies, finance.isTreasurer),
         onUtilities = onUtilities,
         onPolls = onPolls,
-        onDues = onDues
+        onDues = onDues,
+        onRefresh = viewModel::refresh,
+        onRefreshErrorShown = viewModel::consumeRefreshError
     )
 }

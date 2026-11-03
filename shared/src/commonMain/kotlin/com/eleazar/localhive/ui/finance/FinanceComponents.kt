@@ -1,5 +1,11 @@
 package com.eleazar.localhive.ui.finance
 
+import androidx.compose.foundation.clickable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.eleazar.localhive.ui.components.ImageViewer
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -50,10 +56,14 @@ fun PaymentStatusLabel(status: PaymentStatus?, modifier: Modifier = Modifier) {
     )
 }
 
-/** A proof-of-payment screenshot or receipt, shown whole so amounts and names can be read. */
+/**
+ * A proof-of-payment screenshot or receipt, shown whole so amounts and names can be read. A tap
+ * opens it full screen to zoom in.
+ */
 @Composable
 fun ProofImage(url: Any, contentDescription: String, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(12.dp)
+    var viewing by remember { mutableStateOf(false) }
     AsyncImage(
         model = url,
         contentDescription = contentDescription,
@@ -63,5 +73,7 @@ fun ProofImage(url: Any, contentDescription: String, modifier: Modifier = Modifi
             .heightIn(max = 420.dp)
             .clip(shape)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+            .clickable(onClickLabel = "View full screen") { viewing = true }
     )
+    if (viewing) ImageViewer(url, onDismiss = { viewing = false })
 }

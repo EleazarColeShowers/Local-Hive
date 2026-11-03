@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -58,6 +59,7 @@ import coil3.compose.AsyncImage
 import com.eleazar.localhive.domain.model.EmergencyType
 import com.eleazar.localhive.domain.model.Post
 import com.eleazar.localhive.domain.model.PostCategory
+import com.eleazar.localhive.ui.platform.rememberPlatformActions
 import com.eleazar.localhive.ui.theme.AlertRed
 import com.eleazar.localhive.ui.theme.HoneyInk
 import com.eleazar.localhive.ui.util.relativeTime
@@ -88,7 +90,7 @@ fun PostCard(
     playVideo: Boolean = false,
     /** Opens a member tagged in the post. */
     onMentionClick: ((userId: String) -> Unit)? = null,
-    /** Offered to the post's author. */
+    /** Offered to the post's author. Everyone gets "Copy text" in the same menu. */
     onEdit: (() -> Unit)? = null,
     /**
      * Offered to the author and the estate's admins; asks before deleting. An admin removing
@@ -100,6 +102,9 @@ fun PostCard(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var viewingImage by remember { mutableStateOf(false) }
+    val platform = rememberPlatformActions()
+    val canCopy = post.content.isNotBlank()
 
     val isLiked = currentUserId in post.likedBy
     val category = PostCategory.fromKey(post.category)
@@ -186,7 +191,7 @@ fun PostCard(
                     if (post.editedAt > 0L) {
                         Text(text = " · edited", fontSize = 14.sp, color = muted, maxLines = 1)
                     }
-                    if (onEdit != null || onDelete != null) {
+                    if (onEdit != null || onDelete != null || canCopy) {
                         Spacer(Modifier.weight(1f))
                         // Pulled up and right so the bigger touch target doesn't push the row down.
                         Box(modifier = Modifier.size(24.dp).wrapContentSize(unbounded = true)) {
@@ -194,6 +199,16 @@ fun PostCard(
                                 Icon(Icons.Filled.MoreVert, contentDescription = "Post options", tint = muted, modifier = Modifier.size(20.dp))
                             }
                             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                if (canCopy) {
+                                    DropdownMenuItem(
+                                        text = { Text("Copy text") },
+                                        leadingIcon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null) },
+                                        onClick = {
+                                            menuOpen = false
+                                            platform.copyToClipboard("Post", post.content, "Copied")
+                                        }
+                                    )
+                                }
                                 if (onEdit != null) {
                                     DropdownMenuItem(
                                         text = { Text("Edit") },
@@ -244,9 +259,11 @@ fun PostCard(
                             .fillMaxWidth()
                             .aspectRatio(4f / 3f)
                             .clip(MediaShape)
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MediaShape),
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MediaShape)
+                            .clickable(onClickLabel = "View photo") { viewingImage = true },
                         contentScale = ContentScale.Crop
                     )
+                    if (viewingImage) ImageViewer(imageUrl, onDismiss = { viewingImage = false })
                 }
 
                 post.videoUrl?.takeIf { it.isNotBlank() }?.let { videoUrl ->

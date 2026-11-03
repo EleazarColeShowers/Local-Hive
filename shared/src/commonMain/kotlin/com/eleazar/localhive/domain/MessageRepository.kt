@@ -15,6 +15,14 @@ interface MessageRepository {
      * (and push notifications) can label the conversation.
      */
     suspend fun sendMessage(message: Message, participantNames: Map<String, String>): Result<Unit>
-    /** Clears [userId]'s unread tally for a chat they have just opened. */
-    suspend fun markChatRead(chatId: String, userId: String): Result<Unit>
+    /**
+     * Clears [userId]'s unread tally for a chat they have open, and records that they've seen
+     * messages up to [upTo] (the newest message's timestamp), so the sender sees "Seen".
+     */
+    suspend fun markChatRead(chatId: String, userId: String, upTo: Long): Result<Unit>
+    /**
+     * Tells the other person [userId] is typing, with [at] from this phone's clock, or that they've
+     * stopped with 0. Only for a chat that already has a message; fails quietly otherwise.
+     */
+    suspend fun setTyping(chatId: String, userId: String, at: Long): Result<Unit>
 }

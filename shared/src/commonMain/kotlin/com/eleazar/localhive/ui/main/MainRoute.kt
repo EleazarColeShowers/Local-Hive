@@ -25,6 +25,7 @@ import com.eleazar.localhive.ui.navigation.MainActions
 import com.eleazar.localhive.ui.navigation.MainTabsHost
 import com.eleazar.localhive.ui.navigation.Screen
 import com.eleazar.localhive.ui.notifications.NotificationViewModel
+import com.eleazar.localhive.ui.platform.rememberPlatformActions
 import com.eleazar.localhive.ui.profile.ProfileRoute
 
 /** Navigation lives in the shared graph; this only supplies ViewModel state and the tab contents. */
@@ -42,6 +43,15 @@ fun MainRoute(actions: MainActions) {
     // Hoisted so the tab badge and the Messages tab share one chats listener.
     val messagesViewModel: MessagesViewModel = koinViewModel()
     val messagesUiState by messagesViewModel.uiState.collectAsStateWithLifecycle()
+
+    // The app icon shows the same unread count as the Messages tab and the bell together. Waits for
+    // both lists, so opening the app doesn't flash the badge to 0 before they've loaded.
+    val platform = rememberPlatformActions()
+    val unreadLoaded = !messagesUiState.isLoadingChats && !notificationUiState.isLoading
+    val totalUnread = messagesUiState.totalUnread + notificationUiState.unreadCount
+    LaunchedEffect(unreadLoaded, totalUnread) {
+        if (unreadLoaded) platform.setAppBadge(totalUnread)
+    }
 
     val tabs = remember(messagesUiState.totalUnread) {
         listOf(

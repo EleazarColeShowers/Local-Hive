@@ -10,7 +10,15 @@ data class Chat(
     /** Messages each participant has not opened yet, keyed by user id. */
     val unreadCounts: Map<String, Int> = emptyMap(),
     /** Participants who have since deleted their account. */
-    val deletedParticipants: List<String> = emptyList()
+    val deletedParticipants: List<String> = emptyList(),
+    /**
+     * The newest message each participant has seen, as that message's timestamp, for "Seen" under
+     * the sender's last message. Message timestamps come from the sender's clock, so comparing
+     * against them is safe even when the two phones' clocks disagree.
+     */
+    val readUpTo: Map<String, Long> = emptyMap(),
+    /** When each participant last typed here, by their own clock; 0 once they stop or send. */
+    val typing: Map<String, Long> = emptyMap()
 ) {
     fun unreadFor(userId: String?): Int = unreadCounts[userId] ?: 0
 

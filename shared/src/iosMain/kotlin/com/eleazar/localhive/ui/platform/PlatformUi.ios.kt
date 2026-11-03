@@ -1,5 +1,7 @@
 package com.eleazar.localhive.ui.platform
 
+import platform.UserNotifications.UNNotification
+import platform.UserNotifications.UNUserNotificationCenter
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -165,6 +167,28 @@ private object IosPlatformActions : PlatformActions {
         presenter.presentViewController(sheet, animated = true, completion = null)
     }
 
+    @Suppress("DEPRECATION")
+    override fun setAppBadge(count: Int) {
+        UIApplication.sharedApplication.applicationIconBadgeNumber = count.toLong()
+        if (count == 0) removeDelivered { it.startsWith(CHAT_THREAD) || it.startsWith(NOTIFICATION_THREAD) }
+    }
+
+    override fun clearChatNotifications(chatId: String) {
+        removeDelivered { it == "$CHAT_THREAD$chatId" }
+    }
+
+    /** Clears delivered notifications whose thread (the Worker's tag) matches. */
+    private fun removeDelivered(matches: (thread: String) -> Boolean) {
+        val center = UNUserNotificationCenter.currentNotificationCenter()
+        center.getDeliveredNotificationsWithCompletionHandler { delivered ->
+            val ids = delivered.orEmpty()
+                .filterIsInstance<UNNotification>()
+                .filter { matches(it.request.content.threadIdentifier) }
+                .map { it.request.identifier }
+            if (ids.isNotEmpty()) center.removeDeliveredNotificationsWithIdentifiers(ids)
+        }
+    }
+
     override val appVersion: String
         get() = NSBundle.mainBundle.infoDictionary?.get("CFBundleShortVersionString") as? String ?: "—"
 }
@@ -176,3 +200,7 @@ internal fun topViewController(): UIViewController? {
     while (top?.presentedViewController != null) top = top.presentedViewController
     return top
 }
+
+/** Thread ids the Worker gives message and in-app notification pushes. */
+private const val CHAT_THREAD = "chat-"
+private const val NOTIFICATION_THREAD = "notification-"

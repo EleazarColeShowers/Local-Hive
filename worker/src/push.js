@@ -7,6 +7,13 @@ const EMERGENCY_SOUND = "sos_alarm.wav";
 const DEAD_TOKEN_ERRORS = new Set(["UNREGISTERED", "INVALID_ARGUMENT"]);
 
 /**
+ * Pushes to this many people or fewer (a message, a personal notification) carry the app icon's
+ * badge number for iOS. Working it out costs two queries per person, too many for an estate-wide
+ * announcement, which leaves the badge as it was.
+ */
+const BADGE_MAX_RECIPIENTS = 3;
+
+/**
  * Sends a push to each user with a registered device. Android gets it data-only, so the app always
  * runs its own onMessageReceived and can honour the in-app "push notifications" toggle — a payload
  * with a `notification` block would be drawn by the system tray instead, bypassing it. iOS only
@@ -25,6 +32,10 @@ export async function sendToUsers(db, env, userIds, { title, body, deepLink, tag
     .map((id) => ({ id, token: profiles[`users/${id}`]?.fcmToken }))
     .filter((t) => t.token);
   if (targets.length === 0) return 0;
+
+  const badges = targets.length <= BADGE_MAX_RECIPIENTS
+    ? Object.fromEntries(await Promise.all(targets.map(async ({ id }) => [id, await unreadCount(db, id).catch(() => null)])))
+    : {};
 
   const accessToken = await serviceAccessToken(env.FIREBASE_SERVICE_ACCOUNT);
   const url = `https://fcm.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/messages:send`;
@@ -49,6 +60,7 @@ export async function sendToUsers(db, env, userIds, { title, body, deepLink, tag
                   // sound: channel === "emergency" ? { critical: 1, name: EMERGENCY_SOUND, volume: 1.0 } : "default",
                   sound: channel === "emergency" ? EMERGENCY_SOUND : "default",
                   "thread-id": tag,
+                  ...(Number.isInteger(badges[id]) ? { badge: badges[id] } : {}),
                   ...(channel === "emergency" ? { "interruption-level": "time-sensitive" } : {}),
                 },
               },
@@ -66,6 +78,19 @@ export async function sendToUsers(db, env, userIds, { title, body, deepLink, tag
     })
   );
   return results.filter(Boolean).length;
+}
+
+/**
+ * What the app shows as unread: messages across the user's chats plus unread notifications. The
+ * same number the app puts on its icon while it's open.
+ */
+async function unreadCount(db, userId) {
+  const [chats, notes] = await Promise.all([
+    db.query("chats", [["participants", "ARRAY_CONTAINS", userId]]),
+    db.query("notifications", [["recipientId", "EQUAL", userId], ["isRead", "EQUAL", false]]),
+  ]);
+  const messages = chats.reduce((sum, chat) => sum + (Number(chat.data.unreadCounts?.[userId]) || 0), 0);
+  return messages + notes.length;
 }
 
 function truncate(text, max) {

@@ -85,7 +85,10 @@ class MessageRepositoryImpl(
                 "lastMessage" to message.content,
                 "lastMessageTime" to message.timestamp,
                 "lastMessageSenderId" to message.senderId,
-                "unreadCounts" to unreadCounts
+                "unreadCounts" to unreadCounts,
+                // Sending also means the sender has seen everything, and has stopped typing.
+                "readUpTo" to mapOf(message.senderId to message.timestamp),
+                "typing" to mapOf(message.senderId to 0L)
             )
 
             firestore.batch()
@@ -101,8 +104,12 @@ class MessageRepositoryImpl(
         }
     }
 
-    override suspend fun markChatRead(chatId: String, userId: String): Result<Unit> = runCatching {
-        chats.document(chatId).update("unreadCounts.$userId" to 0)
+    override suspend fun markChatRead(chatId: String, userId: String, upTo: Long): Result<Unit> = runCatching {
+        chats.document(chatId).update("unreadCounts.$userId" to 0, "readUpTo.$userId" to upTo)
+    }
+
+    override suspend fun setTyping(chatId: String, userId: String, at: Long): Result<Unit> = runCatching {
+        chats.document(chatId).update("typing.$userId" to at)
     }
 
     private fun mapDocToChat(doc: DocumentSnapshot): Chat? = runCatching {
@@ -114,7 +121,9 @@ class MessageRepositoryImpl(
             lastMessageTime = doc.long("lastMessageTime") ?: 0L,
             lastMessageSenderId = doc.string("lastMessageSenderId").orEmpty(),
             deletedParticipants = doc.stringList("deletedParticipants").orEmpty(),
-            unreadCounts = doc.intMap("unreadCounts").orEmpty()
+            unreadCounts = doc.intMap("unreadCounts").orEmpty(),
+            readUpTo = doc.longMap("readUpTo").orEmpty(),
+            typing = doc.longMap("typing").orEmpty()
         )
     }.getOrNull()
 
