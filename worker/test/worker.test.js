@@ -388,3 +388,9 @@ test("public GET: privacy policy links to account deletion", async () => {
   assert.match(html, /<title>LocalHive Privacy Policy<\/title>/);
   assert.match(html, /href="\/delete-account"/);
 });
+
+test("public GET: child safety standards name a contact", async () => {
+  const html = await publicResponse(new Request("https://x.dev/child-safety"), {}).text();
+  assert.match(html, /<title>LocalHive Child Safety Standards<\/title>/);
+  assert.match(html, /mailto:eleato2020@gmail\.com/);
+});
