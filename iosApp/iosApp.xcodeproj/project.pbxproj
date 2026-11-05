@@ -15,6 +15,7 @@
 		A10000000000000000000006 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = A70000000000000000000003 /* FirebaseMessaging */; };
 		A10000000000000000000007 /* sos_alarm.wav in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* sos_alarm.wav */; };
 		A10000000000000000000008 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* PrivacyInfo.xcprivacy */; };
+		A10000000000000000000009 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = A70000000000000000000004 /* FirebaseCrashlytics */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -37,6 +38,7 @@
 				A10000000000000000000004 /* FirebaseAuth in Frameworks */,
 				A10000000000000000000005 /* FirebaseFirestore in Frameworks */,
 				A10000000000000000000006 /* FirebaseMessaging in Frameworks */,
+				A10000000000000000000009 /* FirebaseCrashlytics in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -94,6 +96,7 @@
 				A30000000000000000000001 /* Frameworks */,
 				A60000000000000000000003 /* Resources */,
 				A60000000000000000000004 /* Copy Firebase Config */,
+				A60000000000000000000005 /* Upload Crashlytics Symbols */,
 			);
 			buildRules = (
 			);
@@ -104,6 +107,7 @@
 				A70000000000000000000001 /* FirebaseAuth */,
 				A70000000000000000000002 /* FirebaseFirestore */,
 				A70000000000000000000003 /* FirebaseMessaging */,
+				A70000000000000000000004 /* FirebaseCrashlytics */,
 			);
 			productName = iosApp;
 			productReference = A20000000000000000000007 /* LocalHive.app */;
@@ -196,6 +200,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "# Kept out of git like app/google-services.json, so it's copied in only when present.\nPLIST=\"$SRCROOT/iosApp/GoogleService-Info.plist\"\nif [ -f \"$PLIST\" ]; then\n  cp \"$PLIST\" \"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/GoogleService-Info.plist\"\nelse\n  echo \"warning: iosApp/iosApp/GoogleService-Info.plist is missing. The app will build but can't reach Firebase.\"\nfi\n";
+		};
+		A60000000000000000000005 /* Upload Crashlytics Symbols */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Upload Crashlytics Symbols";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Uploads the dSYM so iOS crash reports show function names and lines (Kotlin code included,\n# since the Shared framework is static and lives in the app binary). Release builds only: Debug\n# builds have no dSYM.\nif [ \"$DEBUG_INFORMATION_FORMAT\" != \"dwarf-with-dsym\" ]; then\n  exit 0\nfi\nif [ ! -f \"$SRCROOT/iosApp/GoogleService-Info.plist\" ]; then\n  echo \"warning: GoogleService-Info.plist is missing, so Crashlytics symbols weren't uploaded.\"\n  exit 0\nfi\n\"${BUILD_DIR%/Build/*}/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -384,6 +407,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = AA0000000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseMessaging;
+		};
+		A70000000000000000000004 /* FirebaseCrashlytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA0000000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCrashlytics;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -1,4 +1,5 @@
 import FirebaseCore
+import FirebaseCrashlytics
 import FirebaseMessaging
 import Shared
 import SwiftUI
@@ -26,6 +27,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         // Without the Firebase config there's nothing to sign in to; ContentView says what's missing.
         guard Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil else { return true }
         FirebaseApp.configure()
+        LocalHiveIos.shared.installCrashLogger { Crashlytics.crashlytics().log($0) }
         LocalHiveIos.shared.start()
 
         // ENABLE_PUSH in Config.xcconfig: off for free Apple IDs, which can't sign for push.

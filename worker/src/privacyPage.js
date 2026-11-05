@@ -102,8 +102,8 @@ const PAGE = `<!doctype html>
   <p>We don't sell your information or share it for advertising. LocalHive has no ads. We use these services
     to run the app, and they handle data only on our behalf:</p>
   <ul>
-    <li><strong>Google Firebase</strong> (Authentication, Cloud Firestore, Cloud Messaging, Analytics, App Check):
-      accounts, app data, push notifications and analytics.
+    <li><strong>Google Firebase</strong> (Authentication, Cloud Firestore, Cloud Messaging, Analytics, Crashlytics, App Check):
+      accounts, app data, push notifications, analytics and crash reports.
       <a href="https://firebase.google.com/support/privacy">Firebase privacy</a></li>
     <li><strong>Cloudinary:</strong> stores photos and videos.
       <a href="https://cloudinary.com/privacy">Cloudinary privacy</a></li>

@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.experimental.ExperimentalNativeApi::class)
+
 package com.eleazar.localhive
 
 import androidx.compose.runtime.getValue
@@ -7,6 +9,8 @@ import com.eleazar.localhive.data.remote.PushTokenSync
 import com.eleazar.localhive.di.initKoin
 import com.eleazar.localhive.domain.AppSettingsRepository
 import com.eleazar.localhive.ui.LocalHiveApp
+import kotlin.native.setUnhandledExceptionHook
+import kotlin.native.terminateWithUnhandledException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -31,6 +35,18 @@ object LocalHiveIos {
     /** Call once at launch, after `FirebaseApp.configure()`. */
     fun start() {
         initKoin(LOCALHIVE_API_URL)
+    }
+
+    /**
+     * Call once at launch, before [start]. A Kotlin exception nobody catches still crashes the app,
+     * but [log] gets its type, message and stack trace first, so the crash report says what went wrong
+     * rather than only showing the abort.
+     */
+    fun installCrashLogger(log: (String) -> Unit) {
+        setUnhandledExceptionHook { throwable ->
+            runCatching { log("Uncaught Kotlin exception: ${throwable.stackTraceToString()}") }
+            terminateWithUnhandledException(throwable)
+        }
     }
 
     /** A localhive:// link to open: a tapped push, or the URL scheme. */
