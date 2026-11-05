@@ -30,6 +30,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         LocalHiveIos.shared.installCrashLogger { Crashlytics.crashlytics().log($0) }
         LocalHiveIos.shared.start()
 
+        #if DEBUG
+        // `xcrun simctl launch booted com.eleazar.localhive -crashTest` crashes on purpose a moment after
+        // launch, to check that Crashlytics reports arrive. Debug builds only.
+        if ProcessInfo.processInfo.arguments.contains("-crashTest") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { LocalHiveIos.shared.crashTest() }
+        }
+        #endif
+
         // ENABLE_PUSH in Config.xcconfig: off for free Apple IDs, which can't sign for push.
         guard Bundle.main.object(forInfoDictionaryKey: "LocalHivePushEnabled") as? String == "YES" else { return true }
         UNUserNotificationCenter.current().delegate = self

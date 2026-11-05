@@ -40,6 +40,12 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
+        // Debug builds only: `adb shell am start -n com.eleazar.localhive/.MainActivity --ez crashTest true`
+        // crashes on purpose, to check that Crashlytics reports arrive.
+        if (BuildConfig.DEBUG && intent.getBooleanExtra("crashTest", false)) {
+            throw RuntimeException("Crashlytics test crash")
+        }
+
         // Only on first creation: after a rotation the inbox (a ViewModel) still has it, or it's been used.
         if (savedInstanceState == null) {
             intent.toIncomingShare(contentResolver)?.let(shareInbox::offer)

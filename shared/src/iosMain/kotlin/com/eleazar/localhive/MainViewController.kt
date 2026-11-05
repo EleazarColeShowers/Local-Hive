@@ -49,6 +49,11 @@ object LocalHiveIos {
         }
     }
 
+    /** Crashes on purpose from Kotlin, to check that Crashlytics reports (and the logger above) work. */
+    fun crashTest() {
+        throw IllegalStateException("Crashlytics test crash from Kotlin")
+    }
+
     /** A localhive:// link to open: a tapped push, or the URL scheme. */
     fun openLink(url: String) {
         pendingLink.value = url
