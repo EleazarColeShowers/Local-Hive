@@ -318,6 +318,33 @@ service cloud.firestore {
       allow delete: if isEstateAdmin(resource.data.estateId);
     }
 
+    // Reports of posts, comments, chats and people, and feedback from Settings. Users can
+    // send them but not read, change or delete them; they're reviewed in the Firebase console.
+    match /reports/{reportId} {
+      function optionalString(field, max) {
+        return request.resource.data.get(field, null) == null
+               || (request.resource.data[field] is string && request.resource.data[field].size() <= max);
+      }
+
+      allow create: if isSignedIn()
+                    && request.resource.data.keys().hasOnly([
+                         'subject', 'reason', 'details', 'targetId', 'postId', 'targetUserId',
+                         'excerpt', 'reporterId', 'estateId', 'appVersion', 'status', 'createdAt'])
+                    && request.resource.data.reporterId == uid()
+                    && request.resource.data.subject in ['post', 'comment', 'chat', 'user', 'app']
+                    && request.resource.data.reason is string && request.resource.data.reason.size() <= 40
+                    && request.resource.data.details is string && request.resource.data.details.size() <= 2000
+                    && request.resource.data.targetId is string && request.resource.data.targetId.size() <= 200
+                    && request.resource.data.status == 'open'
+                    && request.resource.data.createdAt is int
+                    && optionalString('postId', 200)
+                    && optionalString('targetUserId', 200)
+                    && optionalString('excerpt', 1000)
+                    && optionalString('estateId', 200)
+                    && optionalString('appVersion', 40);
+      allow read, update, delete: if false;
+    }
+
     match /joinRequests/{requestId} {
       function isRequester() {
         return isSignedIn() && resource.data.userId == uid();

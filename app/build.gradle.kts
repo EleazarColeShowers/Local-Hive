@@ -17,8 +17,8 @@ android {
         applicationId = "com.eleazar.localhive"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 3
+        versionName = "1.02"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // The Cloudflare Worker that signs photo uploads and sends push notifications.

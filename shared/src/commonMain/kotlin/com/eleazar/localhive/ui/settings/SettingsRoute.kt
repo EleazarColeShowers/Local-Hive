@@ -7,6 +7,9 @@ import com.eleazar.localhive.domain.ThemeMode
 import com.eleazar.localhive.ui.components.LeaveRole
 import com.eleazar.localhive.ui.platform.rememberPlatformActions
 import com.eleazar.localhive.ui.profile.ProfileColors
+import com.eleazar.localhive.domain.model.Report
+import com.eleazar.localhive.domain.model.ReportSubject
+import com.eleazar.localhive.ui.report.rememberReporter
 
 /**
  * Entry point: owns the ViewModel, navigation side effects and the app version, and feeds the
@@ -22,6 +25,7 @@ fun SettingsRoute(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val platform = rememberPlatformActions()
+    val report = rememberReporter()
 
     val colors = com.eleazar.localhive.ui.profile.rememberProfileColors()
 
@@ -62,6 +66,9 @@ fun SettingsRoute(
         isDeletingAccount = uiState.isDeletingAccount,
         deleteAccountError = uiState.deleteAccountError,
         onDeleteAccount = viewModel::deleteAccount,
-        onDeleteAccountDismissed = viewModel::clearDeleteAccountError
+        onDeleteAccountDismissed = viewModel::clearDeleteAccountError,
+        onSendFeedback = { reason, details ->
+            report(Report(subject = ReportSubject.APP, reason = reason, details = details))
+        }
     )
 }

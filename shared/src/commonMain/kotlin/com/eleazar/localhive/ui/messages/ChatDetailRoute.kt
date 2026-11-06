@@ -16,6 +16,10 @@ import org.koin.compose.viewmodel.koinViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eleazar.localhive.domain.model.Chat
 import com.eleazar.localhive.ui.blocking.BlockingViewModel
+import com.eleazar.localhive.domain.model.Report
+import com.eleazar.localhive.domain.model.ReportReason
+import com.eleazar.localhive.domain.model.ReportSubject
+import com.eleazar.localhive.ui.report.rememberReporter
 
 /** A typing mark further than this from the reader's clock is left over, or the clocks are far apart. */
 private const val STALE_TYPING_MILLIS = 30_000L
@@ -32,6 +36,7 @@ fun ChatDetailRoute(
     val blocking by blockingViewModel.uiState.collectAsStateWithLifecycle()
 
     val platform = rememberPlatformActions()
+    val report = rememberReporter()
     LaunchedEffect(chatId) {
         viewModel.openChat(chatId)
     }
@@ -90,6 +95,19 @@ fun ChatDetailRoute(
             { blockingViewModel.block(id, otherName, peer?.photoUrl) }
         },
         onUnblock = { blockingViewModel.unblock(otherUserId) },
+        onReport = otherUserId.takeIf { it.isNotBlank() }?.let { id ->
+            { reason: ReportReason, details: String ->
+                report(
+                    Report(
+                        subject = ReportSubject.CHAT, reason = reason, details = details,
+                        targetId = chatId, targetUserId = id,
+                        // Their latest messages, in case they delete them.
+                        excerpt = uiState.messages.filter { it.senderId == id }.take(10).reversed()
+                            .joinToString("\n") { it.content }
+                    )
+                )
+            }
+        },
         onOpenProfile = otherUserId.takeIf { it.isNotBlank() }?.let { id -> { onOpenProfile(id) } },
         otherTyping = otherTyping && !otherDeleted && !blocking.isBlocked(otherUserId),
         seenUpTo = chat?.readUpTo?.get(otherUserId) ?: 0L,

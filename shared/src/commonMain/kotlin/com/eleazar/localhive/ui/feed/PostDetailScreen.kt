@@ -42,6 +42,10 @@ import com.eleazar.localhive.ui.components.mentionSuggestions
 import com.eleazar.localhive.ui.components.mentionsIn
 import androidx.compose.ui.text.input.TextFieldValue
 import com.eleazar.localhive.ui.components.PostCard
+import androidx.compose.material.icons.outlined.Flag
+import com.eleazar.localhive.domain.model.Report
+import com.eleazar.localhive.domain.model.ReportReason
+import com.eleazar.localhive.ui.report.ReportDialog
 import com.eleazar.localhive.ui.components.RoleBadge
 import com.eleazar.localhive.ui.components.ScreenGutter
 import com.eleazar.localhive.ui.util.relativeTime
@@ -62,6 +66,7 @@ fun PostDetailScreen(
     onRespond: () -> Unit = {},
     onMarkSafe: () -> Unit = {},
     onDeleteComment: (commentId: String) -> Unit = {},
+    onReport: (Report) -> Unit = {},
 ) {
     var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
     val commentText = draft.text
@@ -175,6 +180,8 @@ fun PostDetailScreen(
                         onMentionClick = onUserClick,
                         onEdit = onEditPost.takeIf { isMine },
                         onDelete = onDeletePost.takeIf { isMine || uiState.isAdmin },
+                        onReport = { reason: ReportReason, details: String -> onReport(Report.of(post, reason, details)) }
+                            .takeIf { !isMine },
                         selectableText = true
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -225,14 +232,17 @@ fun PostDetailScreen(
                         comment.authorId == me || uiState.selectedPost?.authorId == me || uiState.isAdmin
                     ),
                     onUserClick = onUserClick,
-                    onDelete = { onDeleteComment(comment.id) }
+                    onDelete = { onDeleteComment(comment.id) },
+                    onReport = { reason: ReportReason, details: String ->
+                        onReport(Report.of(comment, uiState.selectedPost?.id.orEmpty(), reason, details))
+                    }.takeIf { me != null && comment.authorId != me }
                 )
             }
         }
     }
 }
 
-/** One comment. A long press offers to copy it, and to delete it for those allowed to. */
+/** One comment. A long press offers to copy or report it, and to delete it for those allowed to. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CommentRow(
@@ -240,12 +250,14 @@ private fun CommentRow(
     authorIsAdmin: Boolean,
     canDelete: Boolean,
     onUserClick: (userId: String) -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onReport: ((ReportReason, details: String) -> Unit)? = null
 ) {
     val accent = MaterialTheme.colorScheme.primary
     val platform = rememberPlatformActions()
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenGutter, vertical = 6.dp),
         verticalAlignment = Alignment.Top
@@ -307,6 +319,16 @@ private fun CommentRow(
                         platform.copyToClipboard("Comment", comment.content, "Copied")
                     }
                 )
+                if (onReport != null) {
+                    DropdownMenuItem(
+                        text = { Text("Report") },
+                        leadingIcon = { Icon(Icons.Outlined.Flag, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            reporting = true
+                        }
+                    )
+                }
                 if (canDelete) {
                     DropdownMenuItem(
                         text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
@@ -319,6 +341,9 @@ private fun CommentRow(
                 }
             }
         }
+    }
+    if (reporting && onReport != null) {
+        ReportDialog(title = "Report comment", onSubmit = onReport, onDismiss = { reporting = false })
     }
     if (confirmDelete) {
         AlertDialog(

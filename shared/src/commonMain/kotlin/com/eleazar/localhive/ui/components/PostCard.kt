@@ -37,6 +37,9 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material.icons.outlined.Flag
+import com.eleazar.localhive.domain.model.ReportReason
+import com.eleazar.localhive.ui.report.ReportDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TextButton
@@ -97,11 +100,14 @@ fun PostCard(
      * someone else's post can give a reason, which is passed on to its author.
      */
     onDelete: ((reason: String) -> Unit)? = null,
+    /** Offered on other people's posts; asks why, then sends a report. */
+    onReport: ((ReportReason, details: String) -> Unit)? = null,
     /** The text can be long-pressed and copied; off in the feed, where a tap opens the post. */
     selectableText: Boolean = false
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf(false) }
     var viewingImage by remember { mutableStateOf(false) }
     val platform = rememberPlatformActions()
     val canCopy = post.content.isNotBlank()
@@ -191,7 +197,7 @@ fun PostCard(
                     if (post.editedAt > 0L) {
                         Text(text = " · edited", fontSize = 14.sp, color = muted, maxLines = 1)
                     }
-                    if (onEdit != null || onDelete != null || canCopy) {
+                    if (onEdit != null || onDelete != null || onReport != null || canCopy) {
                         Spacer(Modifier.weight(1f))
                         // Pulled up and right so the bigger touch target doesn't push the row down.
                         Box(modifier = Modifier.size(24.dp).wrapContentSize(unbounded = true)) {
@@ -223,6 +229,13 @@ fun PostCard(
                                             Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                                         },
                                         onClick = { menuOpen = false; confirmDelete = true }
+                                    )
+                                }
+                                if (onReport != null) {
+                                    DropdownMenuItem(
+                                        text = { Text("Report") },
+                                        leadingIcon = { Icon(Icons.Outlined.Flag, contentDescription = null) },
+                                        onClick = { menuOpen = false; reporting = true }
                                     )
                                 }
                             }
@@ -302,6 +315,9 @@ fun PostCard(
                 }
             }
         }
+    }
+    if (reporting && onReport != null) {
+        ReportDialog(title = "Report post", onSubmit = onReport, onDismiss = { reporting = false })
     }
     if (confirmDelete && onDelete != null) {
         ConfirmDeleteDialog(

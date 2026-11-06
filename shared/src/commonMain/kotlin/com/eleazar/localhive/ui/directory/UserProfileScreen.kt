@@ -23,6 +23,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.eleazar.localhive.domain.model.Chat
 import com.eleazar.localhive.ui.blocking.BlockConfirmDialog
+import androidx.compose.material.icons.outlined.Flag
+import com.eleazar.localhive.domain.model.ReportReason
+import com.eleazar.localhive.ui.report.ReportDialog
 import com.eleazar.localhive.ui.components.Avatar
 import com.eleazar.localhive.ui.components.ScreenGutter
 
@@ -36,6 +39,7 @@ fun UserProfileScreen(
     isBlocked: Boolean = false,
     onBlock: () -> Unit = {},
     onUnblock: () -> Unit = {},
+    onReport: (ReportReason, details: String) -> Unit = { _, _ -> },
 ) {
     val accent = MaterialTheme.colorScheme.primary
     val loadedUser = directoryState.selectedUser?.takeIf { it.id == userId }
@@ -43,6 +47,10 @@ fun UserProfileScreen(
     val isSelf = userId == directoryState.currentUserId
     var menuOpen by remember { mutableStateOf(false) }
     var confirmBlock by remember { mutableStateOf<Boolean?>(null) }
+    var reporting by remember { mutableStateOf(false) }
+    if (reporting) {
+        ReportDialog(title = "Report $loadedName", onSubmit = onReport, onDismiss = { reporting = false })
+    }
 
     confirmBlock?.let { blocking ->
         BlockConfirmDialog(
@@ -81,6 +89,14 @@ fun UserProfileScreen(
                                     onClick = {
                                         menuOpen = false
                                         confirmBlock = !isBlocked
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Report") },
+                                    leadingIcon = { Icon(Icons.Outlined.Flag, contentDescription = null) },
+                                    onClick = {
+                                        menuOpen = false
+                                        reporting = true
                                     }
                                 )
                             }

@@ -10,6 +10,7 @@ import com.eleazar.localhive.data.repository.MessageRepositoryImpl
 import com.eleazar.localhive.data.repository.NotificationRepositoryImpl
 import com.eleazar.localhive.data.repository.PollRepositoryImpl
 import com.eleazar.localhive.data.repository.PostRepositoryImpl
+import com.eleazar.localhive.data.repository.ReportRepositoryImpl
 import com.eleazar.localhive.data.repository.StorageRepositoryImpl
 import com.eleazar.localhive.data.repository.UserRepositoryImpl
 import com.eleazar.localhive.data.repository.UtilityRepositoryImpl
@@ -21,6 +22,7 @@ import com.eleazar.localhive.domain.MessageRepository
 import com.eleazar.localhive.domain.NotificationRepository
 import com.eleazar.localhive.domain.PollRepository
 import com.eleazar.localhive.domain.PostRepository
+import com.eleazar.localhive.domain.ReportRepository
 import com.eleazar.localhive.domain.StorageRepository
 import com.eleazar.localhive.domain.UserRepository
 import com.eleazar.localhive.domain.UtilityRepository
@@ -37,6 +39,7 @@ import com.eleazar.localhive.ui.messages.MessagesViewModel
 import com.eleazar.localhive.ui.notifications.NotificationViewModel
 import com.eleazar.localhive.ui.polls.PollsViewModel
 import com.eleazar.localhive.ui.profile.ProfileViewModel
+import com.eleazar.localhive.ui.report.ReportViewModel
 import com.eleazar.localhive.ui.settings.SettingsViewModel
 import com.eleazar.localhive.ui.utilities.UtilitiesViewModel
 import dev.gitlive.firebase.Firebase
@@ -90,6 +93,7 @@ fun dataModule(apiBaseUrl: String) = module {
     singleOf(::AppSettingsRepositoryImpl) bind AppSettingsRepository::class
     singleOf(::PollRepositoryImpl) bind PollRepository::class
     singleOf(::UtilityRepositoryImpl) bind UtilityRepository::class
+    singleOf(::ReportRepositoryImpl) bind ReportRepository::class
 }
 
 val viewModelModule = module {
@@ -99,6 +103,7 @@ val viewModelModule = module {
     viewModelOf(::MembershipViewModel)
     viewModelOf(::NotificationViewModel)
     viewModelOf(::BlockingViewModel)
+    viewModelOf(::ReportViewModel)
     viewModelOf(::DirectoryViewModel)
     viewModelOf(::ProfileViewModel)
     viewModelOf(::SettingsViewModel)

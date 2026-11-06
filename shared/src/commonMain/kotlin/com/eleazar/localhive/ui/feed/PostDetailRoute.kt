@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import org.koin.compose.viewmodel.koinViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.eleazar.localhive.ui.report.rememberReporter
 
 @Composable
 fun PostDetailRoute(
@@ -38,6 +39,7 @@ fun PostDetailRoute(
         onDeletePost = { reason -> viewModel.deletePost(postId, reason) },
         onRespond = { viewModel.respondToEmergency(postId) },
         onMarkSafe = { viewModel.markSafe(postId) },
-        onDeleteComment = { commentId -> viewModel.deleteComment(postId, commentId) }
+        onDeleteComment = { commentId -> viewModel.deleteComment(postId, commentId) },
+        onReport = rememberReporter()
     )
 }

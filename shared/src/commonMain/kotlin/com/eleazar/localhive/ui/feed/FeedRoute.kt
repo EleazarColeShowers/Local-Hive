@@ -8,6 +8,7 @@ import com.eleazar.localhive.ui.components.PollsGlance
 import com.eleazar.localhive.ui.finance.FinanceViewModel
 import com.eleazar.localhive.ui.finance.duesSummary
 import com.eleazar.localhive.ui.polls.PollsViewModel
+import com.eleazar.localhive.ui.report.rememberReporter
 import com.eleazar.localhive.ui.utilities.UtilitiesViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
@@ -47,6 +48,7 @@ fun FeedRoute(
         onEmergency = onEmergency,
         onEditPost = onEditPost,
         onDeletePost = viewModel::deletePost,
+        onReport = rememberReporter(),
         utilities = utilities.statuses,
         polls = polls.openPolls().let { open ->
             PollsGlance(open = open.size, awaitingVote = open.count { it.id !in polls.myVotes })

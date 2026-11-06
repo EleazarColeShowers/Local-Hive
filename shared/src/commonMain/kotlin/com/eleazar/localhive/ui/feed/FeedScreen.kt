@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.eleazar.localhive.ui.components.ComposePrompt
 import com.eleazar.localhive.ui.components.EmergencyBanner
+import com.eleazar.localhive.domain.model.Report
+import com.eleazar.localhive.domain.model.ReportReason
 import com.eleazar.localhive.ui.components.EstateGlance
 import com.eleazar.localhive.ui.components.PollsGlance
 import com.eleazar.localhive.ui.components.icon
@@ -55,6 +57,7 @@ fun FeedScreen(
     onEmergency: () -> Unit = {},
     onEditPost: (postId: String) -> Unit = {},
     onDeletePost: (postId: String, reason: String) -> Unit = { _, _ -> },
+    onReport: (Report) -> Unit = {},
     utilities: Map<UtilityKind, UtilityStatus> = emptyMap(),
     polls: PollsGlance = PollsGlance(open = 0, awaitingVote = 0),
     dues: DuesSummary? = null,
@@ -198,7 +201,9 @@ fun FeedScreen(
                                 pinned = post.id == pinned?.id,
                                 onMentionClick = onUserClick,
                                 onEdit = { onEditPost(post.id) }.takeIf { post.authorId == uiState.currentUserId },
-                                onDelete = { reason: String -> onDeletePost(post.id, reason) }.takeIf { post.authorId == uiState.currentUserId || uiState.isAdmin }
+                                onDelete = { reason: String -> onDeletePost(post.id, reason) }.takeIf { post.authorId == uiState.currentUserId || uiState.isAdmin },
+                                onReport = { reason: ReportReason, details: String -> onReport(Report.of(post, reason, details)) }
+                                    .takeIf { post.authorId != uiState.currentUserId }
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
                         }

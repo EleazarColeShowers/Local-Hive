@@ -18,6 +18,9 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.Feedback
+import com.eleazar.localhive.domain.model.ReportReason
+import com.eleazar.localhive.ui.report.ReportDialog
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -60,9 +63,20 @@ fun SettingsScreen(
     onDeleteAccount: (password: String) -> Unit = {},
     onDeleteAccountDismissed: () -> Unit = {},
     lightAlerts: Boolean = false,
-    onLightAlertsChange: (Boolean) -> Unit = {}
+    onLightAlertsChange: (Boolean) -> Unit = {},
+    onSendFeedback: (ReportReason, details: String) -> Unit = { _, _ -> }
 ) {
     var showLeaveConfirm by remember { mutableStateOf(false) }
+    var showFeedback by remember { mutableStateOf(false) }
+    if (showFeedback) {
+        ReportDialog(
+            title = "Send feedback",
+            onSubmit = onSendFeedback,
+            onDismiss = { showFeedback = false },
+            reasons = ReportReason.forFeedback,
+            feedback = true
+        )
+    }
     var showDeleteAccount by remember { mutableStateOf(false) }
 
     val hiveGreen = colors.hiveGreen
@@ -257,6 +271,31 @@ fun SettingsScreen(
             Spacer(Modifier.height(16.dp))
 
             SettingsSection(title = "About", lightGold = lightGold, darkGray = darkGray) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showFeedback = true }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.Feedback, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Send feedback", fontSize = 14.sp, color = darkGray)
+                        Text(
+                            "Report a problem, a safety concern or an idea",
+                            fontSize = 12.sp,
+                            color = darkGray.copy(alpha = 0.6f)
+                        )
+                    }
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        null,
+                        tint = darkGray.copy(alpha = 0.4f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                SettingsDivider(darkGray)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

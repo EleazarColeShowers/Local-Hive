@@ -68,6 +68,9 @@ import androidx.compose.ui.unit.sp
 import com.eleazar.localhive.domain.model.Message
 import kotlinx.coroutines.launch
 import com.eleazar.localhive.ui.blocking.BlockConfirmDialog
+import androidx.compose.material.icons.outlined.Flag
+import com.eleazar.localhive.domain.model.ReportReason
+import com.eleazar.localhive.ui.report.ReportDialog
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -126,6 +129,8 @@ fun ChatDetailScreen(
     otherDeleted: Boolean = false,
     onBlock: (() -> Unit)? = null,
     onUnblock: () -> Unit = {},
+    /** Reports the conversation and the other person. */
+    onReport: ((ReportReason, details: String) -> Unit)? = null,
     /** The other person is typing right now. */
     otherTyping: Boolean = false,
     /** The newest message the other person has seen, by its timestamp, for "Seen". */
@@ -135,6 +140,10 @@ fun ChatDetailScreen(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var confirmBlock by remember { mutableStateOf<Boolean?>(null) }
+    var reporting by remember { mutableStateOf(false) }
+    if (reporting && onReport != null) {
+        ReportDialog(title = "Report $otherName", onSubmit = onReport, onDismiss = { reporting = false })
+    }
     confirmBlock?.let { blocking ->
         BlockConfirmDialog(
             name = otherName,
@@ -238,6 +247,16 @@ fun ChatDetailScreen(
                                             confirmBlock = !isBlocked
                                         }
                                     )
+                                    if (onReport != null) {
+                                        DropdownMenuItem(
+                                            text = { Text("Report") },
+                                            leadingIcon = { Icon(Icons.Outlined.Flag, contentDescription = null) },
+                                            onClick = {
+                                                menuOpen = false
+                                                reporting = true
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }

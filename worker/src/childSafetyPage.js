@@ -68,6 +68,10 @@ const PAGE = `<!doctype html>
 
   <h2>How to report it</h2>
   <ul>
+    <li><strong>Report it in the app.</strong> Tap ⋮ on a post, long-press a comment, or open the ⋮ menu
+      on someone's profile or in a chat, then choose <em>Report</em> and
+      <em>Child sexual abuse or exploitation</em>. You can also use <em>Settings &gt; Send feedback</em>.
+      Reports come straight to us and the person isn't told who sent them.</li>
     <li><strong>Email us</strong> at <a href="mailto:${CONTACT}">${CONTACT}</a> with the estate's name,
       the person's name as it appears in the app, and what you saw. Please don't send us the image itself.</li>
     <li><strong>Tell your estate's admins</strong>, who can remove any post or comment in the estate straight away.</li>
