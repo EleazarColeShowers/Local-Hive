@@ -2,6 +2,8 @@ package com.eleazar.localhive.ui.settings
 
 import androidx.compose.runtime.*
 import org.koin.compose.viewmodel.koinViewModel
+import org.koin.compose.koinInject
+import com.eleazar.localhive.data.remote.LocalHiveApi
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eleazar.localhive.domain.ThemeMode
 import com.eleazar.localhive.ui.components.LeaveRole
@@ -21,7 +23,8 @@ fun SettingsRoute(
     onLoggedOut: () -> Unit,
     onLeftEstate: () -> Unit,
     onBlockedUsers: () -> Unit,
-    viewModel: SettingsViewModel = koinViewModel()
+    viewModel: SettingsViewModel = koinViewModel(),
+    api: LocalHiveApi = koinInject()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val platform = rememberPlatformActions()
@@ -67,6 +70,11 @@ fun SettingsRoute(
         deleteAccountError = uiState.deleteAccountError,
         onDeleteAccount = viewModel::deleteAccount,
         onDeleteAccountDismissed = viewModel::clearDeleteAccountError,
+        policyLinks = listOf(
+            "Terms of Use" to "terms",
+            "Privacy Policy" to "privacy",
+            "Child Safety Standards" to "child-safety"
+        ).mapNotNull { (title, page) -> api.pageLink(page)?.let { title to it } },
         onSendFeedback = { reason, details ->
             report(Report(subject = ReportSubject.APP, reason = reason, details = details))
         }

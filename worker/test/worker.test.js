@@ -394,3 +394,11 @@ test("public GET: child safety standards name a contact", async () => {
   assert.match(html, /<title>LocalHive Child Safety Standards<\/title>/);
   assert.match(html, /mailto:eleato2020@gmail\.com/);
 });
+
+test("public GET: terms of use forbid abuse and link to the other policies", async () => {
+  const html = await publicResponse(new Request("https://x.dev/terms"), {}).text();
+  assert.match(html, /<title>LocalHive Terms of Use<\/title>/);
+  assert.match(html, /no tolerance/);
+  assert.match(html, /href="\/privacy"/);
+  assert.match(html, /href="\/child-safety"/);
+});

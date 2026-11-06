@@ -1,6 +1,7 @@
 import { deleteAccountPage } from "./deletePage.js";
 import { privacyPage } from "./privacyPage.js";
 import { childSafetyPage } from "./childSafetyPage.js";
+import { termsPage } from "./termsPage.js";
 
 /**
  * The public, signed-out side of the Worker: invite links people tap in WhatsApp or SMS.
@@ -10,6 +11,7 @@ import { childSafetyPage } from "./childSafetyPage.js";
  *   GET /delete-account                -> delete your account from the web (see deletePage.js)
  *   GET /privacy                       -> the privacy policy (see privacyPage.js)
  *   GET /child-safety                  -> child safety (CSAE) standards (see childSafetyPage.js)
+ *   GET /terms                         -> terms of use, agreed to at sign-up (see termsPage.js)
  *
  * The page never looks the code up, so it can't be used to test which codes exist; the app
  * checks the code once the person is signed in.
@@ -20,6 +22,7 @@ export function publicResponse(request, env) {
   if (path === "/delete-account" || path === "/delete-account/") return deleteAccountPage(env);
   if (path === "/privacy" || path === "/privacy/") return privacyPage();
   if (path === "/child-safety" || path === "/child-safety/") return childSafetyPage();
+  if (path === "/terms" || path === "/terms/") return termsPage();
   const code = inviteCodeIn(path);
   if (code) return new Response(joinPage(code, env.ANDROID_PACKAGE), { headers: PAGE_HEADERS });
   return null;

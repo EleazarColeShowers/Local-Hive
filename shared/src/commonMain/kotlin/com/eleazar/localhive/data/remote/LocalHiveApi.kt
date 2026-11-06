@@ -66,6 +66,9 @@ class LocalHiveApi(
      */
     fun inviteLink(code: String): String? = if (isConfigured) "$baseUrl/join/$code" else null
 
+    /** A public page the Worker serves, such as "terms" or "privacy". Null when no API URL is set. */
+    fun pageLink(page: String): String? = if (isConfigured) "$baseUrl/$page" else null
+
     suspend fun uploadSignature(kind: String): UploadSignature {
         val body = post("/upload-signature", mapOf("kind" to kind))
         return UploadSignature(

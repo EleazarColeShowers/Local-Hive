@@ -19,6 +19,9 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Feedback
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.ui.platform.LocalUriHandler
 import com.eleazar.localhive.domain.model.ReportReason
 import com.eleazar.localhive.ui.report.ReportDialog
 import androidx.compose.material3.*
@@ -64,8 +67,11 @@ fun SettingsScreen(
     onDeleteAccountDismissed: () -> Unit = {},
     lightAlerts: Boolean = false,
     onLightAlertsChange: (Boolean) -> Unit = {},
-    onSendFeedback: (ReportReason, details: String) -> Unit = { _, _ -> }
+    onSendFeedback: (ReportReason, details: String) -> Unit = { _, _ -> },
+    /** Terms, privacy policy and so on, as (title, web address), opened in the browser. */
+    policyLinks: List<Pair<String, String>> = emptyList()
 ) {
+    val uriHandler = LocalUriHandler.current
     var showLeaveConfirm by remember { mutableStateOf(false) }
     var showFeedback by remember { mutableStateOf(false) }
     if (showFeedback) {
@@ -296,6 +302,26 @@ fun SettingsScreen(
                     )
                 }
                 SettingsDivider(darkGray)
+                policyLinks.forEach { (title, url) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { runCatching { uriHandler.openUri(url) } }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Outlined.Description, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(14.dp))
+                        Text(title, fontSize = 14.sp, color = darkGray, modifier = Modifier.weight(1f))
+                        Icon(
+                            Icons.AutoMirrored.Filled.OpenInNew,
+                            null,
+                            tint = darkGray.copy(alpha = 0.4f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    SettingsDivider(darkGray)
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

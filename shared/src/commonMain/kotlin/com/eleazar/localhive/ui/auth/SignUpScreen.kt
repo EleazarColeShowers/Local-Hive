@@ -11,6 +11,15 @@ import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.withLink
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -40,11 +49,14 @@ fun SignupScreen(
     error: String?,
     onSignup: (email: String, username: String, password: String) -> Unit,
     onNavigateToLogin: () -> Unit,
+    /** The Terms of Use, which must be agreed to before signing up. */
+    termsUrl: String? = null,
 ) {
     var email by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+    var agreedToTerms by remember { mutableStateOf(false) }
 
     val isEmailValid = email.isEmpty() || isValidEmail(email)
     val isUsernameValid = username.isEmpty() || username.matches(Regex("^[a-zA-Z0-9_.]{3,20}$"))
@@ -90,7 +102,7 @@ fun SignupScreen(
             LocalHiveTextField(
                 value = password, onValueChange = { password = it },
                 label = "Password", placeholder = "At least 6 characters",
-                modifier = Modifier.fillMaxWidth().padding(bottom = 28.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                 leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = darkGray.copy(alpha = 0.5f)) },
                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
@@ -104,6 +116,38 @@ fun SignupScreen(
                 }
             )
 
+            // Apple and Google require people to accept terms that forbid objectionable content.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 20.dp)
+                    .toggleable(value = agreedToTerms, onValueChange = { agreedToTerms = it }, role = Role.Checkbox),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = agreedToTerms,
+                    onCheckedChange = null,
+                    colors = CheckboxDefaults.colors(checkedColor = hiveGreen)
+                )
+                Text(
+                    text = buildAnnotatedString {
+                        withStyle(SpanStyle(color = darkGray.copy(alpha = 0.75f))) { append("I agree to the ") }
+                        val terms = SpanStyle(color = hiveGreen, fontWeight = FontWeight.SemiBold)
+                        if (termsUrl != null) {
+                            withLink(LinkAnnotation.Url(termsUrl, TextLinkStyles(terms))) { append("Terms of Use") }
+                        } else {
+                            withStyle(terms) { append("Terms of Use") }
+                        }
+                        withStyle(SpanStyle(color = darkGray.copy(alpha = 0.75f))) {
+                            append(", including zero tolerance for abusive or objectionable content.")
+                        }
+                    },
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.padding(start = 10.dp)
+                )
+            }
+
             error?.let {
                 Text(text = it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(bottom = 12.dp))
             }
@@ -112,7 +156,7 @@ fun SignupScreen(
                 text = "Sign Up",
                 onClick = { onSignup(email, username, password) },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = isEmailValid && email.isNotBlank() && username.isNotBlank() && isUsernameValid && password.length >= 6 && !isLoading,
+                enabled = isEmailValid && email.isNotBlank() && username.isNotBlank() && isUsernameValid && password.length >= 6 && agreedToTerms && !isLoading,
                 isLoading = isLoading
             )
 
