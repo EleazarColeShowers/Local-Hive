@@ -17,20 +17,17 @@ android {
         applicationId = "com.eleazar.localhive"
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.02"
+        versionCode = 4
+        versionName = "1.03"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // The Cloudflare Worker that signs photo uploads and sends push notifications.
-        // Set `localhive.apiUrl=https://…workers.dev` in local.properties; left blank, the app
-        // still runs, just without photo uploads or pushes.
+
+
         val localProps = Properties().apply {
             rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
         }
         val apiUrl = localProps.getProperty("localhive.apiUrl", "")
         buildConfigField("String", "LOCALHIVE_API_URL", "\"$apiUrl\"")
-        // Invite links (https://<this host>/join/CODE) open in the app; the Worker serves the
-        // assetlinks.json that lets Android verify that.
         val inviteHost = runCatching { URI(apiUrl).host }.getOrNull() ?: "localhive.invalid"
         buildConfigField("String", "INVITE_HOST", "\"$inviteHost\"")
         manifestPlaceholders["inviteHost"] = inviteHost
