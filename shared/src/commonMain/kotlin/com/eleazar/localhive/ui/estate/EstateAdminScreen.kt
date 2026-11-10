@@ -71,6 +71,8 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.LaunchedEffect
 import com.eleazar.localhive.domain.model.JoinRequest
 import com.eleazar.localhive.domain.model.User
+import com.eleazar.localhive.ui.util.nowMillis
+import com.eleazar.localhive.domain.model.SosStanding
 
 /**
  * Bare UI for estate admin management. No ViewModel or Android Context side effects.
@@ -95,6 +97,10 @@ fun EstateAdminScreen(
     /** Null leaves the estate without a treasurer. */
     onSetTreasurer: (userId: String?) -> Unit = {},
     onTransferOwnership: (userId: String) -> Unit = {},
+    /** Each member's SOS standing, by user id; those with nothing on record are left out. */
+    sosStandings: Map<String, SosStanding> = emptyMap(),
+    onSetSosDisabled: (userId: String, disabled: Boolean) -> Unit = { _, _ -> },
+    onRestoreSiren: (userId: String) -> Unit = {},
     onSaveDetails: (name: String, address: String) -> Unit = { _, _ -> },
     onSetJoinMode: (JoinMode) -> Unit = {},
     onRegenerateCode: () -> Unit = {},
@@ -238,6 +244,9 @@ fun EstateAdminScreen(
                     onRemoveMember = onRemoveMember,
                     onSetTreasurer = onSetTreasurer,
                     onTransferOwnership = onTransferOwnership,
+                    sosStandings = sosStandings,
+                    onSetSosDisabled = onSetSosDisabled,
+                    onRestoreSiren = onRestoreSiren,
                     dark = dark,
                     green = green,
                     cardBg = cardBg
@@ -398,10 +407,14 @@ private fun MembersTab(
     onRemoveMember: (String) -> Unit,
     onSetTreasurer: (String?) -> Unit,
     onTransferOwnership: (String) -> Unit,
+    sosStandings: Map<String, SosStanding>,
+    onSetSosDisabled: (String, Boolean) -> Unit,
+    onRestoreSiren: (String) -> Unit,
     dark: Color,
     green: Color,
     cardBg: Color
 ) {
+    val now = remember(sosStandings) { nowMillis() }
     if (members.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("No members yet", color = dark.copy(alpha = 0.4f), fontSize = 15.sp)
@@ -424,7 +437,9 @@ private fun MembersTab(
                 "Admins can approve requests, post announcements, make others admins and remove members. " +
                     "The owner always stays an admin, and an admin has to lose admin before they can be removed. " +
                     "The owner can hand ownership to any member from that member's menu. " +
-                    "The treasurer, who can be anyone, sets dues, confirms payments and logs expenses.",
+                    "The treasurer, who can be anyone, sets dues, confirms payments and logs expenses. " +
+                    "Two false alarms in 30 days and a member's SOS alerts go out without the siren; " +
+                    "admins can restore it, or turn someone's SOS alerts off altogether.",
                 fontSize = 13.sp,
                 lineHeight = 18.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -435,6 +450,7 @@ private fun MembersTab(
             val isAdmin = member.id in adminIds
             val isOwner = member.id == ownerId
             val isTreasurer = treasurerId.isNotBlank() && member.id == treasurerId
+            val sos = sosStandings[member.id] ?: SosStanding()
             MemberCard(
                 member = member,
                 role = when {
@@ -445,6 +461,12 @@ private fun MembersTab(
                 isYou = member.id == currentUserId,
                 isTreasurer = isTreasurer,
                 treasurerName = treasurerName,
+                sosNote = when {
+                    sos.disabled -> "SOS alerts off"
+                    sos.sirenRemoved(now) -> "${sos.recentFalseAlarms(now)} false alarms · alerts without siren"
+                    sos.recentFalseAlarms(now) == 1 -> "1 false alarm in the last 30 days"
+                    else -> null
+                },
                 actions = buildList {
                     if (!viewerIsAdmin) return@buildList
                     // Anyone can hold the treasurer role, the admin making the change included.
@@ -453,6 +475,8 @@ private fun MembersTab(
                     if (viewerIsOwner) add(MemberAction.MAKE_OWNER)
                     if (isAdmin) add(MemberAction.REMOVE_ADMIN)
                     else addAll(listOf(MemberAction.MAKE_ADMIN, MemberAction.REMOVE_MEMBER))
+                    if (!sos.disabled && sos.sirenRemoved(now)) add(MemberAction.RESTORE_SIREN)
+                    add(if (sos.disabled) MemberAction.TURN_ON_SOS else MemberAction.TURN_OFF_SOS)
                 },
                 onAction = { action ->
                     when (action) {
@@ -462,6 +486,9 @@ private fun MembersTab(
                         MemberAction.MAKE_TREASURER -> onSetTreasurer(member.id)
                         MemberAction.REMOVE_TREASURER -> onSetTreasurer(null)
                         MemberAction.MAKE_OWNER -> onTransferOwnership(member.id)
+                        MemberAction.RESTORE_SIREN -> onRestoreSiren(member.id)
+                        MemberAction.TURN_OFF_SOS -> onSetSosDisabled(member.id, true)
+                        MemberAction.TURN_ON_SOS -> onSetSosDisabled(member.id, false)
                     }
                 },
                 dark = dark,
@@ -479,7 +506,10 @@ private enum class MemberAction(val label: String, val destructive: Boolean) {
     MAKE_TREASURER("Make treasurer", false),
     REMOVE_TREASURER("Remove as treasurer", true),
     MAKE_OWNER("Make owner", false),
-    REMOVE_MEMBER("Remove from estate", true)
+    REMOVE_MEMBER("Remove from estate", true),
+    RESTORE_SIREN("Restore SOS siren", false),
+    TURN_OFF_SOS("Turn off SOS alerts", true),
+    TURN_ON_SOS("Turn on SOS alerts", false)
 }
 
 @Composable
@@ -490,6 +520,8 @@ private fun MemberCard(
     isTreasurer: Boolean,
     /** Who holds the role now, so appointing someone else can say who they replace. */
     treasurerName: String?,
+    /** A line about their SOS alerts for the admins, or null when there's nothing to say. */
+    sosNote: String?,
     actions: List<MemberAction>,
     onAction: (MemberAction) -> Unit,
     dark: Color,
@@ -524,6 +556,14 @@ private fun MemberCard(
                         if (role != MemberRole.MEMBER) RoleBadge(owner = role == MemberRole.OWNER)
                         if (isTreasurer) RoleBadge(treasurer = true)
                     }
+                }
+                sosNote?.let {
+                    Text(
+                        it,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
                 }
             }
             if (actions.isNotEmpty()) {
@@ -574,6 +614,14 @@ private fun MemberCard(
             MemberAction.REMOVE_MEMBER -> "Remove $name from the estate?" to
                 "They'll lose access to the feed, the directory and estate announcements, and get a notification. " +
                 "To come back they'll have to ask to join again or use an invite code."
+            MemberAction.RESTORE_SIREN -> "Restore $name's SOS siren?" to
+                "Their alerts will sound the siren again. Their false alarms so far stop counting; " +
+                "two more within 30 days and it's removed again."
+            MemberAction.TURN_OFF_SOS -> "Turn off SOS alerts for $name?" to
+                "They won't be able to send emergency alerts to the estate until an admin turns them back on. " +
+                "They still get everyone else's."
+            MemberAction.TURN_ON_SOS -> "Turn SOS alerts back on for $name?" to
+                "They'll be able to send emergency alerts to the estate again."
         }
         AlertDialog(
             onDismissRequest = { confirming = null },

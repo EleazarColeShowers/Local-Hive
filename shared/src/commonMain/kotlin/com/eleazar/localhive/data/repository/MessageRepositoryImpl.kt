@@ -5,6 +5,7 @@ import com.eleazar.localhive.data.remote.LocalHiveApi
 import com.eleazar.localhive.domain.MessageRepository
 import com.eleazar.localhive.domain.model.Chat
 import com.eleazar.localhive.domain.model.Message
+import com.eleazar.localhive.domain.model.MessageReply
 import dev.gitlive.firebase.firestore.Direction
 import dev.gitlive.firebase.firestore.DocumentSnapshot
 import dev.gitlive.firebase.firestore.FieldValue
@@ -127,8 +128,15 @@ class MessageRepositoryImpl(
         )
     }.getOrNull()
 
-    private fun Message.toMap(): Map<String, Any?> = mapOf(
-        "chatId" to chatId, "senderId" to senderId,
-        "content" to content, "timestamp" to timestamp
-    )
+    private fun Message.toMap(): Map<String, Any?> = buildMap {
+        put("chatId", chatId)
+        put("senderId", senderId)
+        put("content", content)
+        put("timestamp", timestamp)
+        replyTo?.let { reply ->
+            put("replyToId", reply.messageId)
+            put("replyToSenderId", reply.senderId)
+            put("replyToContent", reply.content.take(MessageReply.MAX_PREVIEW_LENGTH))
+        }
+    }
 }

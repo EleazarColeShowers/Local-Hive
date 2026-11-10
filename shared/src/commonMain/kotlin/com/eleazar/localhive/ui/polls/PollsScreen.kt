@@ -2,6 +2,7 @@ package com.eleazar.localhive.ui.polls
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -174,7 +175,9 @@ fun PollCard(
                         label = option,
                         votes = poll.counts.getOrElse(index) { 0 },
                         total = poll.voteCount,
-                        mine = myVote == index
+                        mine = myVote == index,
+                        // While it's open, tapping another option moves your vote there.
+                        onClick = if (open && myVote != index) ({ onVote(index) }) else null
                     )
                 } else {
                     OutlinedButton(
@@ -192,8 +195,9 @@ fun PollCard(
                 buildString {
                     append(if (poll.voteCount == 1) "1 vote" else "${poll.voteCount} votes")
                     when {
+                        myVote != null && open -> append(" · Tap another option to change your vote")
                         myVote != null -> append(" · You voted")
-                        open -> append(" · Votes are anonymous and final")
+                        open -> append(" · Votes are anonymous")
                     }
                 },
                 fontSize = 12.sp,
@@ -219,7 +223,7 @@ fun PollCard(
 }
 
 @Composable
-private fun ResultRow(label: String, votes: Int, total: Int, mine: Boolean) {
+private fun ResultRow(label: String, votes: Int, total: Int, mine: Boolean, onClick: (() -> Unit)? = null) {
     val fraction = if (total > 0) votes.toFloat() / total else 0f
     val accent = MaterialTheme.colorScheme.primary
     val shape = RoundedCornerShape(10.dp)
@@ -230,6 +234,7 @@ private fun ResultRow(label: String, votes: Int, total: Int, mine: Boolean) {
             .height(42.dp)
             .clip(shape)
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+            .then(if (onClick != null) Modifier.clickable(onClickLabel = "Change vote to $label", onClick = onClick) else Modifier)
     ) {
         Box(
             modifier = Modifier
@@ -241,20 +246,23 @@ private fun ResultRow(label: String, votes: Int, total: Int, mine: Boolean) {
             modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                label,
-                fontWeight = if (mine) FontWeight.Bold else FontWeight.Medium,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
-            )
-            if (mine) {
-                Spacer(Modifier.width(6.dp))
-                Icon(Icons.Filled.CheckCircle, contentDescription = "Your vote", tint = accent, modifier = Modifier.size(16.dp))
+            // Takes the room left of the percentage, which then always sits at the right edge.
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                Text(
+                    label,
+                    fontWeight = if (mine) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (mine) {
+                    Spacer(Modifier.width(6.dp))
+                    Icon(Icons.Filled.CheckCircle, contentDescription = "Your vote", tint = accent, modifier = Modifier.size(16.dp))
+                }
             }
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.width(8.dp))
             Text(
                 "${(fraction * 100).toInt()}%",
                 fontWeight = FontWeight.SemiBold,

@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.profile
 
+import com.eleazar.localhive.ui.util.friendlyMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eleazar.localhive.domain.AuthRepository
@@ -44,7 +45,7 @@ class ProfileViewModel(
                     _uiState.update { it.copy(user = user, isLoading = false) }
                     user.estateId?.let { loadEstate(it) }
                 },
-                onFailure = { e -> _uiState.update { it.copy(error = e.message, isLoading = false) } }
+                onFailure = { e -> _uiState.update { it.copy(error = e.friendlyMessage(), isLoading = false) } }
             )
         }
     }
@@ -61,7 +62,13 @@ class ProfileViewModel(
         }
     }
 
-    fun updateProfile(displayName: String, username: String, bio: String, imageUri: String? = null) {
+    fun updateProfile(
+        displayName: String,
+        username: String,
+        bio: String,
+        occupation: String,
+        imageUri: String? = null
+    ) {
         val user = _uiState.value.user ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
@@ -72,7 +79,7 @@ class ProfileViewModel(
                     onSuccess = { it },
                     onFailure = { e ->
                         _uiState.update {
-                            it.copy(isLoading = false, error = e.message ?: "Couldn't upload your photo")
+                            it.copy(isLoading = false, error = e.friendlyMessage("Couldn't upload your photo"))
                         }
                         return@launch
                     }
@@ -83,11 +90,13 @@ class ProfileViewModel(
                 displayName = displayName,
                 username = username,
                 bio = bio,
+                // Saved even when blank, so clearing it takes it off the profile.
+                occupation = occupation.trim(),
                 profileImageUrl = imageUrl
             )
             userRepository.updateUser(updated).fold(
                 onSuccess = { _uiState.update { it.copy(user = updated, isLoading = false) } },
-                onFailure = { e -> _uiState.update { it.copy(error = e.message, isLoading = false) } }
+                onFailure = { e -> _uiState.update { it.copy(error = e.friendlyMessage(), isLoading = false) } }
             )
         }
     }

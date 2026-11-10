@@ -85,7 +85,7 @@ fun ChatDetailRoute(
         isLoadingMoreMessages = uiState.isLoadingMoreMessages,
         unsentDraft = uiState.unsentDraft,
         onNavigateBack = onNavigateBack,
-        onSendMessage = { content -> viewModel.sendMessage(chatId, content) },
+        onSendMessage = { content, replyTo -> viewModel.sendMessage(chatId, content, replyTo) },
         onLoadOlderMessages = { viewModel.loadOlderMessages(chatId) },
         onUnsentDraftShown = viewModel::consumeUnsentDraft,
         unsentReason = uiState.unsentReason,

@@ -11,6 +11,7 @@ import com.eleazar.localhive.data.repository.NotificationRepositoryImpl
 import com.eleazar.localhive.data.repository.PollRepositoryImpl
 import com.eleazar.localhive.data.repository.PostRepositoryImpl
 import com.eleazar.localhive.data.repository.ReportRepositoryImpl
+import com.eleazar.localhive.data.repository.SosRepositoryImpl
 import com.eleazar.localhive.data.repository.StorageRepositoryImpl
 import com.eleazar.localhive.data.repository.UserRepositoryImpl
 import com.eleazar.localhive.data.repository.UtilityRepositoryImpl
@@ -23,6 +24,7 @@ import com.eleazar.localhive.domain.NotificationRepository
 import com.eleazar.localhive.domain.PollRepository
 import com.eleazar.localhive.domain.PostRepository
 import com.eleazar.localhive.domain.ReportRepository
+import com.eleazar.localhive.domain.SosRepository
 import com.eleazar.localhive.domain.StorageRepository
 import com.eleazar.localhive.domain.UserRepository
 import com.eleazar.localhive.domain.UtilityRepository
@@ -94,6 +96,7 @@ fun dataModule(apiBaseUrl: String) = module {
     singleOf(::PollRepositoryImpl) bind PollRepository::class
     singleOf(::UtilityRepositoryImpl) bind UtilityRepository::class
     singleOf(::ReportRepositoryImpl) bind ReportRepository::class
+    singleOf(::SosRepositoryImpl) bind SosRepository::class
 }
 
 val viewModelModule = module {

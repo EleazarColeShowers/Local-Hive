@@ -2,6 +2,7 @@ package com.eleazar.localhive.ui.feed
 
 import com.eleazar.localhive.domain.model.Comment
 import com.eleazar.localhive.domain.model.Post
+import com.eleazar.localhive.domain.model.SosStanding
 import com.eleazar.localhive.domain.model.User
 
 /** Everything the feed, post detail and composer screens render. */
@@ -39,7 +40,9 @@ data class FeedUiState(
     /** The open post doesn't exist, or has just been deleted by someone. */
     val postMissing: Boolean = false,
     /** The user deleted a post, so a screen showing only that post can close. */
-    val postDeleted: Boolean = false
+    val postDeleted: Boolean = false,
+    /** The user's own SOS standing: switched off by an admin, or sent without the siren. */
+    val sosStanding: SosStanding = SosStanding()
 ) {
     val isAdmin: Boolean get() = currentUserId != null && currentUserId in adminIds
 }

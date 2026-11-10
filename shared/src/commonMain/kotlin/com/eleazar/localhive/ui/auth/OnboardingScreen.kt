@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -25,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -34,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import localhive.shared.generated.resources.Res
 import localhive.shared.generated.resources.carouselone
@@ -62,6 +65,8 @@ private val Pages = listOf(
     )
 )
 
+private const val AutoAdvanceMillis = 4_000L
+
 /** Three-page intro: an illustration, a title and a line of text each, then sign up. */
 @Composable
 fun OnboardingScreen(
@@ -71,6 +76,14 @@ fun OnboardingScreen(
     val scope = rememberCoroutineScope()
     val isLastPage = pagerState.currentPage == Pages.lastIndex
     val accent = MaterialTheme.colorScheme.primary
+    val isDragged by pagerState.interactionSource.collectIsDraggedAsState()
+
+    // Moves to the next page on its own, waiting while someone is swiping and stopping on the last.
+    LaunchedEffect(pagerState.currentPage, isDragged) {
+        if (isDragged || isLastPage) return@LaunchedEffect
+        delay(AutoAdvanceMillis)
+        pagerState.animateScrollToPage(pagerState.currentPage + 1)
+    }
 
     Column(
         modifier = Modifier

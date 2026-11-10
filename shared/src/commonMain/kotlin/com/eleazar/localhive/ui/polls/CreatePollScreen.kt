@@ -76,7 +76,7 @@ fun CreatePollScreen(
                 .padding(horizontal = ScreenGutter, vertical = 8.dp)
         ) {
             Text(
-                "Everyone in the estate is notified and can vote once. Votes are anonymous; only the totals are shown.",
+                "Everyone in the estate is notified and gets one vote, which they can change until the poll closes. Votes are anonymous; only the totals are shown.",
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

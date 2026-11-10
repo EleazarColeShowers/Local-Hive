@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.messages
 
+import com.eleazar.localhive.ui.util.friendlyMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eleazar.localhive.domain.AuthRepository
@@ -7,6 +8,7 @@ import com.eleazar.localhive.domain.MessageRepository
 import com.eleazar.localhive.domain.UserRepository
 import com.eleazar.localhive.domain.model.Chat
 import com.eleazar.localhive.domain.model.Message
+import com.eleazar.localhive.domain.model.MessageReply
 import dev.gitlive.firebase.firestore.FirebaseFirestoreException
 import dev.gitlive.firebase.firestore.FirestoreExceptionCode
 import dev.gitlive.firebase.firestore.code
@@ -114,7 +116,7 @@ class MessagesViewModel(
                         it.copy(
                             isLoadingChats = false,
                             isRefreshingChats = false,
-                            chatsError = e.message ?: "Couldn't load your messages"
+                            chatsError = e.friendlyMessage("Couldn't load your messages")
                         )
                     }
                 }
@@ -163,7 +165,7 @@ class MessagesViewModel(
         messagesJob = viewModelScope.launch {
             messageRepository.getMessages(chatId, MESSAGE_PAGE_SIZE)
                 .catch { e ->
-                    _uiState.update { it.copy(isLoadingMessages = false, error = e.message ?: "Couldn't load messages") }
+                    _uiState.update { it.copy(isLoadingMessages = false, error = e.friendlyMessage("Couldn't load messages")) }
                 }
                 .collect { messages ->
                     liveMessages = messages
@@ -201,7 +203,7 @@ class MessagesViewModel(
                     }
                 }
                 .onFailure { e ->
-                    _uiState.update { it.copy(isLoadingMoreMessages = false, error = e.message) }
+                    _uiState.update { it.copy(isLoadingMoreMessages = false, error = e.friendlyMessage()) }
                 }
         }
     }
@@ -255,7 +257,7 @@ class MessagesViewModel(
         viewModelScope.launch { messageRepository.setTyping(chatId, userId, 0L) }
     }
 
-    fun sendMessage(chatId: String, content: String) {
+    fun sendMessage(chatId: String, content: String, replyTo: Message? = null) {
         val text = content.trim()
         val userId = _uiState.value.currentUserId ?: return
         if (text.isEmpty()) return
@@ -273,7 +275,8 @@ class MessagesViewModel(
             chatId = chatId,
             senderId = userId,
             content = text,
-            timestamp = nowMillis()
+            timestamp = nowMillis(),
+            replyTo = replyTo?.let(MessageReply::of)
         )
         viewModelScope.launch {
             messageRepository.sendMessage(message, names).onFailure { e ->

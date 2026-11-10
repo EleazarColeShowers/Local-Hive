@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.estate
 
+import com.eleazar.localhive.ui.util.friendlyMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eleazar.localhive.domain.AuthRepository
@@ -15,6 +16,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.catch
+import com.eleazar.localhive.domain.model.SosStanding
+import com.eleazar.localhive.domain.SosRepository
 
 data class EstateUiState(
     val isLoading: Boolean = false,
@@ -35,14 +39,17 @@ data class EstateUiState(
     /** A one-off confirmation for the admin panel, e.g. "Estate details saved". */
     val message: String? = null,
     /** An estate that looks like the one being created, so the creator can join it instead. */
-    val similarEstate: Estate? = null
+    val similarEstate: Estate? = null,
+    /** Each member's SOS standing, by user id, for the admin panel; members with nothing on record are left out. */
+    val sosStandings: Map<String, SosStanding> = emptyMap()
 )
 
 @OptIn(FlowPreview::class)
 class EstateViewModel(
     private val estateRepository: EstateRepository,
     private val authRepository: AuthRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val sosRepository: SosRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(EstateUiState())
@@ -91,7 +98,7 @@ class EstateViewModel(
                     _uiState.update { it.copy(isLoading = false, estate = estate, success = true) }
                 },
                 onFailure = { e ->
-                    _uiState.update { it.copy(isLoading = false, error = e.message) }
+                    _uiState.update { it.copy(isLoading = false, error = e.friendlyMessage()) }
                 }
             )
         }
@@ -106,7 +113,7 @@ class EstateViewModel(
                     _uiState.update { it.copy(isLoading = false, estate = estate, success = true) }
                 },
                 onFailure = { e ->
-                    _uiState.update { it.copy(isLoading = false, error = e.message) }
+                    _uiState.update { it.copy(isLoading = false, error = e.friendlyMessage()) }
                 }
             )
         }
@@ -151,7 +158,7 @@ class EstateViewModel(
                     onSent()
                 },
                 onFailure = { e ->
-                    _uiState.update { it.copy(error = e.message) }
+                    _uiState.update { it.copy(error = e.friendlyMessage()) }
                 }
             )
         }
@@ -182,11 +189,44 @@ class EstateViewModel(
         }
     }
 
+    /** Admins only: who has SOS turned off, and who has false alarms on record. */
+    fun loadSosStandings(estateId: String) {
+        viewModelScope.launch {
+            sosRepository.observeStandings(estateId)
+                .catch { /* Not an admin (any more): the panel just shows no SOS details. */ }
+                .collect { standings -> _uiState.update { it.copy(sosStandings = standings) } }
+        }
+    }
+
+    fun setSosDisabled(estateId: String, userId: String, disabled: Boolean) {
+        val adminId = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            sosRepository.setDisabled(estateId, userId, disabled, adminId).fold(
+                onSuccess = {
+                    _uiState.update {
+                        it.copy(error = null, message = if (disabled) "SOS alerts turned off for them" else "SOS alerts turned back on")
+                    }
+                },
+                onFailure = { e -> _uiState.update { it.copy(error = e.friendlyMessage()) } }
+            )
+        }
+    }
+
+    fun restoreSiren(estateId: String, userId: String) {
+        val adminId = authRepository.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            sosRepository.restoreSiren(estateId, userId, adminId).fold(
+                onSuccess = { _uiState.update { it.copy(error = null, message = "Siren restored for their alerts") } },
+                onFailure = { e -> _uiState.update { it.copy(error = e.friendlyMessage()) } }
+            )
+        }
+    }
+
     fun approveRequest(estateId: String, userId: String) {
         viewModelScope.launch {
             estateRepository.approveRequest(estateId, userId).fold(
                 onSuccess = { _uiState.update { it.copy(error = null) } },
-                onFailure = { e -> _uiState.update { it.copy(error = e.message) } }
+                onFailure = { e -> _uiState.update { it.copy(error = e.friendlyMessage()) } }
             )
         }
     }
@@ -195,7 +235,7 @@ class EstateViewModel(
         viewModelScope.launch {
             estateRepository.denyRequest(estateId, userId).fold(
                 onSuccess = { _uiState.update { it.copy(error = null) } },
-                onFailure = { e -> _uiState.update { it.copy(error = e.message) } }
+                onFailure = { e -> _uiState.update { it.copy(error = e.friendlyMessage()) } }
             )
         }
     }
@@ -204,7 +244,7 @@ class EstateViewModel(
         viewModelScope.launch {
             estateRepository.promoteToAdmin(estateId, userId).fold(
                 onSuccess = { _uiState.update { it.copy(error = null) } },
-                onFailure = { e -> _uiState.update { it.copy(error = e.message) } }
+                onFailure = { e -> _uiState.update { it.copy(error = e.friendlyMessage()) } }
             )
         }
     }
@@ -213,7 +253,7 @@ class EstateViewModel(
         viewModelScope.launch {
             estateRepository.setTreasurer(estateId, userId).fold(
                 onSuccess = { _uiState.update { it.copy(error = null) } },
-                onFailure = { e -> _uiState.update { it.copy(error = e.message) } }
+                onFailure = { e -> _uiState.update { it.copy(error = e.friendlyMessage()) } }
             )
         }
     }
@@ -222,7 +262,7 @@ class EstateViewModel(
         viewModelScope.launch {
             estateRepository.removeAdmin(estateId, userId).fold(
                 onSuccess = { _uiState.update { it.copy(error = null) } },
-                onFailure = { e -> _uiState.update { it.copy(error = e.message) } }
+                onFailure = { e -> _uiState.update { it.copy(error = e.friendlyMessage()) } }
             )
         }
     }
@@ -231,7 +271,7 @@ class EstateViewModel(
         viewModelScope.launch {
             estateRepository.removeMember(estateId, userId).fold(
                 onSuccess = { _uiState.update { it.copy(error = null) } },
-                onFailure = { e -> _uiState.update { it.copy(error = e.message) } }
+                onFailure = { e -> _uiState.update { it.copy(error = e.friendlyMessage()) } }
             )
         }
     }
@@ -266,7 +306,7 @@ class EstateViewModel(
                 onSuccess = { code ->
                     _uiState.update { it.copy(isSaving = false, message = "New invite code: $code. The old one no longer works.") }
                 },
-                onFailure = { e -> _uiState.update { it.copy(isSaving = false, error = e.message) } }
+                onFailure = { e -> _uiState.update { it.copy(isSaving = false, error = e.friendlyMessage()) } }
             )
         }
     }
@@ -279,7 +319,7 @@ class EstateViewModel(
             _uiState.update { it.copy(isSaving = true, error = null) }
             change().fold(
                 onSuccess = { _uiState.update { it.copy(isSaving = false, message = done) } },
-                onFailure = { e -> _uiState.update { it.copy(isSaving = false, error = e.message) } }
+                onFailure = { e -> _uiState.update { it.copy(isSaving = false, error = e.friendlyMessage()) } }
             )
         }
     }

@@ -43,7 +43,9 @@ import com.eleazar.localhive.ui.components.ScreenGutter
 import com.eleazar.localhive.ui.components.icon
 import com.eleazar.localhive.ui.components.readable
 import com.eleazar.localhive.ui.theme.AlertRed
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.eleazar.localhive.ui.util.nowMillis
 
 /** Fills the button while it's held. */
 private val HoldFill = Color(0xFF7F0000)
@@ -51,11 +53,14 @@ private val HoldFill = Color(0xFF7F0000)
 /** Long enough that a pocket or a stray tap can't send it, short enough not to slow anyone down. */
 private const val HOLD_MILLIS = 1500
 
+/** After the hold, how long there is to change your mind before anyone's phone rings. */
+private const val CANCEL_SECONDS = 5
+
 private const val MAX_DETAILS_LENGTH = 500
 
 /**
  * The SOS screen: what's happening and where, then a press-and-hold button that alerts the whole
- * estate.
+ * estate after a few seconds in which it can still be called off.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,6 +76,10 @@ fun EmergencyAlertScreen(
     val shownLocation = location ?: uiState.currentUserAddress.orEmpty()
     var details by rememberSaveable { mutableStateOf("") }
     val muted = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+    // Held long enough: counting down to the send, which a tap still cancels.
+    var countingDown by remember { mutableStateOf(false) }
+    val standing = uiState.sosStanding
+    val sirenRemoved = remember(standing) { standing.sirenRemoved(nowMillis()) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -93,13 +102,33 @@ fun EmergencyAlertScreen(
                         .imePadding()
                         .padding(horizontal = ScreenGutter, vertical = 12.dp)
                 ) {
-                    HoldToSendButton(
-                        label = type?.takeIf { it != EmergencyType.OTHER }?.let { "Hold to send ${it.label.lowercase()} alert" }
-                            ?: "Hold to send alert",
-                        sending = uiState.isPosting,
-                        enabled = uiState.estateId != null && !uiState.isPosting,
-                        onSend = { onSend(type ?: EmergencyType.OTHER, shownLocation.trim(), details.trim()) }
-                    )
+                    when {
+                        standing.disabled -> SosTurnedOff()
+                        countingDown -> CancelCountdown(
+                            onCancel = { countingDown = false },
+                            onFinished = {
+                                countingDown = false
+                                onSend(type ?: EmergencyType.OTHER, shownLocation.trim(), details.trim())
+                            }
+                        )
+                        else -> HoldToSendButton(
+                            label = type?.takeIf { it != EmergencyType.OTHER }?.let { "Hold to send ${it.label.lowercase()} alert" }
+                                ?: "Hold to send alert",
+                            sending = uiState.isPosting,
+                            enabled = uiState.estateId != null && !uiState.isPosting,
+                            onSend = { countingDown = true }
+                        )
+                    }
+                    if (sirenRemoved && !standing.disabled) {
+                        Text(
+                            "Because of recent false alarms, your alert goes out as a normal notification, " +
+                                "without the siren, until an admin restores it.",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
                     Text(
                         "If someone's life is in danger, call 112 as well.",
                         fontSize = 13.sp,
@@ -191,7 +220,55 @@ fun EmergencyAlertScreen(
     }
 }
 
-/** Fills up while held and sends once full; letting go early cancels. */
+/** Shown instead of the send button once an admin has turned off the user's SOS alerts. */
+@Composable
+private fun SosTurnedOff() {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            "An admin has turned off SOS alerts for you, so this can't alert the estate. " +
+                "Message an admin if you think that's a mistake.",
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            modifier = Modifier.padding(16.dp)
+        )
+    }
+}
+
+/** Counts down to the send; a tap anywhere on it calls the alert off. */
+@Composable
+private fun CancelCountdown(onCancel: () -> Unit, onFinished: () -> Unit) {
+    var secondsLeft by remember { mutableIntStateOf(CANCEL_SECONDS) }
+    val currentOnFinished by rememberUpdatedState(onFinished)
+    LaunchedEffect(Unit) {
+        while (secondsLeft > 0) {
+            delay(1000)
+            secondsLeft--
+        }
+        currentOnFinished()
+    }
+    Surface(
+        onClick = onCancel,
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.inverseSurface,
+        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+        modifier = Modifier.fillMaxWidth().height(60.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                "Sending in $secondsLeft… Tap to cancel",
+                fontWeight = FontWeight.Bold,
+                fontSize = 17.sp
+            )
+        }
+    }
+}
+
+/** Fills up while held, then starts the countdown once full; letting go early cancels. */
 @Composable
 private fun HoldToSendButton(label: String, sending: Boolean, enabled: Boolean, onSend: () -> Unit) {
     val progress = remember { Animatable(0f) }

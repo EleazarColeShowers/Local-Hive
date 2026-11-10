@@ -2,7 +2,9 @@ package com.eleazar.localhive.data.repository
 
 import com.eleazar.localhive.domain.model.Comment
 import com.eleazar.localhive.domain.model.Message
+import com.eleazar.localhive.domain.model.MessageReply
 import com.eleazar.localhive.domain.model.Post
+import com.eleazar.localhive.domain.model.SosSound
 import com.eleazar.localhive.domain.model.User
 import dev.gitlive.firebase.firestore.DocumentSnapshot
 import dev.gitlive.firebase.firestore.FirebaseFirestore
@@ -44,7 +46,9 @@ internal fun DocumentSnapshot.toUser(): User = User(
     occupation = string("occupation"),
     phone = string("phone"),
     fcmToken = string("fcmToken"),
-    lightAlerts = boolean("lightAlerts") ?: false
+    lightAlerts = boolean("lightAlerts") ?: false,
+    sosSound = SosSound.fromKey(string("sosSound")),
+    sosPausedUntil = long("sosPausedUntil") ?: 0L
 )
 
 /** Only the fields that are set, for merge writes that mustn't blank anything out. */
@@ -82,7 +86,9 @@ internal fun DocumentSnapshot.toPost(): Post = Post(
     statusUpdatedByName = string("statusUpdatedByName").orEmpty(),
     statusUpdatedAt = long("statusUpdatedAt") ?: 0L,
     editedAt = long("editedAt") ?: 0L,
-    responders = stringMap("responders").orEmpty()
+    responders = stringMap("responders").orEmpty(),
+    falseAlarm = boolean("falseAlarm") ?: false,
+    falseAlarmByName = string("falseAlarmByName").orEmpty()
 )
 
 internal fun DocumentSnapshot.toComment(): Comment = Comment(
@@ -92,7 +98,8 @@ internal fun DocumentSnapshot.toComment(): Comment = Comment(
     authorName = string("authorName").orEmpty(),
     content = string("content").orEmpty(),
     createdAt = long("createdAt") ?: 0L,
-    mentions = stringMap("mentions").orEmpty()
+    mentions = stringMap("mentions").orEmpty(),
+    parentId = string("parentId")?.takeIf { it.isNotBlank() }
 )
 
 internal fun DocumentSnapshot.toMessage(): Message = Message(
@@ -100,5 +107,12 @@ internal fun DocumentSnapshot.toMessage(): Message = Message(
     chatId = string("chatId").orEmpty(),
     senderId = string("senderId").orEmpty(),
     content = string("content").orEmpty(),
-    timestamp = long("timestamp") ?: 0L
+    timestamp = long("timestamp") ?: 0L,
+    replyTo = string("replyToId")?.takeIf { it.isNotBlank() }?.let { replyId ->
+        MessageReply(
+            messageId = replyId,
+            senderId = string("replyToSenderId").orEmpty(),
+            content = string("replyToContent").orEmpty()
+        )
+    }
 )

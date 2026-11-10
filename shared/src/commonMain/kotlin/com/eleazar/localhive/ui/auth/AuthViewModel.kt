@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.auth
 
+import com.eleazar.localhive.ui.util.friendlyMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eleazar.localhive.data.remote.PushTokenSync
@@ -33,7 +34,7 @@ class AuthViewModel(
                     _uiState.update { it.copy(isLoading = false, user = user) }
                     pushTokenSync.sync(user.id)
                 },
-                onFailure = { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
+                onFailure = { e -> _uiState.update { it.copy(isLoading = false, error = e.friendlyMessage()) } }
             )
         }
     }
@@ -43,7 +44,7 @@ class AuthViewModel(
             _uiState.update { it.copy(reset = PasswordResetState.Sending) }
             val next = authRepository.sendPasswordReset(email).fold(
                 onSuccess = { PasswordResetState.Sent(email) },
-                onFailure = { e -> PasswordResetState.Failed(e.message ?: "Couldn't send the reset email. Try again.") }
+                onFailure = { e -> PasswordResetState.Failed(e.friendlyMessage("Couldn't send the reset email. Try again.")) }
             )
             _uiState.update { it.copy(reset = next) }
         }
@@ -61,7 +62,7 @@ class AuthViewModel(
                     _uiState.update { it.copy(isLoading = false, user = user) }
                     pushTokenSync.sync(user.id)
                 },
-                onFailure = { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
+                onFailure = { e -> _uiState.update { it.copy(isLoading = false, error = e.friendlyMessage()) } }
             )
         }
     }
@@ -73,7 +74,7 @@ class AuthViewModel(
             val updated = currentUser.copy(displayName = displayName, username = username, bio = bio)
             authRepository.saveUserProfile(updated).fold(
                 onSuccess = { _uiState.update { it.copy(isLoading = false, user = updated) } },
-                onFailure = { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
+                onFailure = { e -> _uiState.update { it.copy(isLoading = false, error = e.friendlyMessage()) } }
             )
         }
     }

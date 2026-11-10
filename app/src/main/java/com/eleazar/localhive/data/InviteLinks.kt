@@ -14,8 +14,8 @@ private const val TAG = "InviteLinks"
 private val INVITE_CODE = Regex("[A-Za-z0-9]{4,12}")
 
 /**
- * A localhive:// link waiting for the nav graph to follow it once the user is signed in: an
- * invite link that opened the app, or an invite code carried through a Play Store install.
+ * A localhive:// link waiting for the nav graph to follow it once the user is signed in: a tapped
+ * push, an invite link that opened the app, or an invite code carried through a Play Store install.
  */
 class LinkInbox : ViewModel() {
     private val _pending = MutableStateFlow<String?>(null)
@@ -29,6 +29,13 @@ class LinkInbox : ViewModel() {
         _pending.value = null
     }
 }
+
+/**
+ * The localhive:// link an intent asks to open: its own localhive:// link (a tapped push, or a
+ * page handing over to the app), or the join link for an https invite. Null for anything else.
+ */
+fun appLinkFrom(uri: Uri?): String? =
+    if (uri?.scheme == "localhive") uri.toString() else inviteLinkFrom(uri)
 
 /** "localhive://join/CODE" for an https://<invite host>/join/CODE link, or null for anything else. */
 fun inviteLinkFrom(uri: Uri?): String? {

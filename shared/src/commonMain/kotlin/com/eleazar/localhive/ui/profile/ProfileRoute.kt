@@ -70,8 +70,8 @@ fun ProfileRoute(
         colors = colors,
         onPickPhoto = pickPhoto,
         onEditModeChange = { editing -> if (!editing) pickedImageUri = null },
-        onSave = { name, username, bio ->
-            viewModel.updateProfile(name, username, bio, pickedImageUri)
+        onSave = { name, username, bio, occupation ->
+            viewModel.updateProfile(name, username, bio, occupation, pickedImageUri)
         },
         onCopyInviteCode = { code -> platform.copyToClipboard("Invite Code", code, "Code copied!") },
         onShareInviteCode = { code, estateName ->

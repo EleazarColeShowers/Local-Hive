@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { buildPush, estateNameLowerUpdates, pollReminders, tooManyEmergencies } from "../src/index.js";
+import { buildPush, estateNameLowerUpdates, falseAlarmsCostSiren, pollReminders, tooManyEmergencies } from "../src/index.js";
+import { sosSoundFor } from "../src/push.js";
 import { MAX_VIDEO_BYTES, oversizedVideoIds, signUpload } from "../src/cloudinary.js";
 import { decodeValue } from "../src/firestore.js";
 import { appIntentUrl, inviteCodeIn, playStoreUrl, publicResponse } from "../src/links.js";
@@ -180,6 +181,60 @@ test("emergencies only go out fresh, from their author, in the author's estate",
   assert.equal(await status(buildPush(db, "other", { type: "emergency", postId: "sos3" })), 403);
   assert.equal(await status(buildPush(db, "member", { type: "emergency", postId: "p1" })), 404);
   assert.equal(await status(buildPush(db, "member", { type: "emergency", postId: "../sos1" })), 400);
+});
+
+test("an emergency keeps the siren until its sender has two recent false alarms", async () => {
+  const day = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const alarm = (id, ago, userId = "member") => [`estates/E1/falseAlarms/${id}`, { userId, postId: id, at: now - ago }];
+  const withAlarms = (...entries) => fakeDb({ ...docs, ...Object.fromEntries(entries) });
+
+  assert.equal((await buildPush(db, "member", { type: "emergency", postId: "sos1" })).payload.maxSound, "siren");
+  // One recent, one too old, one someone else's: still the siren.
+  const mixed = withAlarms(alarm("f1", day), alarm("f2", 40 * day), alarm("f3", day, "third"));
+  assert.equal((await buildPush(mixed, "member", { type: "emergency", postId: "sos1" })).payload.maxSound, "siren");
+  const two = withAlarms(alarm("f1", day), alarm("f2", 2 * day));
+  assert.equal((await buildPush(two, "member", { type: "emergency", postId: "sos1" })).payload.maxSound, "sound");
+  // An admin restoring the siren wipes the slate.
+  assert.equal(await falseAlarmsCostSiren(two, "E1", "member", { restoredAt: now - day / 2 }, now), false);
+  assert.equal(await falseAlarmsCostSiren(two, "E1", "member", { restoredAt: now - 3 * day }, now), true);
+});
+
+test("an emergency from someone whose SOS an admin turned off is refused", async () => {
+  const off = fakeDb({ ...docs, "estates/E1/sosMembers/member": { disabled: true } });
+  assert.equal(await status(buildPush(off, "member", { type: "emergency", postId: "sos1" })), 403);
+  const backOn = fakeDb({ ...docs, "estates/E1/sosMembers/member": { disabled: false } });
+  assert.equal((await buildPush(backOn, "member", { type: "emergency", postId: "sos1" })).key, "emergency_sos1");
+});
+
+test("each person's SOS is as loud as their settings allow, and never louder than the sender may be", () => {
+  const now = 1_000_000;
+  assert.equal(sosSoundFor(undefined, "siren", now), "siren");
+  assert.equal(sosSoundFor({}, "siren", now), "siren");
+  assert.equal(sosSoundFor({ sosSound: "sound" }, "siren", now), "sound");
+  assert.equal(sosSoundFor({ sosSound: "vibrate" }, "siren", now), "vibrate");
+  assert.equal(sosSoundFor({ sosSound: "nonsense" }, "siren", now), "siren");
+  // Paused: only vibrates, until the pause runs out.
+  assert.equal(sosSoundFor({ sosPausedUntil: now + 1 }, "siren", now), "vibrate");
+  assert.equal(sosSoundFor({ sosPausedUntil: now - 1 }, "siren", now), "siren");
+  // A sender who lost the siren can't make anyone's phone play it.
+  assert.equal(sosSoundFor({}, "sound", now), "sound");
+  assert.equal(sosSoundFor({ sosSound: "vibrate" }, "sound", now), "vibrate");
+});
+
+test("a false alarm tells the estate, only once it's marked, from its sender or an admin", async () => {
+  const marked = fakeDb({ ...docs, "posts/sos5": { ...docs["posts/sos5"], falseAlarm: true } });
+  const byAdmin = await buildPush(marked, "admin", { type: "sos_false_alarm", postId: "sos5" });
+  assert.deepEqual(byAdmin.recipients.sort(), ["blocker", "member", "third"]);
+  assert.equal(byAdmin.payload.title, "✅ False alarm");
+  assert.equal(byAdmin.payload.body, "The fire alert from Ada was a false alarm. No help is needed.");
+  assert.equal(byAdmin.key, "sos_false_alarm_sos5");
+  assert.deepEqual((await buildPush(marked, "member", { type: "sos_false_alarm", postId: "sos5" })).recipients.sort(), ["admin", "blocker", "third"]);
+  // Another member, someone outside the estate, an unmarked alert, or not an emergency at all.
+  assert.equal(await status(buildPush(marked, "third", { type: "sos_false_alarm", postId: "sos5" })), 403);
+  assert.equal(await status(buildPush(marked, "other", { type: "sos_false_alarm", postId: "sos5" })), 403);
+  assert.equal(await status(buildPush(db, "admin", { type: "sos_false_alarm", postId: "sos5" })), 409);
+  assert.equal(await status(buildPush(marked, "admin", { type: "sos_false_alarm", postId: "sec1" })), 404);
 });
 
 test("a security report goes to the estate's admins only", async () => {

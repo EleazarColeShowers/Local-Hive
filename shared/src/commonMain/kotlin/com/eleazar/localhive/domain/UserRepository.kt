@@ -2,6 +2,7 @@ package com.eleazar.localhive.domain
 
 import com.eleazar.localhive.domain.model.BlockedUser
 import com.eleazar.localhive.domain.model.User
+import com.eleazar.localhive.domain.model.SosSound
 import kotlinx.coroutines.flow.Flow
 
 interface UserRepository {
@@ -23,6 +24,10 @@ interface UserRepository {
     suspend fun updateFcmToken(userId: String, token: String): Result<Unit>
     /** Whether the user gets a push when a neighbour reports the light is back. */
     suspend fun setLightAlerts(userId: String, enabled: Boolean): Result<Unit>
+    /** How a neighbour's SOS sounds on the user's phone. */
+    suspend fun setSosSound(userId: String, sound: SosSound): Result<Unit>
+    /** SOS alerts only vibrate until [until]; 0 ends the pause. */
+    suspend fun setSosPausedUntil(userId: String, until: Long): Result<Unit>
     /** Stops pushes for [userId] reaching this device, e.g. when they log out of it. */
     suspend fun clearFcmToken(userId: String): Result<Unit>
     /** People [userId] has blocked, newest first. */

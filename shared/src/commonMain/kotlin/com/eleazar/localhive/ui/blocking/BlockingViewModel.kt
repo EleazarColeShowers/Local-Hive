@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.blocking
 
+import com.eleazar.localhive.ui.util.friendlyMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eleazar.localhive.domain.AuthRepository
@@ -43,7 +44,7 @@ class BlockingViewModel(
         val id = userId ?: return
         viewModelScope.launch {
             userRepository.blockUser(id, BlockedUser(id = targetId, name = name, photoUrl = photoUrl))
-                .onFailure { e -> _uiState.update { it.copy(error = e.message ?: "Couldn't block them") } }
+                .onFailure { e -> _uiState.update { it.copy(error = e.friendlyMessage("Couldn't block them")) } }
         }
     }
 
@@ -51,7 +52,7 @@ class BlockingViewModel(
         val id = userId ?: return
         viewModelScope.launch {
             userRepository.unblockUser(id, targetId)
-                .onFailure { e -> _uiState.update { it.copy(error = e.message ?: "Couldn't unblock them") } }
+                .onFailure { e -> _uiState.update { it.copy(error = e.friendlyMessage("Couldn't unblock them")) } }
         }
     }
 

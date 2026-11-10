@@ -116,6 +116,21 @@ fun IncidentStatusChip(status: IncidentStatus, modifier: Modifier = Modifier) {
     }
 }
 
+/** In place of the status on an emergency that turned out not to be one. */
+@Composable
+fun FalseAlarmChip(modifier: Modifier = Modifier) {
+    val tint = MaterialTheme.colorScheme.onSurfaceVariant
+    Surface(shape = RoundedCornerShape(50), color = tint.copy(alpha = 0.14f), modifier = modifier) {
+        Text(
+            "False alarm",
+            color = tint,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+        )
+    }
+}
+
 /** A security report or emergency's location and status, shown under its category. */
 @Composable
 fun IncidentSummary(post: Post, modifier: Modifier = Modifier) {
@@ -123,7 +138,7 @@ fun IncidentSummary(post: Post, modifier: Modifier = Modifier) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IncidentStatusChip(status)
+            if (post.falseAlarm) FalseAlarmChip() else IncidentStatusChip(status)
             if (post.location.isNotBlank()) {
                 Spacer(Modifier.width(8.dp))
                 Icon(Icons.Outlined.LocationOn, contentDescription = "Location", tint = muted, modifier = Modifier.size(15.dp))
@@ -144,7 +159,14 @@ fun IncidentSummary(post: Post, modifier: Modifier = Modifier) {
                 Text(line, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = readable(HiveGreen))
             }
         }
-        if (post.statusUpdatedByName.isNotBlank() && status != IncidentStatus.OPEN) {
+        if (post.falseAlarm) {
+            Text(
+                "Marked a false alarm by ${post.falseAlarmByName.ifBlank { "an admin" }}. No help is needed.",
+                fontSize = 12.sp,
+                color = muted,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        } else if (post.statusUpdatedByName.isNotBlank() && status != IncidentStatus.OPEN) {
             val time = relativeTime(post.statusUpdatedAt)
             Text(
                 "Marked ${status.label.lowercase()} by ${post.statusUpdatedByName}" + if (time.isNotEmpty()) " · $time" else "",

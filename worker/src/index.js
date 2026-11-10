@@ -19,6 +19,7 @@ import { publicResponse } from "./links.js";
  *                           { type: "light_back", estateId }
  *                           { type: "sos_responding", postId }
  *                           { type: "sos_safe", postId }
+ *                           { type: "sos_false_alarm", postId }
  *                           { type: "levy_reminder", estateId, levyId } -> sends the push
  *   POST /delete-account    {}                                       -> deletes the caller's account
  *   GET  /join/{code}, /.well-known/assetlinks.json                  -> invite links (see links.js)
@@ -306,6 +307,10 @@ export async function buildPush(db, uid, body) {
       if (await tooManyEmergencies(db, uid)) {
         throw new HttpError(429, "You've raised several emergencies in the last half hour. Call for help directly.");
       }
+      // The rules already stop someone whose SOS an admin turned off from posting one; this is the backstop.
+      const standing = await db.get(`estates/${post.estateId}/sosMembers/${uid}`);
+      if (standing?.disabled === true) throw new HttpError(403, "An admin has turned off SOS alerts for you.");
+      const sirenRemoved = await falseAlarmsCostSiren(db, post.estateId, uid, standing);
       const members = await db.idsWhere("users", "estateId", post.estateId);
       const type = EMERGENCY_TYPES[post.emergencyType];
       const where = post.location ? ` at ${post.location}` : "";
@@ -318,6 +323,8 @@ export async function buildPush(db, uid, body) {
           deepLink: `localhive://post/${body.postId}`,
           tag: `emergency-${body.postId}`,
           channel: "emergency",
+          // Each person's own settings can make it quieter still (see sosSoundFor).
+          maxSound: sirenRemoved ? "sound" : "siren",
         },
       };
     }
@@ -422,6 +429,28 @@ export async function buildPush(db, uid, body) {
       };
     }
 
+    case "sos_false_alarm": {
+      const { post } = await emergencyFor(db, body.postId);
+      if (post.falseAlarm !== true) throw new HttpError(409, "Not marked as a false alarm");
+      const [caller, estate] = await Promise.all([db.get(`users/${uid}`), db.get(`estates/${post.estateId}`)]);
+      if (caller?.estateId !== post.estateId) throw new HttpError(403, "Not in this estate");
+      if (post.authorId !== uid && !(estate?.adminIds || []).includes(uid)) {
+        throw new HttpError(403, "Only the sender or an admin can call it a false alarm");
+      }
+      const members = await db.idsWhere("users", "estateId", post.estateId);
+      const type = EMERGENCY_TYPES[post.emergencyType];
+      return {
+        key: `sos_false_alarm_${body.postId}`,
+        recipients: members.filter((id) => id !== uid),
+        payload: {
+          title: "✅ False alarm",
+          body: `The ${type ? `${type.toLowerCase()} ` : ""}alert from ${post.authorName || "a neighbour"} was a false alarm. No help is needed.`,
+          deepLink: `localhive://post/${body.postId}`,
+          tag: `emergency-${body.postId}`,
+        },
+      };
+    }
+
     case "levy_reminder": {
       const { estateId, levyId } = body;
       if (!isId(estateId) || !isId(levyId)) throw new HttpError(400, "Bad levy reference");
@@ -490,6 +519,20 @@ export async function tooManyEmergencies(db, uid, now = Date.now()) {
   // The app stamps createdAt; a future one still counts, so it can't be used to dodge the limit.
   const recent = mine.filter(({ data }) => Number(data.createdAt || 0) > now - EMERGENCY_WINDOW_MS);
   return recent.length > EMERGENCY_LIMIT;
+}
+
+/** False alarms within this long count against the sender, and this many cost their alerts the siren. Matches the app. */
+const FALSE_ALARM_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const FALSE_ALARM_LIMIT = 2;
+
+/**
+ * True when the sender's recent false alarms mean their SOS goes out without the siren. Those from
+ * before an admin last restored it ([standing].restoredAt) don't count.
+ */
+export async function falseAlarmsCostSiren(db, estateId, uid, standing, now = Date.now()) {
+  const since = Math.max(now - FALSE_ALARM_WINDOW_MS, Number(standing?.restoredAt) || 0);
+  const alarms = await db.query("falseAlarms", [["userId", "EQUAL", uid]], { parent: `estates/${estateId}` });
+  return alarms.filter(({ data }) => Number(data.at || 0) > since).length >= FALSE_ALARM_LIMIT;
 }
 
 /** A "light is back" report older than this is too stale to push. */

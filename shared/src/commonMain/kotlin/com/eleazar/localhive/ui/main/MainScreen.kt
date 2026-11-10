@@ -23,6 +23,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -151,7 +153,7 @@ private fun MainBottomBar(
                         selected = false,
                         onClick = onCreatePostClick,
                         icon = { Icon(Icons.Outlined.AddBox, contentDescription = null) },
-                        label = { Text("Post", fontWeight = FontWeight.Normal, style = MaterialTheme.typography.labelMedium) },
+                        label = { NavLabel("Post", selected = false) },
                         colors = NavigationBarItemDefaults.colors(
                             unselectedIconColor = inactive,
                             unselectedTextColor = inactive
@@ -189,13 +191,7 @@ private fun RowScope.MainNavItem(
                 )
             }
         },
-        label = {
-            Text(
-                text = tab.label,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                style = MaterialTheme.typography.labelMedium
-            )
-        },
+        label = { NavLabel(tab.label, selected) },
         modifier = Modifier.semantics {
             if (tab.badgeCount > 0) contentDescription = "${tab.label}, ${tab.badgeCount} unread"
         },
@@ -206,6 +202,26 @@ private fun RowScope.MainNavItem(
             unselectedIconColor = inactive,
             unselectedTextColor = inactive
         )
+    )
+}
+
+/**
+ * A tab's name, always on one line. Six tabs share a narrow phone's width, so with a large system
+ * font "Messages" used to wrap; the text stops growing past a modest font scale instead.
+ */
+@Composable
+private fun NavLabel(text: String, selected: Boolean) {
+    val style = MaterialTheme.typography.labelMedium
+    val fontScale = LocalDensity.current.fontScale
+    val maxScale = 1.15f
+    Text(
+        text = text,
+        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        style = style,
+        fontSize = if (fontScale > maxScale) style.fontSize * (maxScale / fontScale) else style.fontSize,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Clip
     )
 }
 

@@ -117,7 +117,7 @@ fun ProfileScreen(
     colors: ProfileColors,
     onPickPhoto: () -> Unit,
     onEditModeChange: (Boolean) -> Unit,
-    onSave: (name: String, username: String, bio: String) -> Unit,
+    onSave: (name: String, username: String, bio: String, occupation: String) -> Unit,
     onCopyInviteCode: (code: String) -> Unit,
     onShareInviteCode: (code: String, estateName: String) -> Unit,
     onSettings: () -> Unit,
@@ -132,11 +132,13 @@ fun ProfileScreen(
     var editName by remember { mutableStateOf("") }
     var editUsername by remember { mutableStateOf("") }
     var editBio by remember { mutableStateOf("") }
+    var editOccupation by remember { mutableStateOf("") }
 
     fun resetFields() {
         editName = user?.displayName ?: ""
         editUsername = user?.username ?: ""
         editBio = user?.bio ?: ""
+        editOccupation = user?.occupation ?: ""
     }
 
     LaunchedEffect(user) { resetFields() }
@@ -192,17 +194,19 @@ fun ProfileScreen(
                     name = editName,
                     username = editUsername,
                     bio = editBio,
+                    occupation = editOccupation,
                     isLoading = isLoading,
                     colors = colors,
                     onNameChange = { editName = it },
                     onUsernameChange = { editUsername = it },
                     onBioChange = { editBio = it },
+                    onOccupationChange = { editOccupation = it },
                     onCancel = {
                         resetFields()
                         showEdit = false
                     },
                     onSave = {
-                        onSave(editName, editUsername, editBio)
+                        onSave(editName, editUsername, editBio, editOccupation)
                         showEdit = false
                     }
                 )
@@ -460,7 +464,7 @@ private fun ViewContent(
             user?.email?.let { Triple(Icons.Default.Email, "Email", it) },
             user?.phone?.let { Triple(Icons.Default.Phone, "Phone", it) },
             user?.address?.let { Triple(Icons.Default.Home, "Address", it) },
-            user?.occupation?.let { Triple(Icons.Default.AccountBox, "Occupation", it) }
+            user?.occupation?.takeIf { it.isNotBlank() }?.let { Triple(Icons.Default.AccountBox, "Occupation", it) }
         )
         if (contactRows.isNotEmpty()) {
             SectionLabel("About", colors)
@@ -486,11 +490,13 @@ private fun EditContent(
     name: String,
     username: String,
     bio: String,
+    occupation: String,
     isLoading: Boolean,
     colors: ProfileColors,
     onNameChange: (String) -> Unit,
     onUsernameChange: (String) -> Unit,
     onBioChange: (String) -> Unit,
+    onOccupationChange: (String) -> Unit,
     onCancel: () -> Unit,
     onSave: () -> Unit
 ) {
@@ -530,6 +536,16 @@ private fun EditContent(
                     onValueChange = onUsernameChange,
                     label = { Text("Username") },
                     prefix = { Text("@") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    singleLine = true,
+                    colors = fieldColors(colors)
+                )
+                OutlinedTextField(
+                    value = occupation,
+                    onValueChange = onOccupationChange,
+                    label = { Text("Occupation (optional)") },
+                    placeholder = { Text("e.g. Teacher, Engineer…") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
                     singleLine = true,

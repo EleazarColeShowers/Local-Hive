@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.settings
 
+import com.eleazar.localhive.ui.util.friendlyMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eleazar.localhive.data.remote.PushTokenSync
@@ -9,6 +10,7 @@ import com.eleazar.localhive.domain.EstateRepository
 import com.eleazar.localhive.domain.ThemeMode
 import com.eleazar.localhive.domain.UserRepository
 import com.eleazar.localhive.domain.model.Estate
+import com.eleazar.localhive.domain.model.SosSound
 import com.eleazar.localhive.domain.model.User
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +23,9 @@ data class SettingsUiState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val pushNotificationsEnabled: Boolean = true,
     val lightAlerts: Boolean = false,
+    val sosSound: SosSound = SosSound.SIREN,
+    /** Until when SOS alerts only vibrate; 0 or past when not paused. */
+    val sosPausedUntil: Long = 0L,
     val isLoading: Boolean = false,
     val error: String? = null,
     val isLoggedOut: Boolean = false,
@@ -57,7 +62,9 @@ class SettingsViewModel(
         viewModelScope.launch {
             userRepository.getUser(userId).fold(
                 onSuccess = { user ->
-                    _uiState.update { it.copy(user = user, lightAlerts = user.lightAlerts) }
+                    _uiState.update {
+                        it.copy(user = user, lightAlerts = user.lightAlerts, sosSound = user.sosSound, sosPausedUntil = user.sosPausedUntil)
+                    }
                     user.estateId?.let { loadEstate(it) }
                 },
                 onFailure = { /* non-critical, ignore */ }
@@ -96,6 +103,29 @@ class SettingsViewModel(
         }
     }
 
+    fun setSosSound(sound: SosSound) {
+        val userId = authRepository.getCurrentUserId() ?: return
+        val previous = _uiState.value.sosSound
+        _uiState.update { it.copy(sosSound = sound) }
+        viewModelScope.launch {
+            userRepository.setSosSound(userId, sound).onFailure { e ->
+                _uiState.update { it.copy(sosSound = previous, error = e.friendlyMessage("Couldn't save that")) }
+            }
+        }
+    }
+
+    /** SOS alerts only vibrate until [until]; 0 resumes the siren now. */
+    fun pauseSos(until: Long) {
+        val userId = authRepository.getCurrentUserId() ?: return
+        val previous = _uiState.value.sosPausedUntil
+        _uiState.update { it.copy(sosPausedUntil = until) }
+        viewModelScope.launch {
+            userRepository.setSosPausedUntil(userId, until).onFailure { e ->
+                _uiState.update { it.copy(sosPausedUntil = previous, error = e.friendlyMessage("Couldn't save that")) }
+            }
+        }
+    }
+
     fun leaveEstate() {
         val user = _uiState.value.user ?: return
         val estateId = user.estateId ?: return
@@ -103,7 +133,7 @@ class SettingsViewModel(
             _uiState.update { it.copy(isLoading = true) }
             estateRepository.leaveEstate(estateId, user.id).fold(
                 onSuccess = { _uiState.update { it.copy(isLoading = false, hasLeftEstate = true, estate = null) } },
-                onFailure = { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
+                onFailure = { e -> _uiState.update { it.copy(isLoading = false, error = e.friendlyMessage()) } }
             )
         }
     }
@@ -116,7 +146,7 @@ class SettingsViewModel(
                 onSuccess = { _uiState.update { it.copy(isDeletingAccount = false, isLoggedOut = true) } },
                 onFailure = { e ->
                     _uiState.update {
-                        it.copy(isDeletingAccount = false, deleteAccountError = e.message ?: "Couldn't delete your account. Try again.")
+                        it.copy(isDeletingAccount = false, deleteAccountError = e.friendlyMessage("Couldn't delete your account. Try again."))
                     }
                 }
             )

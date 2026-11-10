@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.ui.platform.LocalUriHandler
 import com.eleazar.localhive.domain.model.ReportReason
+import com.eleazar.localhive.domain.model.SosSound
 import com.eleazar.localhive.ui.report.ReportDialog
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -67,6 +68,10 @@ fun SettingsScreen(
     onDeleteAccountDismissed: () -> Unit = {},
     lightAlerts: Boolean = false,
     onLightAlertsChange: (Boolean) -> Unit = {},
+    sosSound: SosSound = SosSound.SIREN,
+    onSosSoundChange: (SosSound) -> Unit = {},
+    sosPausedUntil: Long = 0L,
+    onPauseSos: (until: Long) -> Unit = {},
     onSendFeedback: (ReportReason, details: String) -> Unit = { _, _ -> },
     /** Terms, privacy policy and so on, as (title, web address), opened in the browser. */
     policyLinks: List<Pair<String, String>> = emptyList()
@@ -221,6 +226,21 @@ fun SettingsScreen(
             }
 
             Spacer(Modifier.height(16.dp))
+
+            if (hasEstate) {
+                SettingsSection(title = "SOS alerts", lightGold = lightGold, darkGray = darkGray) {
+                    SosSettingsRows(
+                        sound = sosSound,
+                        onSoundChange = onSosSoundChange,
+                        pausedUntil = sosPausedUntil,
+                        onPause = onPauseSos,
+                        darkGray = darkGray,
+                        hiveGreen = hiveGreen
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
+            }
 
             SettingsSection(title = "Account", lightGold = lightGold, darkGray = darkGray) {
                 userEmail?.let { email ->

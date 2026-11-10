@@ -1,7 +1,7 @@
 package com.eleazar.localhive.domain.model
 
 /**
- * A question an admin puts to the estate. Each member votes once, and votes can't be changed;
+ * A question an admin puts to the estate. Each member has one vote, which they can change while it's open;
  * only the tallies are shared, never who voted for what.
  */
 data class Poll(

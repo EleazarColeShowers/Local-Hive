@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.*
@@ -27,6 +28,13 @@ import com.eleazar.localhive.ui.theme.HiveGreen
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.automirrored.outlined.Reply
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.ui.draw.clip
 import com.eleazar.localhive.domain.model.Comment
@@ -58,13 +66,16 @@ fun PostDetailScreen(
     uiState: FeedUiState,
     onNavigateBack: () -> Unit,
     onLike: (postId: String) -> Unit,
-    onAddComment: (content: String, mentions: Map<String, String>) -> Unit,
+    /** Posts a comment, or a reply under the comment [parentId] when it's set. */
+    onAddComment: (content: String, mentions: Map<String, String>, parentId: String?) -> Unit,
     onUserClick: (userId: String) -> Unit = {},
     onUpdateStatus: (IncidentStatus) -> Unit = {},
     onEditPost: () -> Unit = {},
     onDeletePost: (reason: String) -> Unit = {},
     onRespond: () -> Unit = {},
     onMarkSafe: () -> Unit = {},
+    onMarkFalseAlarm: () -> Unit = {},
+    onClearFalseAlarm: () -> Unit = {},
     onDeleteComment: (commentId: String) -> Unit = {},
     onReport: (Report) -> Unit = {},
 ) {
@@ -74,6 +85,26 @@ fun PostDetailScreen(
     val mentionQuery = activeMentionQuery(draft)
     val suggestions = mentionQuery?.let { mentionSuggestions(uiState.members, it.query) }.orEmpty()
     val accent = MaterialTheme.colorScheme.primary
+    var replyingTo by remember { mutableStateOf<Comment?>(null) }
+    // A reply that's lost its comment (deleted, or blocked) is shown on its own instead.
+    val threads = remember(uiState.comments) { commentThreads(uiState.comments) }
+    val composerFocus = remember { FocusRequester() }
+    LaunchedEffect(replyingTo?.id) {
+        if (replyingTo != null) runCatching { composerFocus.requestFocus() }
+    }
+
+    // Starts a reply with an @ of the person being answered, so they're told about it and it
+    // reads as an answer to them even where replies aren't shown nested.
+    fun startReply(comment: Comment) {
+        replyingTo = comment
+        val member = uiState.members.firstOrNull { it.id == comment.authorId && it.id != uiState.currentUserId }
+        val name = member?.mentionName?.takeIf { it.isNotEmpty() } ?: return
+        if ("@$name" !in draft.text) {
+            val text = "@$name " + draft.text.trimStart()
+            draft = TextFieldValue(text, TextRange(text.length))
+            picked = picked + (member.id to name)
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -92,6 +123,25 @@ fun PostDetailScreen(
             Surface(color = MaterialTheme.colorScheme.surface) {
                 Column(modifier = Modifier.navigationBarsPadding().imePadding()) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    replyingTo?.let { target ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Replying to ${target.authorName.ifBlank { "Neighbour" }}",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(onClick = { replyingTo = null }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Filled.Close, contentDescription = "Cancel reply", modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
                     CharactersLeft(
                         commentText.length,
                         MAX_COMMENT_LENGTH,
@@ -114,8 +164,8 @@ fun PostDetailScreen(
                             value = draft,
                             // Matches the comment rule in firestore.rules.
                             onValueChange = { if (it.text.length <= MAX_COMMENT_LENGTH) draft = it },
-                            placeholder = { Text("Add a comment") },
-                            modifier = Modifier.weight(1f),
+                            placeholder = { Text(if (replyingTo != null) "Write a reply" else "Add a comment") },
+                            modifier = Modifier.weight(1f).focusRequester(composerFocus),
                             shape = RoundedCornerShape(24.dp),
                             maxLines = 4,
                             colors = TextFieldDefaults.colors(
@@ -130,9 +180,12 @@ fun PostDetailScreen(
                         FilledIconButton(
                             onClick = {
                                 if (commentText.isNotBlank()) {
-                                    onAddComment(commentText.trim(), mentionsIn(commentText, picked))
+                                    // Replies all hang off the top-level comment, one level deep.
+                                    val parentId = replyingTo?.let { it.parentId ?: it.id }
+                                    onAddComment(commentText.trim(), mentionsIn(commentText, picked), parentId)
                                     draft = TextFieldValue()
                                     picked = emptyMap()
+                                    replyingTo = null
                                 }
                             },
                             enabled = commentText.isNotBlank(),
@@ -186,8 +239,8 @@ fun PostDetailScreen(
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
-                val isLiveEmergency = post.category == PostCategory.EMERGENCY.key &&
-                    post.incidentStatus != IncidentStatus.RESOLVED.key
+                val isEmergency = post.category == PostCategory.EMERGENCY.key
+                val isLiveEmergency = isEmergency && post.incidentStatus != IncidentStatus.RESOLVED.key
                 if (isLiveEmergency) {
                     item(key = "sos") {
                         SosFollowUp(
@@ -211,6 +264,21 @@ fun PostDetailScreen(
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
                 }
+                // The sender owns up to a false alarm, or an admin calls it one; only an admin takes it back.
+                val canMark = isEmergency && !post.falseAlarm && canUpdate
+                val canUndo = isEmergency && post.falseAlarm && uiState.isAdmin
+                if (canMark || canUndo) {
+                    item(key = "false-alarm") {
+                        FalseAlarmAction(
+                            marked = post.falseAlarm,
+                            isMine = isMine,
+                            authorName = post.authorName.ifBlank { "the sender" },
+                            onMark = onMarkFalseAlarm,
+                            onUndo = onClearFalseAlarm
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
             }
 
             item(key = "comments-header") {
@@ -222,10 +290,12 @@ fun PostDetailScreen(
                     modifier = Modifier.padding(start = ScreenGutter, end = ScreenGutter, top = 16.dp, bottom = 8.dp)
                 )
             }
-            items(uiState.comments, key = { it.id }) { comment ->
+            items(threads, key = { it.comment.id }) { (comment, isReply) ->
                 val me = uiState.currentUserId
                 CommentRow(
                     comment = comment,
+                    isReply = isReply,
+                    onReply = { startReply(comment) }.takeIf { me != null },
                     authorIsAdmin = comment.authorId in uiState.adminIds,
                     // Matches who the rules let delete a comment.
                     canDelete = me != null && (
@@ -242,11 +312,27 @@ fun PostDetailScreen(
     }
 }
 
-/** One comment. A long press offers to copy or report it, and to delete it for those allowed to. */
+private data class CommentLine(val comment: Comment, val isReply: Boolean)
+
+/** Each comment in order, followed by its replies, oldest first. */
+private fun commentThreads(comments: List<Comment>): List<CommentLine> {
+    val ids = comments.mapTo(HashSet()) { it.id }
+    val replies = comments.filter { it.parentId != null && it.parentId in ids }.groupBy { it.parentId }
+    return buildList {
+        comments.filter { it.parentId == null || it.parentId !in ids }.forEach { top ->
+            add(CommentLine(top, isReply = false))
+            replies[top.id].orEmpty().forEach { add(CommentLine(it, isReply = true)) }
+        }
+    }
+}
+
+/** One comment. Its menu button, or a long press, offers to copy or report it, and to delete it for those allowed to. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CommentRow(
     comment: Comment,
+    isReply: Boolean,
+    onReply: (() -> Unit)?,
     authorIsAdmin: Boolean,
     canDelete: Boolean,
     onUserClick: (userId: String) -> Unit,
@@ -259,12 +345,16 @@ private fun CommentRow(
     var confirmDelete by remember { mutableStateOf(false) }
     var reporting by remember { mutableStateOf(false) }
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenGutter, vertical = 6.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            // Replies sit in under the comment they answer, lined up with its text.
+            .padding(start = if (isReply) ScreenGutter + 44.dp else ScreenGutter, end = ScreenGutter, top = if (isReply) 2.dp else 6.dp, bottom = 2.dp),
         verticalAlignment = Alignment.Top
     ) {
-        Avatar(imageUrl = null, name = comment.authorName, size = 34.dp)
+        Avatar(imageUrl = null, name = comment.authorName, size = if (isReply) 26.dp else 34.dp)
         Spacer(Modifier.width(10.dp))
-        Box(modifier = Modifier.weight(1f, fill = false)) {
+        // The bubble wraps its text; the space it leaves keeps the menu button at the right edge.
+        Column(modifier = Modifier.weight(1f)) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -310,7 +400,41 @@ private fun CommentRow(
                     )
                 }
             }
+            if (onReply != null) {
+                Text(
+                    "Reply",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .padding(start = 4.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable(onClick = onReply)
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                )
+            }
+        }
+        // A visible way in to the same menu as the long press, which people don't find on their own.
+        Box {
+            IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    Icons.Filled.MoreVert,
+                    contentDescription = "Comment options",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                if (onReply != null) {
+                    DropdownMenuItem(
+                        text = { Text("Reply") },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Reply, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            onReply()
+                        }
+                    )
+                }
                 DropdownMenuItem(
                     text = { Text("Copy") },
                     leadingIcon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null) },
@@ -379,6 +503,63 @@ private fun IncidentStatusPicker(current: IncidentStatus?, onPick: (IncidentStat
                 )
             }
         }
+    }
+}
+
+/** Marks an emergency a false alarm, after saying what that means, or (for admins) takes it back. */
+@Composable
+private fun FalseAlarmAction(
+    marked: Boolean,
+    isMine: Boolean,
+    authorName: String,
+    onMark: () -> Unit,
+    onUndo: () -> Unit
+) {
+    var confirming by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenGutter, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            if (marked) "Marked as a false alarm" else "Wasn't a real emergency?",
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+        TextButton(onClick = { confirming = true }) {
+            Text(
+                if (marked) "Undo" else "Mark as false alarm",
+                color = if (marked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+    if (confirming) {
+        val (title, body) = when {
+            marked -> "Not a false alarm?" to
+                "The false-alarm mark comes off, and it stops counting against $authorName."
+            isMine -> "Mark your alert as a false alarm?" to
+                "It closes, everyone is told no help is needed, and it shows as a false alarm. " +
+                "Two false alarms in 30 days and your alerts go out without the siren."
+            else -> "Mark this as a false alarm?" to
+                "It closes, everyone is told no help is needed, and it shows as a false alarm. " +
+                "Two false alarms in 30 days and $authorName's alerts go out without the siren."
+        }
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text(title) },
+            text = { Text(body) },
+            confirmButton = {
+                TextButton(onClick = { confirming = false; if (marked) onUndo() else onMark() }) {
+                    Text(
+                        if (marked) "Undo" else "Mark false alarm",
+                        color = if (marked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirming = false }) { Text("Cancel") } }
+        )
     }
 }
 

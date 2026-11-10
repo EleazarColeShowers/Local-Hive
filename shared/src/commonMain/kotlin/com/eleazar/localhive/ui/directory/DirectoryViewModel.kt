@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.directory
 
+import com.eleazar.localhive.ui.util.friendlyMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eleazar.localhive.domain.AuthRepository
@@ -52,7 +53,7 @@ class DirectoryViewModel(
                     }
                 }
             }.onFailure {
-                _uiState.update { state -> state.copy(isLoading = false, error = it.message) }
+                _uiState.update { state -> state.copy(isLoading = false, error = it.friendlyMessage()) }
             }
         }
     }
@@ -69,7 +70,7 @@ class DirectoryViewModel(
         membersJob = viewModelScope.launch {
             userRepository.observeDirectory(estateId, forceRefresh)
                 .onCompletion { _uiState.update { it.copy(isRefreshing = false, isLoading = false) } }
-                .catch { e -> _uiState.update { it.copy(error = e.message) } }
+                .catch { e -> _uiState.update { it.copy(error = e.friendlyMessage()) } }
                 .collect { members ->
                     _uiState.update { state ->
                         state.copy(

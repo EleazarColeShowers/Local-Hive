@@ -1,6 +1,22 @@
 package com.eleazar.localhive.ui.messages
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material.icons.automirrored.filled.Reply
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +50,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -116,7 +133,8 @@ fun ChatDetailScreen(
     isLoadingMoreMessages: Boolean,
     unsentDraft: String?,
     onNavigateBack: () -> Unit,
-    onSendMessage: (String) -> Unit,
+    /** Sends the text, answering the given message when the user chose to reply to one. */
+    onSendMessage: (String, replyTo: Message?) -> Unit,
     onLoadOlderMessages: () -> Unit,
     onUnsentDraftShown: () -> Unit,
     modifier: Modifier = Modifier,
@@ -154,6 +172,15 @@ fun ChatDetailScreen(
     }
 
     var messageText by rememberSaveable { mutableStateOf("") }
+    var replyingTo by remember { mutableStateOf<Message?>(null) }
+    // The message a tapped quote jumped to, lit up for a moment so the eye finds it.
+    var highlightedId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(highlightedId) {
+        if (highlightedId != null) {
+            delay(1_500)
+            highlightedId = null
+        }
+    }
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -280,11 +307,15 @@ fun ChatDetailScreen(
                 },
                 onSend = {
                     if (messageText.isNotBlank()) {
-                        onSendMessage(messageText)
+                        onSendMessage(messageText, replyingTo)
                         messageText = ""
+                        replyingTo = null
                     }
                 },
-                colors = colors
+                colors = colors,
+                replyingTo = replyingTo,
+                replyingToName = replyingTo?.let { if (it.senderId == currentUserId) "yourself" else otherName },
+                onCancelReply = { replyingTo = null }
             )
             }
         }
@@ -306,7 +337,12 @@ fun ChatDetailScreen(
                     isLoadingMore = isLoadingMoreMessages,
                     listState = listState,
                     colors = colors,
-                    seenUpTo = seenUpTo
+                    seenUpTo = seenUpTo,
+                    otherName = otherName,
+                    highlightedId = highlightedId,
+                    // Replying needs an open composer.
+                    onReply = if (otherDeleted || isBlocked) null else ({ replyingTo = it }),
+                    onJumpTo = { highlightedId = it }
                 )
             }
         }
@@ -320,7 +356,11 @@ private fun MessageList(
     isLoadingMore: Boolean,
     listState: LazyListState,
     colors: ChatDetailColors,
-    seenUpTo: Long
+    seenUpTo: Long,
+    otherName: String,
+    highlightedId: String?,
+    onReply: ((Message) -> Unit)?,
+    onJumpTo: (messageId: String) -> Unit
 ) {
     // "Sent" or "Seen" goes under the user's own message when it's the last thing said.
     val newest = messages.firstOrNull()
@@ -329,6 +369,19 @@ private fun MessageList(
         seenUpTo >= newest.timestamp -> "Seen"
         else -> "Sent"
     }
+    // Where each message sits in the list below (status line and day labels take slots too),
+    // so tapping a quote can scroll to the message it quotes.
+    val positions = remember(messages, status != null) {
+        val map = HashMap<String, Int>()
+        var index = if (status != null) 1 else 0
+        messages.forEachIndexed { i, message ->
+            map[message.id] = index++
+            val above = messages.getOrNull(i + 1)
+            if (above == null || startOfDay(above.timestamp) != startOfDay(message.timestamp)) index++
+        }
+        map
+    }
+    val scope = rememberCoroutineScope()
     LazyColumn(
         state = listState,
         reverseLayout = true,
@@ -363,6 +416,18 @@ private fun MessageList(
                     joinsAbove = joinsAbove,
                     joinsBelow = joinsBelow,
                     colors = colors,
+                    otherName = otherName,
+                    isHighlighted = message.id == highlightedId,
+                    onReply = onReply?.let { reply -> { reply(message) } },
+                    // Only messages already loaded can be scrolled to.
+                    onQuoteClick = message.replyTo?.messageId?.let { id ->
+                        positions[id]?.let { position ->
+                            {
+                                scope.launch { listState.animateScrollToItem(position) }
+                                onJumpTo(id)
+                            }
+                        }
+                    },
                     modifier = Modifier.padding(top = if (joinsAbove) 2.dp else 8.dp)
                 )
             }
@@ -394,6 +459,10 @@ private fun MessageBubble(
     joinsAbove: Boolean,
     joinsBelow: Boolean,
     colors: ChatDetailColors,
+    otherName: String,
+    isHighlighted: Boolean,
+    onReply: (() -> Unit)?,
+    onQuoteClick: (() -> Unit)?,
     modifier: Modifier = Modifier
 ) {
     val large = 18.dp
@@ -419,8 +488,42 @@ private fun MessageBubble(
     val platform = rememberPlatformActions()
     var menuOpen by remember { mutableStateOf(false) }
 
+    // Swiping a message to the right replies to it, as in WhatsApp; it springs back on release.
+    val density = LocalDensity.current
+    val swipeLimit = with(density) { 72.dp.toPx() }
+    val swipeTrigger = with(density) { 56.dp.toPx() }
+    val swipe = remember { Animatable(0f) }
+    val swipeScope = rememberCoroutineScope()
+    val swipeModifier = if (onReply == null) Modifier else Modifier.pointerInput(onReply) {
+        detectHorizontalDragGestures(
+            onDragEnd = {
+                if (swipe.value >= swipeTrigger) onReply()
+                swipeScope.launch { swipe.animateTo(0f) }
+            },
+            onDragCancel = { swipeScope.launch { swipe.animateTo(0f) } },
+            onHorizontalDrag = { change, amount ->
+                change.consume()
+                swipeScope.launch { swipe.snapTo((swipe.value + amount).coerceIn(0f, swipeLimit)) }
+            }
+        )
+    }
+    val highlight = if (isHighlighted) colors.hiveGreen.copy(alpha = 0.12f) else Color.Transparent
+
+    Box(modifier = modifier.fillMaxWidth().background(highlight, RoundedCornerShape(8.dp)).then(swipeModifier)) {
+        if (swipe.value > 0f) {
+            Icon(
+                Icons.AutoMirrored.Filled.Reply,
+                contentDescription = null,
+                tint = colors.hiveGreen,
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = 4.dp)
+                    .size(22.dp)
+                    .graphicsLayer { alpha = (swipe.value / swipeTrigger).coerceAtMost(1f) }
+            )
+        }
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().offset { IntOffset(swipe.value.roundToInt(), 0) },
         horizontalArrangement = if (isOwn) Arrangement.End else Arrangement.Start
     ) {
         Box {
@@ -440,7 +543,23 @@ private fun MessageBubble(
                         onLongClick = { menuOpen = true }
                     )
             ) {
-                Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 6.dp)) {
+                Column(
+                    modifier = Modifier
+                        .width(IntrinsicSize.Max)
+                        .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 6.dp)
+                ) {
+                    message.replyTo?.let { reply ->
+                        QuotedMessage(
+                            // The quoted message is the user's own when it shares a sender with an own bubble, or not with theirs.
+                            name = if ((reply.senderId == message.senderId) == isOwn) "You" else otherName,
+                            content = reply.content,
+                            barColor = if (isOwn) Color.White else colors.hiveGreen,
+                            background = if (isOwn) Color.White.copy(alpha = 0.18f)
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+                            onClick = onQuoteClick,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                        )
+                    }
                     LinkifiedText(text = message.content, fontSize = 15.sp, lineHeight = 21.sp)
                     Text(
                         text = clockTime(message.timestamp),
@@ -451,6 +570,16 @@ private fun MessageBubble(
                 }
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                if (onReply != null) {
+                    DropdownMenuItem(
+                        text = { Text("Reply") },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            onReply()
+                        }
+                    )
+                }
                 DropdownMenuItem(
                     text = { Text("Copy") },
                     leadingIcon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null) },
@@ -460,6 +589,39 @@ private fun MessageBubble(
                     }
                 )
             }
+        }
+    }
+    }
+}
+
+/** The message being answered, shown small at the top of a reply or above the composer. */
+@Composable
+private fun QuotedMessage(
+    name: String,
+    content: String,
+    barColor: Color,
+    background: Color,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null
+) {
+    Row(
+        modifier = modifier
+            .height(IntrinsicSize.Min)
+            .clip(RoundedCornerShape(8.dp))
+            .background(background)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+    ) {
+        Box(Modifier.width(3.dp).fillMaxHeight().background(barColor))
+        Column(Modifier.padding(horizontal = 8.dp, vertical = 5.dp)) {
+            Text(name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = barColor, maxLines = 1)
+            Text(
+                content,
+                fontSize = 13.sp,
+                lineHeight = 17.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                color = LocalContentColor.current.copy(alpha = 0.8f)
+            )
         }
     }
 }
@@ -533,12 +695,37 @@ private fun MessageComposer(
     text: String,
     onTextChange: (String) -> Unit,
     onSend: () -> Unit,
-    colors: ChatDetailColors
+    colors: ChatDetailColors,
+    replyingTo: Message? = null,
+    replyingToName: String? = null,
+    onCancelReply: () -> Unit = {}
 ) {
     val canSend = text.isNotBlank()
+    val focusRequester = remember { FocusRequester() }
+    // Choosing Reply brings up the keyboard, ready to answer.
+    LaunchedEffect(replyingTo?.id) {
+        if (replyingTo != null) runCatching { focusRequester.requestFocus() }
+    }
     Surface(color = MaterialTheme.colorScheme.surface) {
         Column {
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+            if (replyingTo != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    QuotedMessage(
+                        name = "Replying to ${replyingToName.orEmpty()}",
+                        content = replyingTo.content,
+                        barColor = colors.hiveGreen,
+                        background = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = onCancelReply) {
+                        Icon(Icons.Default.Close, contentDescription = "Cancel reply")
+                    }
+                }
+            }
             CharactersLeft(
                 text.length,
                 MAX_MESSAGE_LENGTH,
@@ -556,7 +743,7 @@ private fun MessageComposer(
                     value = text,
                     onValueChange = onTextChange,
                     placeholder = { Text("Message") },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).focusRequester(focusRequester),
                     shape = RoundedCornerShape(24.dp),
                     maxLines = 5,
                     colors = TextFieldDefaults.colors(

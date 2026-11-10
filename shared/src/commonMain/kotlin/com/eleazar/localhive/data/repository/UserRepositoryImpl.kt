@@ -3,6 +3,7 @@ package com.eleazar.localhive.data.repository
 import com.eleazar.localhive.data.platform.KeyValueStore
 import com.eleazar.localhive.domain.UserRepository
 import com.eleazar.localhive.domain.model.BlockedUser
+import com.eleazar.localhive.domain.model.SosSound
 import com.eleazar.localhive.domain.model.User
 import com.eleazar.localhive.ui.util.nowMillis
 import dev.gitlive.firebase.firestore.Direction
@@ -48,6 +49,7 @@ class UserRepositoryImpl(
             .where { "estateId" equalTo estateId }
             .snapshots
             .map { snapshot -> snapshot.documents.map { it.toUser() } }
+            .catch { emit(emptyList()) }
 
     override fun observeDirectory(estateId: String, forceRefresh: Boolean): Flow<List<User>> = flow {
         val idsKey = "directory_ids_$estateId"
@@ -89,6 +91,14 @@ class UserRepositoryImpl(
 
     override suspend fun setLightAlerts(userId: String, enabled: Boolean): Result<Unit> = runCatching {
         firestore.users().document(userId).set(mapOf("lightAlerts" to enabled), merge = true)
+    }
+
+    override suspend fun setSosSound(userId: String, sound: SosSound): Result<Unit> = runCatching {
+        firestore.users().document(userId).set(mapOf("sosSound" to sound.key), merge = true)
+    }
+
+    override suspend fun setSosPausedUntil(userId: String, until: Long): Result<Unit> = runCatching {
+        firestore.users().document(userId).set(mapOf("sosPausedUntil" to until), merge = true)
     }
 
     override suspend fun clearFcmToken(userId: String): Result<Unit> = runCatching {

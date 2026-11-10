@@ -219,8 +219,45 @@ service cloud.firestore {
                       || (docId == 'bank' && isTreasurerOf(estateId));
       }
 
-      // Polls: admins ask, every member votes once. The tallies live on the poll for all to see;
-      // each vote is a separate document only its voter can read. A vote and its tally are
+      // An admin's SOS settings for one member: their alerts turned off, or the siren given back
+      // after false alarms (restoredAt). The member can see their own; admins see everyone's.
+      match /sosMembers/{memberId} {
+        allow read: if isEstateAdmin(estateId) || (isSignedIn() && uid() == memberId);
+        allow create, update: if isEstateAdmin(estateId)
+                              && memberId != uid()
+                              && request.resource.data.keys().hasOnly(['disabled', 'restoredAt', 'updatedBy', 'updatedAt'])
+                              && request.resource.data.updatedBy == uid()
+                              && request.resource.data.get('disabled', false) is bool
+                              && request.resource.data.get('restoredAt', 0) is int;
+        allow delete: if isEstateAdmin(estateId);
+      }
+
+      // One per emergency marked a false alarm, keyed by the post, counting against its sender.
+      // The sender or an admin writes it, in a batch that marks the post; the sender can't remove
+      // it, even by deleting the post. Only an admin can.
+      match /falseAlarms/{postId} {
+        function alarmPost() {
+          return get(/databases/$(database)/documents/posts/$(postId)).data;
+        }
+
+        allow read: if isEstateAdmin(estateId) || (isSignedIn() && resource.data.userId == uid());
+        allow create: if isSignedIn()
+                      && request.resource.data.keys().hasOnly(['userId', 'postId', 'markedBy', 'markedByName', 'at'])
+                      && request.resource.data.postId == postId
+                      && request.resource.data.markedBy == uid()
+                      && request.resource.data.at is int
+                      && math.abs(request.resource.data.at - request.time.toMillis()) < 60 * 60 * 1000
+                      && alarmPost().estateId == estateId
+                      && alarmPost().category == 'emergency'
+                      && request.resource.data.userId == alarmPost().authorId
+                      && (isEstateAdmin(estateId) || alarmPost().authorId == uid())
+                      && getAfter(/databases/$(database)/documents/posts/$(postId)).data.get('falseAlarm', false) == true;
+        allow update: if false;
+        allow delete: if isEstateAdmin(estateId);
+      }
+
+      // Polls: admins ask, every member votes once and may move that vote while the poll is open.
+      // The tallies live on the poll for all to see; each vote is a separate document only its voter can read. A vote and its tally are
       // written in one batch, and the two rules below hold each to the other.
       function pollPath(pollId) {
         return /databases/$(database)/documents/estates/$(estateId)/polls/$(pollId);
@@ -252,7 +289,8 @@ service cloud.firestore {
         allow update: if (isEstateAdmin(estateId)
                           && changedKeys().hasOnly(['closed'])
                           && request.resource.data.closed == true)
-                      || tallyForNewVote();
+                      || tallyForNewVote()
+                      || tallyForChangedVote();
         allow delete: if isEstateAdmin(estateId);
 
         // The caller's vote document appears in this same batch, and the option it names, and
@@ -268,11 +306,27 @@ service cloud.firestore {
                  && request.resource.data.counts.diff(resource.data.counts).affectedKeys().hasOnly([option])
                  && request.resource.data.counts[option] == resource.data.counts.get(option, 0) + 1;
         }
+
+        // The caller moves their existing vote in this same batch: the old option goes down by
+        // one, the new one up by one, and the total stays put.
+        function tallyForChangedVote() {
+          let from = string(get(votePath(pollId)).data.option);
+          let to = string(getAfter(votePath(pollId)).data.option);
+          return isMemberOf(estateId)
+                 && pollOpen(resource.data)
+                 && exists(votePath(pollId))
+                 && from != to
+                 && changedKeys().hasOnly(['counts'])
+                 && request.resource.data.counts.diff(resource.data.counts).affectedKeys().hasOnly([from, to])
+                 && request.resource.data.counts[to] == resource.data.counts.get(to, 0) + 1
+                 && request.resource.data.counts[from] == resource.data.counts.get(from, 0) - 1;
+        }
       }
 
       match /pollVotes/{voteId} {
         allow read: if isSignedIn() && resource.data.userId == uid();
-        // One per member per poll, keyed "<pollId>_<uid>", and final: never changed or removed.
+        // One per member per poll, keyed "<pollId>_<uid>". It can move to another option while the
+        // poll is open, in a batch with the matching tally change, but is never removed.
         allow create: if isMemberOf(estateId)
                       && request.resource.data.keys().hasOnly(['pollId', 'userId', 'option', 'at'])
                       && request.resource.data.userId == uid()
@@ -283,7 +337,19 @@ service cloud.firestore {
                       && request.resource.data.option < get(pollPath(request.resource.data.pollId)).data.options.size()
                       && getAfter(pollPath(request.resource.data.pollId)).data.voteCount
                          == get(pollPath(request.resource.data.pollId)).data.voteCount + 1;
-        allow update, delete: if false;
+        allow update: if isMemberOf(estateId)
+                      && resource.data.userId == uid()
+                      && request.resource.data.keys().hasOnly(['pollId', 'userId', 'option', 'at'])
+                      && request.resource.data.userId == uid()
+                      && request.resource.data.pollId == resource.data.pollId
+                      && request.resource.data.option is int
+                      && request.resource.data.option != resource.data.option
+                      && request.resource.data.option >= 0
+                      && request.resource.data.option < get(pollPath(resource.data.pollId)).data.options.size()
+                      && pollOpen(get(pollPath(resource.data.pollId)).data)
+                      && getAfter(pollPath(resource.data.pollId)).data.counts[string(request.resource.data.option)]
+                         == get(pollPath(resource.data.pollId)).data.counts.get(string(request.resource.data.option), 0) + 1;
+        allow delete: if false;
       }
 
       // "Is there light?": the latest word on each supply, and every report behind it.
@@ -453,6 +519,28 @@ service cloud.firestore {
                        || data.get('emergencyType', '') in ['break_in', 'fire', 'medical', 'other']));
       }
 
+      // An admin can turn off a member's SOS alerts (estates/{id}/sosMembers), and then they
+      // can't raise an emergency. No record means nobody has.
+      function sosAllowed(estateId) {
+        let path = /databases/$(database)/documents/estates/$(estateId)/sosMembers/$(uid());
+        return !exists(path) || get(path).data.get('disabled', false) != true;
+      }
+
+      // The record a false alarm leaves in its estate, which counts against the sender.
+      function falseAlarmPath() {
+        return /databases/$(database)/documents/estates/$(resource.data.estateId)/falseAlarms/$(postId);
+      }
+
+      // An emergency becomes a false alarm only with its record written in the same batch, and only
+      // an admin takes the mark back off, deleting the record with it.
+      function falseAlarmChangeValid() {
+        let before = resource.data.get('falseAlarm', false);
+        let after = request.resource.data.get('falseAlarm', false);
+        return before == after
+               || (after == true && resource.data.get('category', '') == 'emergency' && existsAfter(falseAlarmPath()))
+               || (after == false && isEstateAdmin(resource.data.estateId) && !existsAfter(falseAlarmPath()));
+      }
+
       // The composer stops at 2,000 characters (MAX_POST_LENGTH in CreatePostScreen).
       function contentValid() {
         return request.resource.data.get('content', '') is string
@@ -464,7 +552,9 @@ service cloud.firestore {
                     && isMemberOf(request.resource.data.estateId)
                     && categoryAllowed()
                     && incidentValid()
-                    && contentValid();
+                    && contentValid()
+                    && request.resource.data.get('falseAlarm', false) == false
+                    && (request.resource.data.get('category', '') != 'emergency' || sosAllowed(request.resource.data.estateId));
       allow update: if isSignedIn() && (
         (resource.data.authorId == uid()
           && request.resource.data.authorId == resource.data.authorId
@@ -473,11 +563,15 @@ service cloud.firestore {
           && (request.resource.data.get('category', '') == resource.data.get('category', '') || categoryAllowed())
           // An old post can't be turned into an emergency, which would pin it to everyone's feed.
           && (request.resource.data.get('category', '') != 'emergency'
-              || resource.data.get('category', '') == 'emergency'))
-        // Admins move a security report or emergency from open to resolved, and change nothing else.
+              || resource.data.get('category', '') == 'emergency')
+          && falseAlarmChangeValid())
+        // Admins move a security report or emergency from open to resolved, or mark an emergency a
+        // false alarm (or take that back), and change nothing else.
         || (isIncident(resource.data.get('category', ''))
             && isEstateAdmin(resource.data.estateId)
-            && changedKeys().hasOnly(['incidentStatus', 'statusUpdatedBy', 'statusUpdatedByName', 'statusUpdatedAt'])
+            && changedKeys().hasOnly(['incidentStatus', 'statusUpdatedBy', 'statusUpdatedByName', 'statusUpdatedAt',
+                                      'falseAlarm', 'falseAlarmByName'])
+            && falseAlarmChangeValid()
             && request.resource.data.incidentStatus in ['open', 'handling', 'resolved']
             && request.resource.data.statusUpdatedBy == uid())
         // A neighbour may like a post or comment on it. Neither may rewrite its body.

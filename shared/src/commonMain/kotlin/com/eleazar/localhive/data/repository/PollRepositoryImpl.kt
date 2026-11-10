@@ -74,6 +74,27 @@ class PollRepositoryImpl(
             .commit()
     }
 
+    /** One option down and the other up in the same batch, which is what the rules check for. */
+    override suspend fun changeVote(
+        estateId: String,
+        pollId: String,
+        userId: String,
+        from: Int,
+        to: Int
+    ): Result<Unit> = runCatching {
+        firestore.batch()
+            .set(
+                votes(estateId).document("${pollId}_$userId"),
+                mapOf("pollId" to pollId, "userId" to userId, "option" to to, "at" to nowMillis())
+            )
+            .update(
+                polls(estateId).document(pollId),
+                "counts.$from" to FieldValue.increment(-1),
+                "counts.$to" to FieldValue.increment(1)
+            )
+            .commit()
+    }
+
     override suspend fun closePoll(estateId: String, pollId: String): Result<Unit> = runCatching {
         polls(estateId).document(pollId).update("closed" to true)
     }

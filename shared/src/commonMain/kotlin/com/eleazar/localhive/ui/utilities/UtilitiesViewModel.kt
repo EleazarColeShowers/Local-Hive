@@ -8,6 +8,7 @@ import com.eleazar.localhive.domain.UtilityRepository
 import com.eleazar.localhive.domain.model.UtilityKind
 import com.eleazar.localhive.domain.model.UtilityReport
 import com.eleazar.localhive.domain.model.UtilityStatus
+import com.eleazar.localhive.ui.util.friendlyMessage
 import com.eleazar.localhive.ui.util.nowMillis
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,12 +53,12 @@ class UtilitiesViewModel(
             _uiState.update { it.copy(estateId = estateId) }
             launch {
                 utilityRepository.observeStatuses(estateId)
-                    .catch { e -> _uiState.update { it.copy(error = e.message) } }
+                    .catch { e -> _uiState.update { it.copy(error = e.friendlyMessage()) } }
                     .collect { statuses -> _uiState.update { it.copy(statuses = statuses) } }
             }
             launch {
                 utilityRepository.observeReports(estateId)
-                    .catch { e -> _uiState.update { it.copy(error = e.message) } }
+                    .catch { e -> _uiState.update { it.copy(error = e.friendlyMessage()) } }
                     .collect { reports ->
                         val now = nowMillis()
                         val lastDay = UtilityKind.entries.mapNotNull { kind ->
@@ -74,7 +75,7 @@ class UtilitiesViewModel(
         _uiState.update { it.copy(lightAlerts = enabled) }
         viewModelScope.launch {
             userRepository.setLightAlerts(userId, enabled).onFailure { e ->
-                _uiState.update { it.copy(lightAlerts = !enabled, error = e.message ?: "Couldn't save that") }
+                _uiState.update { it.copy(lightAlerts = !enabled, error = e.friendlyMessage("Couldn't save that")) }
             }
         }
     }
@@ -87,7 +88,7 @@ class UtilitiesViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(reporting = it.reporting + kind, error = null) }
             utilityRepository.report(estateId, kind, isOn, state.statuses[kind], userId, userName)
-                .onFailure { e -> _uiState.update { it.copy(error = e.message ?: "Couldn't send your report") } }
+                .onFailure { e -> _uiState.update { it.copy(error = e.friendlyMessage("Couldn't send your report")) } }
             _uiState.update { it.copy(reporting = it.reporting - kind) }
         }
     }

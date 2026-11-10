@@ -177,28 +177,31 @@ fun PostCard(
             Spacer(Modifier.width(AvatarGap))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = post.authorName.ifBlank { "Neighbour" },
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 15.sp,
-                        color = content,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                    if (authorIsAdmin) {
-                        Spacer(Modifier.width(6.dp))
-                        RoleBadge()
-                    }
-                    val time = relativeTime(post.createdAt)
-                    if (time.isNotEmpty()) {
-                        Text(text = " · $time", fontSize = 14.sp, color = muted, maxLines = 1)
-                    }
-                    if (post.editedAt > 0L) {
-                        Text(text = " · edited", fontSize = 14.sp, color = muted, maxLines = 1)
+                    // Name and time share the space left of the menu, so the dots sit at the right edge
+                    // whatever the name's length.
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = post.authorName.ifBlank { "Neighbour" },
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.sp,
+                            color = content,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (authorIsAdmin) {
+                            Spacer(Modifier.width(6.dp))
+                            RoleBadge()
+                        }
+                        val time = relativeTime(post.createdAt)
+                        if (time.isNotEmpty()) {
+                            Text(text = " · $time", fontSize = 14.sp, color = muted, maxLines = 1)
+                        }
+                        if (post.editedAt > 0L) {
+                            Text(text = " · edited", fontSize = 14.sp, color = muted, maxLines = 1)
+                        }
                     }
                     if (onEdit != null || onDelete != null || onReport != null || canCopy) {
-                        Spacer(Modifier.weight(1f))
                         // Pulled up and right so the bigger touch target doesn't push the row down.
                         Box(modifier = Modifier.size(24.dp).wrapContentSize(unbounded = true)) {
                             IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(40.dp)) {

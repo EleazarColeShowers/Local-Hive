@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.notifications
 
+import com.eleazar.localhive.ui.util.friendlyMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eleazar.localhive.domain.AuthRepository
@@ -33,7 +34,7 @@ class NotificationViewModel(
             _uiState.update { it.copy(isLoading = true) }
             viewModelScope.launch {
                 notificationRepository.observeNotifications(userId)
-                    .catch { e -> _uiState.update { it.copy(isLoading = false, error = e.message ?: "Failed to load notifications") } }
+                    .catch { e -> _uiState.update { it.copy(isLoading = false, error = e.friendlyMessage("Failed to load notifications")) } }
                     .collect { notifications ->
                         _uiState.update { it.copy(notifications = notifications, isLoading = false, error = null) }
                     }

@@ -36,4 +36,11 @@ interface PostRepository {
     /** The person who raised an emergency says they're safe: resolves it and tells the estate. */
     suspend fun markSafe(postId: String, userId: String, userName: String): Result<Unit>
     suspend fun updateIncidentStatus(postId: String, status: IncidentStatus, userId: String, userName: String): Result<Unit>
+    /**
+     * Marks an emergency as a false alarm, closes it and tells the estate. Open to its author and
+     * the estate's admins; it counts against the author (see [com.eleazar.localhive.domain.model.SosStanding]).
+     */
+    suspend fun markFalseAlarm(post: Post, userId: String, userName: String): Result<Unit>
+    /** An admin takes a false-alarm mark back off, and it stops counting against the author. */
+    suspend fun clearFalseAlarm(post: Post, userId: String, userName: String): Result<Unit>
 }

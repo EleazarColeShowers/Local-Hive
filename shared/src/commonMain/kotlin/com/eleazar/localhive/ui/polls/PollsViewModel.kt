@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.polls
 
+import com.eleazar.localhive.ui.util.friendlyMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eleazar.localhive.domain.AuthRepository
@@ -65,7 +66,7 @@ class PollsViewModel(
             }
             launch {
                 pollRepository.observePolls(estateId)
-                    .catch { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
+                    .catch { e -> _uiState.update { it.copy(isLoading = false, error = e.friendlyMessage()) } }
                     .collect { polls -> _uiState.update { it.copy(polls = polls, isLoading = false) } }
             }
             launch {
@@ -96,7 +97,7 @@ class PollsViewModel(
             )
             pollRepository.createPoll(estateId, poll)
                 .onSuccess { _uiState.update { it.copy(isSaving = false, pollCreated = true) } }
-                .onFailure { e -> _uiState.update { it.copy(isSaving = false, error = e.message ?: "Couldn't create the poll") } }
+                .onFailure { e -> _uiState.update { it.copy(isSaving = false, error = e.friendlyMessage("Couldn't create the poll")) } }
         }
     }
 
@@ -104,17 +105,26 @@ class PollsViewModel(
         _uiState.update { it.copy(pollCreated = false) }
     }
 
-    /** Shows the vote straight away, and takes it back if it doesn't go through. */
+    /**
+     * Votes, or moves an existing vote to [option]. Shows it straight away, and puts back the
+     * previous choice if it doesn't go through.
+     */
     fun vote(pollId: String, option: Int) {
         val state = _uiState.value
         val estateId = state.estateId ?: return
         val userId = state.currentUserId ?: return
-        if (pollId in state.myVotes) return
+        val previous = state.myVotes[pollId]
+        if (previous == option) return
         _uiState.update { it.copy(myVotes = it.myVotes + (pollId to option), error = null) }
         viewModelScope.launch {
-            pollRepository.vote(estateId, pollId, userId, option).onFailure { e ->
+            val result = if (previous == null) pollRepository.vote(estateId, pollId, userId, option)
+            else pollRepository.changeVote(estateId, pollId, userId, previous, option)
+            result.onFailure { e ->
                 _uiState.update {
-                    it.copy(myVotes = it.myVotes - pollId, error = e.message ?: "Couldn't record your vote")
+                    it.copy(
+                        myVotes = if (previous == null) it.myVotes - pollId else it.myVotes + (pollId to previous),
+                        error = e.friendlyMessage("Couldn't record your vote")
+                    )
                 }
             }
         }
@@ -124,7 +134,7 @@ class PollsViewModel(
         val estateId = _uiState.value.estateId ?: return
         viewModelScope.launch {
             pollRepository.closePoll(estateId, pollId)
-                .onFailure { e -> _uiState.update { it.copy(error = e.message ?: "Couldn't close the poll") } }
+                .onFailure { e -> _uiState.update { it.copy(error = e.friendlyMessage("Couldn't close the poll")) } }
         }
     }
 
@@ -132,7 +142,7 @@ class PollsViewModel(
         val estateId = _uiState.value.estateId ?: return
         viewModelScope.launch {
             pollRepository.deletePoll(estateId, pollId)
-                .onFailure { e -> _uiState.update { it.copy(error = e.message ?: "Couldn't delete the poll") } }
+                .onFailure { e -> _uiState.update { it.copy(error = e.friendlyMessage("Couldn't delete the poll")) } }
         }
     }
 }

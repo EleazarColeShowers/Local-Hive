@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.finance
 
+import com.eleazar.localhive.ui.util.friendlyMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eleazar.localhive.domain.AuthRepository
@@ -107,7 +108,7 @@ class FinanceViewModel(
                     if (levies.isEmpty()) flowOf(emptyList())
                     else combine(levies.map { levyRow(estate, it, userId, treasurer) }) { it.toList() }
                 }
-                .catch { e -> _uiState.update { it.copy(isLoading = false, isRefreshing = false, error = e.message) } }
+                .catch { e -> _uiState.update { it.copy(isLoading = false, isRefreshing = false, error = e.friendlyMessage()) } }
                 .collect { rows -> _uiState.update { it.copy(levies = rows, isLoading = false, isRefreshing = false) } }
         }
     }
@@ -131,7 +132,7 @@ class FinanceViewModel(
         expensesJob = viewModelScope.launch {
             val estate = estateId.filterNotNull().first()
             financeRepository.observeExpenses(estate)
-                .catch { e -> _uiState.update { it.copy(isLoading = false, isRefreshing = false, error = e.message) } }
+                .catch { e -> _uiState.update { it.copy(isLoading = false, isRefreshing = false, error = e.friendlyMessage()) } }
                 .collect { expenses -> _uiState.update { it.copy(expenses = expenses, isLoading = false, isRefreshing = false) } }
         }
     }
@@ -165,7 +166,7 @@ class FinanceViewModel(
             combine(income, financeRepository.observeExpenses(estate)) { paid, spent ->
                 (paid + spent.map(StatementEntry::expense)).sortedByDescending { it.at }
             }
-                .catch { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
+                .catch { e -> _uiState.update { it.copy(isLoading = false, error = e.friendlyMessage()) } }
                 .collect { entries -> _uiState.update { it.copy(statement = entries, isLoading = false) } }
         }
     }
@@ -191,7 +192,7 @@ class FinanceViewModel(
             _uiState.update { it.copy(isSaving = true, error = null) }
             financeRepository.setBankDetails(estate, details, user.id)
                 .onSuccess { _uiState.update { it.copy(isSaving = false, message = "Bank details saved. Every member can see them.") } }
-                .onFailure { e -> _uiState.update { it.copy(isSaving = false, error = e.message ?: "Couldn't save the bank details") } }
+                .onFailure { e -> _uiState.update { it.copy(isSaving = false, error = e.friendlyMessage("Couldn't save the bank details")) } }
         }
     }
 
@@ -201,7 +202,7 @@ class FinanceViewModel(
         viewModelScope.launch {
             financeRepository.setBankDetails(estate, null, user.id)
                 .onSuccess { _uiState.update { it.copy(message = "Bank details removed") } }
-                .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
+                .onFailure { e -> _uiState.update { it.copy(error = e.friendlyMessage()) } }
         }
     }
 
@@ -214,7 +215,7 @@ class FinanceViewModel(
             val userId = _uiState.value.currentUserId ?: return@launch
             launch {
                 financeRepository.observeLevy(estate, levyId)
-                    .catch { e -> _uiState.update { it.copy(error = e.message) } }
+                    .catch { e -> _uiState.update { it.copy(error = e.friendlyMessage()) } }
                     .collect { levy -> _uiState.update { it.copy(levy = levy, levyMissing = levy == null, isLoading = false) } }
             }
             launch {
@@ -231,7 +232,7 @@ class FinanceViewModel(
                             financeRepository.observePayments(estate, levyId)
                         ) { members, payments -> memberPayments(members, payments) }
                     }
-                    .catch { e -> _uiState.update { it.copy(error = e.message) } }
+                    .catch { e -> _uiState.update { it.copy(error = e.friendlyMessage()) } }
                     .collect { rows -> _uiState.update { it.copy(memberPayments = rows) } }
             }
         }
@@ -270,7 +271,7 @@ class FinanceViewModel(
             _uiState.update {
                 it.copy(
                     isSaving = false,
-                    error = result.exceptionOrNull()?.message,
+                    error = result.exceptionOrNull()?.friendlyMessage(),
                     message = if (result.isSuccess) "Proof sent. The treasurer will confirm it." else null
                 )
             }
@@ -291,7 +292,7 @@ class FinanceViewModel(
             val treasurerName = me?.displayLabel().orEmpty()
             financeRepository.setPaymentStatus(estate, levy, member.userId, member.name, status, member.payment, treasurerName)
                 .onSuccess { _uiState.update { it.copy(isSaving = false, message = done) } }
-                .onFailure { e -> _uiState.update { it.copy(isSaving = false, error = e.message) } }
+                .onFailure { e -> _uiState.update { it.copy(isSaving = false, error = e.friendlyMessage()) } }
         }
     }
 
@@ -310,7 +311,7 @@ class FinanceViewModel(
                     }
                     _uiState.update { it.copy(isSaving = false, message = message) }
                 }
-                .onFailure { e -> _uiState.update { it.copy(isSaving = false, error = e.message) } }
+                .onFailure { e -> _uiState.update { it.copy(isSaving = false, error = e.friendlyMessage()) } }
         }
     }
 
@@ -323,7 +324,7 @@ class FinanceViewModel(
             _uiState.update { it.copy(isSaving = true, error = null) }
             financeRepository.deleteLevy(estate, levy.id)
                 .onSuccess { _uiState.update { it.copy(isSaving = false, saved = true) } }
-                .onFailure { e -> _uiState.update { it.copy(isSaving = false, error = e.message) } }
+                .onFailure { e -> _uiState.update { it.copy(isSaving = false, error = e.friendlyMessage()) } }
         }
     }
 
@@ -349,7 +350,7 @@ class FinanceViewModel(
             )
             financeRepository.createLevy(estate, levy)
                 .onSuccess { _uiState.update { it.copy(isSaving = false, saved = true) } }
-                .onFailure { e -> _uiState.update { it.copy(isSaving = false, error = e.message ?: "Couldn't create the levy") } }
+                .onFailure { e -> _uiState.update { it.copy(isSaving = false, error = e.friendlyMessage("Couldn't create the levy")) } }
         }
     }
 
@@ -366,7 +367,7 @@ class FinanceViewModel(
             // Upload first: an expense pointing at a failed upload would show a broken receipt.
             val receiptUrl = receipt?.let { uri ->
                 storageRepository.uploadReceipt(userId, uri).getOrElse { e ->
-                    _uiState.update { it.copy(isSaving = false, error = e.message ?: "Couldn't upload the receipt") }
+                    _uiState.update { it.copy(isSaving = false, error = e.friendlyMessage("Couldn't upload the receipt")) }
                     return@launch
                 }
             }
@@ -381,7 +382,7 @@ class FinanceViewModel(
             )
             financeRepository.addExpense(estate, expense)
                 .onSuccess { _uiState.update { it.copy(isSaving = false, saved = true) } }
-                .onFailure { e -> _uiState.update { it.copy(isSaving = false, error = e.message ?: "Couldn't save the expense") } }
+                .onFailure { e -> _uiState.update { it.copy(isSaving = false, error = e.friendlyMessage("Couldn't save the expense")) } }
         }
     }
 
@@ -390,7 +391,7 @@ class FinanceViewModel(
         viewModelScope.launch {
             financeRepository.deleteExpense(estate, expense.id)
                 .onSuccess { _uiState.update { it.copy(message = "Expense deleted") } }
-                .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
+                .onFailure { e -> _uiState.update { it.copy(error = e.friendlyMessage()) } }
         }
     }
 

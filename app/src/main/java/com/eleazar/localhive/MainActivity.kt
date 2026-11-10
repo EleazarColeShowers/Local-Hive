@@ -19,8 +19,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eleazar.localhive.data.LinkInbox
+import com.eleazar.localhive.data.appLinkFrom
 import com.eleazar.localhive.data.checkInstallReferrer
-import com.eleazar.localhive.data.inviteLinkFrom
 import com.eleazar.localhive.ui.LocalHiveApp
 import com.eleazar.localhive.ui.share.LocalShareInbox
 import com.eleazar.localhive.ui.share.ShareInbox
@@ -49,9 +49,12 @@ class MainActivity : ComponentActivity() {
         // Only on first creation: after a rotation the inbox (a ViewModel) still has it, or it's been used.
         if (savedInstanceState == null) {
             intent.toIncomingShare(contentResolver)?.let(shareInbox::offer)
-            inviteLinkFrom(intent.data)?.let(linkInbox::offer)
+            appLinkFrom(intent.data)?.let(linkInbox::offer)
             checkInstallReferrer(this, linkInbox::offer)
         }
+        // The link now waits in the inbox. Left on the intent, the nav graph would also follow it
+        // itself, restarting the app with the screen on top of the splash, which Back then leaves.
+        clearLink()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
@@ -66,8 +69,7 @@ class MainActivity : ComponentActivity() {
             CompositionLocalProvider(LocalShareInbox provides shareInbox) {
                 LocalHiveApp(
                     hasPendingShare = pendingShare != null,
-                    // Invite links (https and from a Play install); localhive:// links go to the
-                    // nav graph's own deep links.
+                    // Tapped pushes and invite links, opened on top of wherever the user is.
                     pendingLink = pendingLink,
                     onLinkHandled = linkInbox::handled,
                     // Follows the in-app theme, which can differ from the phone's: dark icons on the
@@ -94,8 +96,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** A push tapped, or a link opened, while the app is already running. */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        inviteLinkFrom(intent.data)?.let(linkInbox::offer)
+        appLinkFrom(intent.data)?.let(linkInbox::offer)
+        setIntent(intent)
+        clearLink()
+    }
+
+    private fun clearLink() {
+        if (intent.data != null) intent = Intent(intent).setData(null)
     }
 }

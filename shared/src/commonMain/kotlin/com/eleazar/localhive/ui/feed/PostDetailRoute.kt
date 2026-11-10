@@ -32,13 +32,15 @@ fun PostDetailRoute(
         uiState = uiState,
         onNavigateBack = onNavigateBack,
         onLike = viewModel::toggleLike,
-        onAddComment = { content, mentions -> viewModel.addComment(postId, content, mentions) },
+        onAddComment = { content, mentions, parentId -> viewModel.addComment(postId, content, mentions, parentId) },
         onUserClick = onOpenProfile,
         onUpdateStatus = { status -> viewModel.updateIncidentStatus(postId, status) },
         onEditPost = { onEditPost(postId) },
         onDeletePost = { reason -> viewModel.deletePost(postId, reason) },
         onRespond = { viewModel.respondToEmergency(postId) },
         onMarkSafe = { viewModel.markSafe(postId) },
+        onMarkFalseAlarm = { viewModel.markFalseAlarm(postId) },
+        onClearFalseAlarm = { viewModel.clearFalseAlarm(postId) },
         onDeleteComment = { commentId -> viewModel.deleteComment(postId, commentId) },
         onReport = rememberReporter()
     )

@@ -2,15 +2,17 @@ package com.eleazar.localhive.ui.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.NavOptionsBuilder
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import androidx.navigation.navDeepLink
 import com.eleazar.localhive.ui.auth.OnboardingScreen
 
 /** Clears the whole back stack, so the destination becomes the new root. */
@@ -18,13 +20,22 @@ private fun NavOptionsBuilder.clearBackStack() {
     popUpTo(Screen.Root.route) { inclusive = true }
 }
 
+/** The route this entry shows with its arguments filled in, to compare against [routeForLink]. */
+private fun NavBackStackEntry.filledRoute(): String? {
+    var route = destination.route ?: return null
+    destination.arguments.keys.forEach { key -> route = route.replace("{$key}", arguments?.getString(key).orEmpty()) }
+    return route
+}
+
 /**
  * @param hasPendingShare something was shared into the app from elsewhere. The composer opens
  *   as soon as the user reaches the home screen (signing in first if they need to), and
  *   [LocalHiveScreens.CreatePost] is expected to pick the share up.
- * @param pendingLink a localhive:// link to open, such as from a tapped push on iOS, where the
- *   deep links declared below aren't delivered. Like a share, it waits for the user to reach
- *   the home screen; [onLinkHandled] is called once it has been followed or found unusable.
+ * @param pendingLink a localhive:// link to open, such as a tapped push. Both platforms send them
+ *   here rather than to the deep links declared below, so the screen opens on top of the app as
+ *   it was and Back returns there. It waits until the user is signed in to an estate, wherever
+ *   they are in the app by then; [onLinkHandled] is called once it has been followed or found
+ *   unusable.
  */
 @Composable
 fun LocalHiveNavGraph(
@@ -34,6 +45,28 @@ fun LocalHiveNavGraph(
     pendingLink: String? = null,
     onLinkHandled: () -> Unit = {}
 ) {
+    val currentEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = currentEntry?.destination?.route
+    LaunchedEffect(pendingLink, currentRoute) {
+        val link = pendingLink ?: return@LaunchedEffect
+        val route = routeForLink(link)
+        if (route == null) {
+            onLinkHandled()
+            return@LaunchedEffect
+        }
+        // Main sits at the bottom of the stack whenever the user is signed in to an estate.
+        val inEstate = runCatching { navController.getBackStackEntry(Screen.Main.route) }.isSuccess
+        val isInvite = route.startsWith("join_estate")
+        when {
+            inEstate || (isInvite && currentRoute == Screen.EstateSelection.route) -> {
+                // Already looking at it, say the chat a message push is about: nothing to open.
+                if (currentEntry?.filledRoute() != route) navController.navigate(route)
+                onLinkHandled()
+            }
+            // Otherwise it waits for the splash to finish, or for the user to sign in.
+        }
+    }
+
     NavHost(
         navController = navController,
         startDestination = Screen.Splash.route,
@@ -115,14 +148,6 @@ fun LocalHiveNavGraph(
                     navController.navigate(Screen.Main.route) { clearBackStack() }
                 }
             )
-            // An invite link is the one link that's useful before the user has an estate.
-            val joinRoute = pendingLink?.let(::routeForLink)?.takeIf { it.startsWith("join_estate") }
-            if (joinRoute != null) {
-                LaunchedEffect(pendingLink) {
-                    navController.navigate(joinRoute) { launchSingleTop = true }
-                    onLinkHandled()
-                }
-            }
         }
 
         composable(Screen.Main.route) {
@@ -154,12 +179,6 @@ fun LocalHiveNavGraph(
                     navController.navigate(Screen.CreatePost.route) { launchSingleTop = true }
                 }
             }
-            if (pendingLink != null) {
-                LaunchedEffect(pendingLink) {
-                    routeForLink(pendingLink)?.let { navController.navigate(it) { launchSingleTop = true } }
-                    onLinkHandled()
-                }
-            }
         }
 
         composable(Screen.CreatePost.route) {
@@ -172,9 +191,7 @@ fun LocalHiveNavGraph(
 
         composable(
             route = Screen.PostDetail.route,
-            arguments = listOf(navArgument("postId") { type = NavType.StringType }),
-            // Announcement pushes open the post directly.
-            deepLinks = listOf(navDeepLink { uriPattern = "localhive://post/{postId}" })
+            arguments = listOf(navArgument("postId") { type = NavType.StringType })
         ) { backStackEntry ->
             val postId = backStackEntry.arguments?.getString("postId") ?: ""
             screens.PostDetail(
@@ -186,9 +203,7 @@ fun LocalHiveNavGraph(
         }
 
         composable(
-            route = Screen.Polls.route,
-            // New-poll pushes open the list.
-            deepLinks = listOf(navDeepLink { uriPattern = "localhive://polls" })
+            route = Screen.Polls.route
         ) {
             screens.Polls(
                 onBack = { navController.navigateUp() },
@@ -201,9 +216,7 @@ fun LocalHiveNavGraph(
         }
 
         composable(
-            route = Screen.Utilities.route,
-            // "Light is back" pushes open it.
-            deepLinks = listOf(navDeepLink { uriPattern = "localhive://utilities" })
+            route = Screen.Utilities.route
         ) {
             screens.Utilities(onBack = { navController.navigateUp() })
         }
@@ -220,8 +233,7 @@ fun LocalHiveNavGraph(
 
         composable(
             route = Screen.ChatDetail.route,
-            arguments = listOf(navArgument("chatId") { type = NavType.StringType }),
-            deepLinks = listOf(navDeepLink { uriPattern = "localhive://chat/{chatId}" })
+            arguments = listOf(navArgument("chatId") { type = NavType.StringType })
         ) { backStackEntry ->
             val chatId = backStackEntry.arguments?.getString("chatId") ?: ""
             screens.ChatDetail(
@@ -246,8 +258,7 @@ fun LocalHiveNavGraph(
             arguments = listOf(navArgument("inviteCode") {
                 type = NavType.StringType
                 defaultValue = ""
-            }),
-            deepLinks = listOf(navDeepLink { uriPattern = "localhive://join/{inviteCode}" })
+            })
         ) { backStackEntry ->
             val code = backStackEntry.arguments?.getString("inviteCode") ?: ""
             screens.JoinEstate(
@@ -285,8 +296,7 @@ fun LocalHiveNavGraph(
         }
 
         composable(
-            route = Screen.Notifications.route,
-            deepLinks = listOf(navDeepLink { uriPattern = "localhive://notifications" })
+            route = Screen.Notifications.route
         ) {
             screens.Notifications(
                 onBack = { navController.navigateUp() },
@@ -314,9 +324,7 @@ fun LocalHiveNavGraph(
 
         composable(
             route = Screen.LevyDetail.route,
-            arguments = listOf(navArgument("levyId") { type = NavType.StringType }),
-            // Payment notices and levy reminders open the levy directly.
-            deepLinks = listOf(navDeepLink { uriPattern = "localhive://levy/{levyId}" })
+            arguments = listOf(navArgument("levyId") { type = NavType.StringType })
         ) { backStackEntry ->
             val levyId = backStackEntry.arguments?.getString("levyId") ?: ""
             screens.LevyDetail(levyId = levyId, onBack = { navController.navigateUp() })

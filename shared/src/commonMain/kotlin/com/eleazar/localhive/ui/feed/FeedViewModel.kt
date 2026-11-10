@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.feed
 
+import com.eleazar.localhive.ui.util.friendlyMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eleazar.localhive.domain.AuthRepository
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.eleazar.localhive.domain.SosRepository
 import com.eleazar.localhive.ui.util.nowMillis
 
 private const val POST_PAGE_SIZE = 20L
@@ -32,7 +34,8 @@ class FeedViewModel(
     private val userRepository: UserRepository,
     private val storageRepository: StorageRepository,
     private val estateRepository: EstateRepository,
-    private val notificationRepository: NotificationRepository
+    private val notificationRepository: NotificationRepository,
+    private val sosRepository: SosRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(FeedUiState())
@@ -72,8 +75,18 @@ class FeedViewModel(
                     loadPosts(it)
                     loadEstate(it)
                     loadMembers(it)
+                    loadSosStanding(it, userId)
                 }
             }
+        }
+    }
+
+    /** Whether an admin has turned off the user's SOS, or false alarms have cost them the siren. */
+    private fun loadSosStanding(estateId: String, userId: String) {
+        viewModelScope.launch {
+            sosRepository.observeStanding(estateId, userId)
+                .catch { /* Without it the SOS screen just doesn't warn; the rules still decide. */ }
+                .collect { standing -> _uiState.update { it.copy(sosStanding = standing) } }
         }
     }
 
@@ -111,7 +124,7 @@ class FeedViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             postRepository.getPostsForEstate(estateId, POST_PAGE_SIZE)
-                .catch { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
+                .catch { e -> _uiState.update { it.copy(isLoading = false, error = e.friendlyMessage()) } }
                 .collect { posts ->
                     livePosts = posts
                     val merged = mergePosts()
@@ -147,7 +160,7 @@ class FeedViewModel(
                     }
                 }
                 .onFailure { e ->
-                    _uiState.update { it.copy(isLoadingMore = false, error = e.message) }
+                    _uiState.update { it.copy(isLoadingMore = false, error = e.friendlyMessage()) }
                 }
         }
     }
@@ -210,7 +223,7 @@ class FeedViewModel(
             _uiState.update { it.copy(isPosting = true, error = null, uploadProgress = if (isVideo) 0f else null) }
 
             fun fail(e: Throwable, fallback: String) {
-                _uiState.update { it.copy(isPosting = false, uploadProgress = null, error = e.message ?: fallback) }
+                _uiState.update { it.copy(isPosting = false, uploadProgress = null, error = e.friendlyMessage(fallback)) }
             }
 
             // Upload first: a post that referenced a failed upload would render a broken image.
@@ -281,7 +294,7 @@ class FeedViewModel(
                     }
                 }
                 .onFailure { e ->
-                    _uiState.update { it.copy(isPosting = false, error = e.message ?: "Couldn't send the alert") }
+                    _uiState.update { it.copy(isPosting = false, error = e.friendlyMessage("Couldn't send the alert")) }
                 }
         }
     }
@@ -298,7 +311,7 @@ class FeedViewModel(
         viewModelScope.launch {
             postRepository.updateIncidentStatus(postId, status, userId, name).onFailure { e ->
                 replacePost(post)
-                _uiState.update { it.copy(error = e.message ?: "Couldn't update the status") }
+                _uiState.update { it.copy(error = e.friendlyMessage("Couldn't update the status")) }
             }
         }
     }
@@ -320,7 +333,7 @@ class FeedViewModel(
                     _uiState.update { it.copy(isPosting = false, postCreated = true) }
                 }
                 .onFailure { e ->
-                    _uiState.update { it.copy(isPosting = false, error = e.message ?: "Couldn't save your changes") }
+                    _uiState.update { it.copy(isPosting = false, error = e.friendlyMessage("Couldn't save your changes")) }
                 }
         }
     }
@@ -340,7 +353,7 @@ class FeedViewModel(
                     olderPosts = olderPosts.filter { it.id != postId }
                     _uiState.update { it.copy(posts = mergePosts(), postDeleted = true) }
                 }
-                .onFailure { e -> _uiState.update { it.copy(error = e.message ?: "Couldn't delete the post") } }
+                .onFailure { e -> _uiState.update { it.copy(error = e.friendlyMessage("Couldn't delete the post")) } }
         }
     }
 
@@ -375,7 +388,7 @@ class FeedViewModel(
         viewModelScope.launch {
             postRepository.respondToEmergency(postId, userId, name).onFailure { e ->
                 replacePost(post)
-                _uiState.update { it.copy(error = e.message ?: "Couldn't let them know") }
+                _uiState.update { it.copy(error = e.friendlyMessage("Couldn't let them know")) }
             }
         }
     }
@@ -390,7 +403,44 @@ class FeedViewModel(
         viewModelScope.launch {
             postRepository.markSafe(postId, userId, name).onFailure { e ->
                 replacePost(post)
-                _uiState.update { it.copy(error = e.message ?: "Couldn't update the alert") }
+                _uiState.update { it.copy(error = e.friendlyMessage("Couldn't update the alert")) }
+            }
+        }
+    }
+
+    /** Marks an emergency a false alarm: shows straight away, and puts it back if the write fails. */
+    fun markFalseAlarm(postId: String) {
+        val state = _uiState.value
+        val userId = state.currentUserId ?: return
+        val post = state.selectedPost?.takeIf { it.id == postId } ?: state.posts.find { it.id == postId } ?: return
+        if (post.falseAlarm) return
+        val name = state.currentUserName ?: "A neighbour"
+        replacePost(
+            post.copy(
+                falseAlarm = true, falseAlarmByName = name, incidentStatus = IncidentStatus.RESOLVED.key,
+                statusUpdatedByName = name, statusUpdatedAt = nowMillis()
+            )
+        )
+        viewModelScope.launch {
+            postRepository.markFalseAlarm(post, userId, name).onFailure { e ->
+                replacePost(post)
+                _uiState.update { it.copy(error = e.friendlyMessage("Couldn't mark it as a false alarm")) }
+            }
+        }
+    }
+
+    /** An admin takes the false-alarm mark back off. */
+    fun clearFalseAlarm(postId: String) {
+        val state = _uiState.value
+        val userId = state.currentUserId ?: return
+        val post = state.selectedPost?.takeIf { it.id == postId } ?: state.posts.find { it.id == postId } ?: return
+        if (!post.falseAlarm) return
+        val name = state.currentUserName ?: "An admin"
+        replacePost(post.copy(falseAlarm = false, falseAlarmByName = ""))
+        viewModelScope.launch {
+            postRepository.clearFalseAlarm(post, userId, name).onFailure { e ->
+                replacePost(post)
+                _uiState.update { it.copy(error = e.friendlyMessage("Couldn't undo the false alarm")) }
             }
         }
     }
@@ -411,7 +461,7 @@ class FeedViewModel(
     fun observePost(postId: String) {
         viewModelScope.launch {
             postRepository.observePost(postId)
-                .catch { e -> _uiState.update { it.copy(error = e.message) } }
+                .catch { e -> _uiState.update { it.copy(error = e.friendlyMessage()) } }
                 .collect { post ->
                     _uiState.update { it.copy(selectedPost = post ?: it.selectedPost, postMissing = post == null) }
                 }
@@ -422,7 +472,7 @@ class FeedViewModel(
         observePost(postId)
         viewModelScope.launch {
             postRepository.getComments(postId)
-                .catch { e -> _uiState.update { it.copy(error = e.message) } }
+                .catch { e -> _uiState.update { it.copy(error = e.friendlyMessage()) } }
                 .collect { comments ->
                     allComments = comments
                     _uiState.update { it.copy(comments = visibleComments()) }
@@ -430,7 +480,13 @@ class FeedViewModel(
         }
     }
 
-    fun addComment(postId: String, content: String, mentions: Map<String, String> = emptyMap()) {
+    /** Adds a comment to the post, or a reply under the comment [parentId] when given. */
+    fun addComment(
+        postId: String,
+        content: String,
+        mentions: Map<String, String> = emptyMap(),
+        parentId: String? = null
+    ) {
         val state = _uiState.value
         val userId = state.currentUserId ?: return
         viewModelScope.launch {
@@ -440,11 +496,14 @@ class FeedViewModel(
                 authorName = state.currentUserName ?: "Neighbor",
                 content = content,
                 createdAt = nowMillis(),
-                mentions = mentions
+                mentions = mentions,
+                parentId = parentId
             )
-            postRepository.addComment(comment).onSuccess { commentId ->
-                state.estateId?.let { notifyMentioned(mentions.keys, it, postId, commentId, content) }
-            }
+            postRepository.addComment(comment)
+                .onSuccess { commentId ->
+                    state.estateId?.let { notifyMentioned(mentions.keys, it, postId, commentId, content) }
+                }
+                .onFailure { e -> _uiState.update { it.copy(error = e.friendlyMessage("Couldn't post your comment")) } }
         }
     }
 
@@ -455,7 +514,7 @@ class FeedViewModel(
     fun deleteComment(postId: String, commentId: String) {
         viewModelScope.launch {
             postRepository.deleteComment(postId, commentId)
-                .onFailure { e -> _uiState.update { it.copy(error = e.message ?: "Couldn't delete the comment") } }
+                .onFailure { e -> _uiState.update { it.copy(error = e.friendlyMessage("Couldn't delete the comment")) } }
         }
     }
 

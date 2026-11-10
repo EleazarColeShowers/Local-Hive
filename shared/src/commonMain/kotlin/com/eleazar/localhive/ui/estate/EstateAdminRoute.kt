@@ -22,6 +22,7 @@ fun EstateAdminRoute(
         viewModel.loadPendingRequests(estateId)
         viewModel.loadMembers(estateId)
         viewModel.loadInviteCode(estateId)
+        viewModel.loadSosStandings(estateId)
     }
     val platform = rememberPlatformActions()
 
@@ -31,6 +32,7 @@ fun EstateAdminRoute(
         estate = uiState.estate,
         pendingRequests = uiState.pendingRequests,
         members = uiState.members,
+        sosStandings = uiState.sosStandings,
         currentUserId = currentUserId,
         error = uiState.error,
         inviteCode = uiState.inviteCode,
@@ -45,6 +47,8 @@ fun EstateAdminRoute(
         onRemoveMember = { userId -> viewModel.removeMember(estateId, userId) },
         onSetTreasurer = { userId -> viewModel.setTreasurer(estateId, userId) },
         onTransferOwnership = { userId -> viewModel.transferOwnership(estateId, userId) },
+        onSetSosDisabled = { userId, disabled -> viewModel.setSosDisabled(estateId, userId, disabled) },
+        onRestoreSiren = { userId -> viewModel.restoreSiren(estateId, userId) },
         onSaveDetails = { name, address -> viewModel.updateEstateDetails(estateId, name, address) },
         onSetJoinMode = { mode -> viewModel.setJoinMode(estateId, mode) },
         onRegenerateCode = { viewModel.regenerateInviteCode(estateId) },

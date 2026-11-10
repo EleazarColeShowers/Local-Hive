@@ -184,6 +184,47 @@ class PostRepositoryImpl(
         api.notifyInBackground("type" to "sos_safe", "postId" to postId)
     }
 
+    private fun falseAlarmRecord(post: Post) =
+        firestore.collection("estates").document(post.estateId).collection("falseAlarms").document(post.id)
+
+    /** The record that counts against the author and the mark on the post go together, as the rules require. */
+    override suspend fun markFalseAlarm(post: Post, userId: String, userName: String): Result<Unit> = runCatching {
+        val now = nowMillis()
+        firestore.batch()
+            .set(
+                falseAlarmRecord(post),
+                mapOf(
+                    "userId" to post.authorId, "postId" to post.id,
+                    "markedBy" to userId, "markedByName" to userName, "at" to now
+                )
+            )
+            .update(
+                posts.document(post.id),
+                "falseAlarm" to true,
+                "falseAlarmByName" to userName,
+                "incidentStatus" to IncidentStatus.RESOLVED.key,
+                "statusUpdatedBy" to userId,
+                "statusUpdatedByName" to userName,
+                "statusUpdatedAt" to now
+            )
+            .commit()
+        api.notifyInBackground("type" to "sos_false_alarm", "postId" to post.id)
+    }
+
+    override suspend fun clearFalseAlarm(post: Post, userId: String, userName: String): Result<Unit> = runCatching {
+        firestore.batch()
+            .delete(falseAlarmRecord(post))
+            .update(
+                posts.document(post.id),
+                "falseAlarm" to false,
+                "falseAlarmByName" to "",
+                "statusUpdatedBy" to userId,
+                "statusUpdatedByName" to userName,
+                "statusUpdatedAt" to nowMillis()
+            )
+            .commit()
+    }
+
     private fun Post.toMap(): Map<String, Any?> = mapOf(
         "authorId" to authorId, "authorName" to authorName,
         "authorImageUrl" to authorImageUrl, "estateId" to estateId,
@@ -201,11 +242,15 @@ class PostRepositoryImpl(
         emptyMap()
     }
 
-    private fun Comment.toMap(): Map<String, Any?> = mapOf(
-        "postId" to postId, "authorId" to authorId,
-        "authorName" to authorName, "content" to content,
-        "createdAt" to createdAt, "mentions" to mentions
-    )
+    private fun Comment.toMap(): Map<String, Any?> = buildMap {
+        put("postId", postId)
+        put("authorId", authorId)
+        put("authorName", authorName)
+        put("content", content)
+        put("createdAt", createdAt)
+        put("mentions", mentions)
+        parentId?.let { put("parentId", it) }
+    }
 }
 
 private const val TAG = "PostRepository"

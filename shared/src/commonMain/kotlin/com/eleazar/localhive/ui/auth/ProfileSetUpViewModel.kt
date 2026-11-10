@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.auth
 
+import com.eleazar.localhive.ui.util.friendlyMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eleazar.localhive.domain.AuthRepository
@@ -34,7 +35,7 @@ class ProfileSetUpViewModel(
                     onSuccess = { it },
                     onFailure = { e ->
                         _uiState.update {
-                            it.copy(isLoading = false, error = e.message ?: "Couldn't upload your photo")
+                            it.copy(isLoading = false, error = e.friendlyMessage("Couldn't upload your photo"))
                         }
                         return@launch
                     }
@@ -52,7 +53,7 @@ class ProfileSetUpViewModel(
             )
             authRepository.saveUserProfile(user).fold(
                 onSuccess = { _uiState.update { it.copy(isLoading = false, isDone = true) } },
-                onFailure = { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
+                onFailure = { e -> _uiState.update { it.copy(isLoading = false, error = e.friendlyMessage()) } }
             )
         }
     }

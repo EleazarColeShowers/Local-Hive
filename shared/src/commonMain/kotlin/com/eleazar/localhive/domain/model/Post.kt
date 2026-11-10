@@ -32,5 +32,8 @@ data class Post(
     /** When the author last changed the text, or 0 if they never have. */
     val editedAt: Long = 0L,
     /** Neighbours on their way to help with an emergency: user id to name. */
-    val responders: Map<String, String> = emptyMap()
+    val responders: Map<String, String> = emptyMap(),
+    /** An emergency that turned out not to be one, and who said so. */
+    val falseAlarm: Boolean = false,
+    val falseAlarmByName: String = ""
 )
