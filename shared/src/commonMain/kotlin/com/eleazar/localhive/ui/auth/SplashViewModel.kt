@@ -22,6 +22,8 @@ class SplashViewModel(
         object NotLoggedIn : AuthState()
         object LoggedInNoEstate : AuthState()
         object LoggedInWithEstate : AuthState()
+        /** Not in an estate, but a security guard at one's gate. */
+        object GuardOnDuty : AuthState()
     }
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Loading)
@@ -47,7 +49,10 @@ class SplashViewModel(
                 onSuccess = { user ->
                     val estateId = user.estateId
                     if (estateId == null) {
-                        _authState.value = AuthState.LoggedInNoEstate
+                        // The Gate screen checks the guard is still on duty, and sends them
+                        // back to choose an estate if an admin removed them.
+                        _authState.value =
+                            if (user.guardEstateId != null) AuthState.GuardOnDuty else AuthState.LoggedInNoEstate
                     } else {
                         _authState.value = AuthState.LoggedInWithEstate
                         launch { dropEstateIfDeleted(estateId, userId) }

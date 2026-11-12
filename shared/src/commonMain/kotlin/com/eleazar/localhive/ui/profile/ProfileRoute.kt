@@ -20,6 +20,7 @@ fun ProfileRoute(
     onFinances: () -> Unit = {},
     onPolls: () -> Unit = {},
     onUtilities: () -> Unit = {},
+    onVisitors: () -> Unit = {},
     viewModel: ProfileViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -86,6 +87,7 @@ fun ProfileRoute(
         onAdminPanel = onAdminPanel,
         onFinances = onFinances,
         onPolls = onPolls,
-        onUtilities = onUtilities
+        onUtilities = onUtilities,
+        onVisitors = onVisitors
     )
 }

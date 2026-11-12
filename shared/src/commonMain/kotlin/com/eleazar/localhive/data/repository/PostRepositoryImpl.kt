@@ -62,7 +62,9 @@ class PostRepositoryImpl(
         when (PostCategory.fromKey(post.category)) {
             PostCategory.ANNOUNCEMENT -> api.notifyInBackground("type" to "announcement", "postId" to ref.id)
             PostCategory.SECURITY -> api.notifyInBackground("type" to "security_report", "postId" to ref.id)
-            else -> Unit
+            PostCategory.EMERGENCY -> Unit
+            // Everything else goes only to neighbours who turned on new-post alerts.
+            else -> api.notifyInBackground("type" to "post", "postId" to ref.id)
         }
         ref.id
     }
@@ -135,6 +137,19 @@ class PostRepositoryImpl(
         ref.set(comment.toMap())
         posts.document(comment.postId).update("commentCount" to FieldValue.increment(1))
         ref.id
+    }
+
+    override suspend fun updateComment(
+        postId: String,
+        commentId: String,
+        content: String,
+        mentions: Map<String, String>
+    ): Result<Unit> = runCatching {
+        posts.document(postId).collection("comments").document(commentId).update(
+            "content" to content,
+            "mentions" to mentions,
+            "editedAt" to nowMillis()
+        )
     }
 
     override suspend fun deleteComment(postId: String, commentId: String): Result<Unit> = runCatching {

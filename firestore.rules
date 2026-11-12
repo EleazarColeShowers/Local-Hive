@@ -15,6 +15,12 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys();
     }
 
+    // Posts and comments can be edited for 30 minutes after they're written (EDIT_WINDOW_MILLIS in
+    // the app), plus two minutes for phones whose clocks run a little behind.
+    function withinEditWindow() {
+      return request.time.toMillis() < resource.data.get('createdAt', 0) + 32 * 60 * 1000;
+    }
+
     // The estate the caller currently belongs to, or null.
     function myEstateId() {
       return get(/databases/$(database)/documents/users/$(uid())).data.get('estateId', null);
@@ -51,6 +57,14 @@ service cloud.firestore {
     function inviteCodeOpens(code, estateId) {
       return code is string
              && get(/databases/$(database)/documents/inviteCodes/$(code)).data.estateId == estateId;
+    }
+
+    // A security guard an admin let in at the gate. Guards are never members: they don't live
+    // there, so isMemberOf stays false for them and the feed, chats, money and the directory
+    // stay closed. All they get is the visitor passes below, one code at a time.
+    function isGuardOf(estateId) {
+      return isSignedIn()
+             && exists(/databases/$(database)/documents/estates/$(estateId)/guards/$(uid()));
     }
 
     match /users/{userId} {
@@ -372,6 +386,131 @@ service cloud.firestore {
                       && request.resource.data.by == uid();
         allow update, delete: if false;
       }
+
+      // The estate's security guards, keyed by their uid. A guard gets in by redeeming a one-time
+      // code an admin made (guardCodes below), which is deleted in the same batch so it can't be
+      // used twice. Someone who lives in an estate can't sign on as a guard. Admins can remove a
+      // guard at any time, and a guard can leave.
+      match /guards/{guardId} {
+        function guardCodePath(code) {
+          return /databases/$(database)/documents/guardCodes/$(code);
+        }
+
+        allow read: if isEstateAdmin(estateId) || (isSignedIn() && uid() == guardId);
+        allow create: if isSignedIn()
+                      && uid() == guardId
+                      && myEstateId() == null
+                      && request.resource.data.keys().hasOnly(['userId', 'name', 'code', 'addedAt'])
+                      && request.resource.data.userId == uid()
+                      && request.resource.data.name is string
+                      && request.resource.data.name.size() <= 100
+                      && request.resource.data.addedAt is int
+                      && request.resource.data.code is string
+                      && get(guardCodePath(request.resource.data.code)).data.estateId == estateId
+                      && request.time.toMillis() < get(guardCodePath(request.resource.data.code)).data.expiresAt
+                      && !existsAfter(guardCodePath(request.resource.data.code));
+        allow update: if false;
+        allow delete: if isEstateAdmin(estateId) || (isSignedIn() && uid() == guardId);
+      }
+
+      // A resident expecting a visitor makes a pass, keyed by its code. The guard types in the
+      // code the visitor gives them and sees that one pass. They can't list passes, so they can't
+      // see who else is expected, only the visitors inside right now, to check them out.
+      match /visitorPasses/{code} {
+        function isResident() {
+          return isSignedIn() && resource.data.residentId == uid();
+        }
+
+        function now() {
+          return request.time.toMillis();
+        }
+
+        // A guard sees a pass only while it's usable: expected and not expired, or inside.
+        function guardMaySee() {
+          return isGuardOf(estateId)
+                 && (resource.data.stage == 'inside'
+                     || (resource.data.stage == 'expected' && now() < resource.data.validUntil));
+        }
+
+        // The resident who made it is still in the estate.
+        function residentStillHere() {
+          return get(/databases/$(database)/documents/users/$(resource.data.residentId)).data.get('estateId', null) == estateId;
+        }
+
+        // A guard lets the visitor in, on the day the pass is for, and stamps it with who and when.
+        function checkIn() {
+          let data = request.resource.data;
+          return isGuardOf(estateId)
+                 && resource.data.stage == 'expected'
+                 && now() >= resource.data.validFrom
+                 && now() < resource.data.validUntil
+                 && residentStillHere()
+                 && changedKeys().hasOnly(['stage', 'checkedInAt', 'checkedInBy', 'checkedInByName'])
+                 && data.stage == 'inside'
+                 && data.checkedInBy == uid()
+                 && data.checkedInAt is int
+                 && math.abs(data.checkedInAt - now()) < 10 * 60 * 1000
+                 && data.checkedInByName is string
+                 && data.checkedInByName.size() <= 100;
+        }
+
+        // A guard records the visitor leaving. Allowed after the pass's day, for late stays.
+        function checkOut() {
+          let data = request.resource.data;
+          return isGuardOf(estateId)
+                 && resource.data.stage == 'inside'
+                 && changedKeys().hasOnly(['stage', 'checkedOutAt', 'checkedOutBy', 'checkedOutByName'])
+                 && data.stage == 'left'
+                 && data.checkedOutBy == uid()
+                 && data.checkedOutAt is int
+                 && math.abs(data.checkedOutAt - now()) < 10 * 60 * 1000
+                 && data.checkedOutByName is string
+                 && data.checkedOutByName.size() <= 100;
+        }
+
+        function passValid() {
+          let data = request.resource.data;
+          return data.keys().hasOnly(['code', 'residentId', 'residentName', 'residentAddress', 'visitorName',
+                                      'note', 'validFrom', 'validUntil', 'createdAt', 'stage'])
+                 && data.code == code
+                 && code.matches('^[A-HJ-NP-Z2-9]{6}$')
+                 && data.residentId == uid()
+                 && data.stage == 'expected'
+                 && data.visitorName is string
+                 && data.visitorName.size() > 0
+                 && data.visitorName.size() <= 80
+                 && data.residentName is string
+                 && data.residentName.size() <= 100
+                 && data.get('residentAddress', '') is string
+                 && data.get('residentAddress', '').size() <= 200
+                 && data.get('note', '') is string
+                 && data.get('note', '').size() <= 200
+                 && data.createdAt is int
+                 // One day at a time, starting within the next week, and not already over.
+                 && data.validFrom is int
+                 && data.validUntil is int
+                 && data.validUntil > now()
+                 && data.validUntil - data.validFrom <= 26 * 60 * 60 * 1000
+                 && data.validFrom < now() + 8 * 24 * 60 * 60 * 1000;
+        }
+
+        allow get: if isResident() || guardMaySee();
+        // Residents list their own passes; guards list only who is inside now. Each of these
+        // must be provable from the query alone (residentId == uid, or stage == 'inside').
+        allow list: if isResident()
+                    || (isGuardOf(estateId) && resource.data.stage == 'inside');
+        // A pass with this code already existing turns the write into an update, which fails, so
+        // nobody can overwrite someone else's pass by guessing its code.
+        allow create: if isMemberOf(estateId) && passValid();
+        allow update: if (isResident()
+                          && resource.data.stage == 'expected'
+                          && changedKeys().hasOnly(['stage'])
+                          && request.resource.data.stage == 'cancelled')
+                      || checkIn()
+                      || checkOut();
+        // The resident clears old passes, but not one for a visitor who's inside.
+        allow delete: if isResident() && resource.data.stage != 'inside';
+      }
     }
 
     // Maps an invite code to its estate. Fetchable only by someone who already knows the
@@ -382,6 +521,24 @@ service cloud.firestore {
       allow create: if isEstateAdminAfter(request.resource.data.estateId);
       allow update: if false;
       allow delete: if isEstateAdmin(resource.data.estateId);
+    }
+
+    // One-time codes an admin makes to sign a security guard on to their estate. Fetchable only
+    // by someone who already knows the code, and gone once a guard has used it (see guards).
+    match /guardCodes/{code} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create: if isEstateAdmin(request.resource.data.estateId)
+                    && code.matches('^[A-HJ-NP-Z2-9]{8}$')
+                    && request.resource.data.keys().hasOnly(['estateId', 'createdBy', 'createdAt', 'expiresAt'])
+                    && request.resource.data.createdBy == uid()
+                    && request.resource.data.expiresAt is int
+                    && request.resource.data.expiresAt <= request.time.toMillis() + 2 * 24 * 60 * 60 * 1000;
+      allow update: if false;
+      // An admin withdraws it, or the guard using it deletes it as they sign on.
+      allow delete: if isEstateAdmin(resource.data.estateId)
+                    || (isSignedIn()
+                        && getAfter(/databases/$(database)/documents/estates/$(resource.data.estateId)/guards/$(uid())).data.code == code);
     }
 
     // Reports of posts, comments, chats and people, and feedback from Settings. Users can
@@ -466,7 +623,7 @@ service cloud.firestore {
             || (type == 'OWNERSHIP_TRANSFERRED'
                 && isEstateAdmin(estateId)
                 && estateOf(estateId).get('ownerId', '') == data.recipientId)
-            || (type == 'MENTION'
+            || (type in ['MENTION', 'COMMENT']
                 && isMemberOf(estateId)
                 && get(/databases/$(database)/documents/users/$(data.recipientId)).data.get('estateId', null) == estateId)
             || (type == 'PAYMENT_SUBMITTED'
@@ -560,6 +717,8 @@ service cloud.firestore {
           && request.resource.data.authorId == resource.data.authorId
           && request.resource.data.estateId == resource.data.estateId
           && contentValid()
+          && request.resource.data.get('createdAt', 0) == resource.data.get('createdAt', 0)
+          && (!changedKeys().hasAny(['content', 'mentions', 'location', 'editedAt']) || withinEditWindow())
           && (request.resource.data.get('category', '') == resource.data.get('category', '') || categoryAllowed())
           // An old post can't be turned into an emergency, which would pin it to everyone's feed.
           && (request.resource.data.get('category', '') != 'emergency'
@@ -604,7 +763,14 @@ service cloud.firestore {
                       && isMemberOf(postEstate())
                       && request.resource.data.content is string
                       && request.resource.data.content.size() <= 1000;
-        allow update: if false;
+        // Its author rewrites the text, for 30 minutes after writing it.
+        allow update: if isSignedIn()
+                      && resource.data.authorId == uid()
+                      && isMemberOf(postEstate())
+                      && changedKeys().hasOnly(['content', 'mentions', 'editedAt'])
+                      && request.resource.data.content is string
+                      && request.resource.data.content.size() <= 1000
+                      && withinEditWindow();
         // The comment's author, the author of the post being commented on, or an admin of its
         // estate (deleting a post takes its comments with it).
         allow delete: if isSignedIn() && (

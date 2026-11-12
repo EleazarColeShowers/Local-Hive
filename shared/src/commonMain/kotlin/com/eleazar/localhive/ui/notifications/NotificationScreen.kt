@@ -21,8 +21,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Comment
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.Badge
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.filled.ArrowBack
@@ -172,6 +174,9 @@ private fun NotificationCard(
         NotificationType.POST_REMOVED -> Icons.Outlined.Delete to Color(0xFFE53935)
         NotificationType.OWNERSHIP_TRANSFERRED -> Icons.Default.Star to green
         NotificationType.BANK_DETAILS_CHANGED -> Icons.Outlined.AccountBalance to Color(0xFFE53935)
+        NotificationType.COMMENT -> Icons.AutoMirrored.Outlined.Comment to green
+        NotificationType.VISITOR_ARRIVED -> Icons.Outlined.Badge to green
+        NotificationType.VISITOR_LEFT -> Icons.Outlined.Badge to green
     }
 
     // Unread rows get a faint brand tint, as most apps' notification lists do.

@@ -62,6 +62,8 @@ fun SettingsRoute(
         onPushNotificationsChange = { viewModel.setPushNotificationsEnabled(it) },
         lightAlerts = uiState.lightAlerts,
         onLightAlertsChange = viewModel::setLightAlerts,
+        newPostAlerts = uiState.newPostAlerts,
+        onNewPostAlertsChange = viewModel::setNewPostAlerts,
         sosSound = uiState.sosSound,
         onSosSoundChange = viewModel::setSosSound,
         sosPausedUntil = uiState.sosPausedUntil,

@@ -65,6 +65,13 @@ export async function deleteAccount(db, uid, { deleteAuthUser, deleteMedia = asy
   for (const n of notifications) remove(n.path);
   for (const b of blocks) remove(b.path);
 
+  // A guard's place at the gate, and a resident's visitor passes in their estate.
+  if (user?.guardEstateId) remove(`estates/${user.guardEstateId}/guards/${uid}`);
+  if (user?.estateId) {
+    const passes = await db.query("visitorPasses", [["residentId", "EQUAL", uid]], { parent: `estates/${user.estateId}` });
+    for (const p of passes) remove(p.path);
+  }
+
   // The other person keeps the conversation but can't reply into the void.
   for (const chat of chats) {
     writes.push({

@@ -54,7 +54,16 @@ fun EstateAdminRoute(
         onRegenerateCode = { viewModel.regenerateInviteCode(estateId) },
         onCopyCode = { code -> platform.copyToClipboard("Invite Code", code, "Code copied!") },
         onMessageShown = { viewModel.consumeMessage() },
-        onClearError = { viewModel.clearError() }
+        onClearError = { viewModel.clearError() },
+        guardsTab = {
+            GuardsTabRoute(
+                estateId = estateId,
+                estateName = uiState.estate?.name.orEmpty(),
+                dark = colors.darkGray,
+                green = colors.hiveGreen,
+                cardBg = colors.cardBackground
+            )
+        }
     )
 }
 

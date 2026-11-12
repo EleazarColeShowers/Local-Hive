@@ -6,6 +6,7 @@ import com.eleazar.localhive.data.repository.AppSettingsRepositoryImpl
 import com.eleazar.localhive.data.repository.AuthRepositoryImpl
 import com.eleazar.localhive.data.repository.EstateRepositoryImpl
 import com.eleazar.localhive.data.repository.FinanceRepositoryImpl
+import com.eleazar.localhive.data.repository.GateRepositoryImpl
 import com.eleazar.localhive.data.repository.MessageRepositoryImpl
 import com.eleazar.localhive.data.repository.NotificationRepositoryImpl
 import com.eleazar.localhive.data.repository.PollRepositoryImpl
@@ -19,6 +20,7 @@ import com.eleazar.localhive.domain.AppSettingsRepository
 import com.eleazar.localhive.domain.AuthRepository
 import com.eleazar.localhive.domain.EstateRepository
 import com.eleazar.localhive.domain.FinanceRepository
+import com.eleazar.localhive.domain.GateRepository
 import com.eleazar.localhive.domain.MessageRepository
 import com.eleazar.localhive.domain.NotificationRepository
 import com.eleazar.localhive.domain.PollRepository
@@ -34,6 +36,8 @@ import com.eleazar.localhive.ui.auth.SplashViewModel
 import com.eleazar.localhive.ui.blocking.BlockingViewModel
 import com.eleazar.localhive.ui.directory.DirectoryViewModel
 import com.eleazar.localhive.ui.estate.EstateViewModel
+import com.eleazar.localhive.ui.estate.GuardsViewModel
+import com.eleazar.localhive.ui.gate.GateViewModel
 import com.eleazar.localhive.ui.feed.FeedViewModel
 import com.eleazar.localhive.ui.finance.FinanceViewModel
 import com.eleazar.localhive.ui.main.MembershipViewModel
@@ -44,6 +48,7 @@ import com.eleazar.localhive.ui.profile.ProfileViewModel
 import com.eleazar.localhive.ui.report.ReportViewModel
 import com.eleazar.localhive.ui.settings.SettingsViewModel
 import com.eleazar.localhive.ui.utilities.UtilitiesViewModel
+import com.eleazar.localhive.ui.visitors.VisitorsViewModel
 import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.auth.auth
 import dev.gitlive.firebase.firestore.firestore
@@ -97,6 +102,7 @@ fun dataModule(apiBaseUrl: String) = module {
     singleOf(::UtilityRepositoryImpl) bind UtilityRepository::class
     singleOf(::ReportRepositoryImpl) bind ReportRepository::class
     singleOf(::SosRepositoryImpl) bind SosRepository::class
+    singleOf(::GateRepositoryImpl) bind GateRepository::class
 }
 
 val viewModelModule = module {
@@ -116,6 +122,9 @@ val viewModelModule = module {
     viewModelOf(::FinanceViewModel)
     viewModelOf(::PollsViewModel)
     viewModelOf(::UtilitiesViewModel)
+    viewModelOf(::VisitorsViewModel)
+    viewModelOf(::GateViewModel)
+    viewModelOf(::GuardsViewModel)
 }
 
 fun initKoin(apiBaseUrl: String, appDeclaration: KoinAppDeclaration = {}) = startKoin {

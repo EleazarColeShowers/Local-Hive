@@ -42,6 +42,7 @@ fun PostDetailRoute(
         onMarkFalseAlarm = { viewModel.markFalseAlarm(postId) },
         onClearFalseAlarm = { viewModel.clearFalseAlarm(postId) },
         onDeleteComment = { commentId -> viewModel.deleteComment(postId, commentId) },
+        onEditComment = { commentId, content, mentions -> viewModel.editComment(postId, commentId, content, mentions) },
         onReport = rememberReporter()
     )
 }

@@ -111,7 +111,8 @@ fun MainRoute(actions: MainActions) {
                 onAdminPanel = actions.onAdminPanel,
                 onFinances = actions.onFinances,
                 onPolls = actions.onPolls,
-                onUtilities = actions.onUtilities
+                onUtilities = actions.onUtilities,
+                onVisitors = actions.onVisitors
             )
         }
     }

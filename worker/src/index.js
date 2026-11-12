@@ -15,12 +15,14 @@ import { publicResponse } from "./links.js";
  *                           { type: "announcement", postId }
  *                           { type: "emergency", postId }
  *                           { type: "security_report", postId }
+ *                           { type: "post", postId }  (an ordinary post, for members with new-post alerts on)
  *                           { type: "poll", estateId, pollId }
  *                           { type: "light_back", estateId }
  *                           { type: "sos_responding", postId }
  *                           { type: "sos_safe", postId }
  *                           { type: "sos_false_alarm", postId }
- *                           { type: "levy_reminder", estateId, levyId } -> sends the push
+ *                           { type: "levy_reminder", estateId, levyId }
+ *                           { type: "visitor_arrived" | "visitor_left", estateId, code } -> sends the push
  *   POST /delete-account    {}                                       -> deletes the caller's account
  *   GET  /join/{code}, /.well-known/assetlinks.json                  -> invite links (see links.js)
  *   GET  /delete-account                                             -> delete an account from the web
@@ -329,6 +331,36 @@ export async function buildPush(db, uid, body) {
       };
     }
 
+    case "post": {
+      const { postId } = body;
+      if (!isId(postId)) throw new HttpError(400, "Bad post reference");
+      const post = await db.get(`posts/${postId}`);
+      if (!post) throw new HttpError(404, "No such post");
+      if (post.authorId !== uid) throw new HttpError(403, "Not your post");
+      // These categories have pushes of their own.
+      if (["announcement", "security", "emergency"].includes(post.category)) throw new HttpError(409, "Pushed separately");
+      if (!(Date.now() - Number(post.createdAt || 0) < NEW_POST_MAX_AGE_MS)) throw new HttpError(410, "Not a new post");
+      const [author, estate] = await Promise.all([db.get(`users/${uid}`), db.get(`estates/${post.estateId}`)]);
+      if (!estate || author?.estateId !== post.estateId) throw new HttpError(403, "Not in this estate");
+      const members = (await db.idsWhere("users", "estateId", post.estateId)).filter((id) => id !== uid);
+      const [profiles, blocks] = await Promise.all([
+        db.getAll(members.map((id) => `users/${id}`)),
+        db.getAll(members.map((id) => `users/${id}/blocks/${uid}`)),
+      ]);
+      // Only people who turned on new-post alerts, and not anyone who blocked the author.
+      const recipients = members.filter((id) => profiles[`users/${id}`]?.newPostAlerts === true && !blocks[`users/${id}/blocks/${uid}`]);
+      return {
+        key: `post_${postId}`,
+        recipients,
+        payload: {
+          title: `${post.authorName || "A neighbour"} posted in ${estate.name || "your estate"}`,
+          body: post.content || (post.videoUrl ? "Shared a video" : post.imageUrl ? "Shared a photo" : "Tap to read"),
+          deepLink: `localhive://post/${postId}`,
+          tag: `post-${postId}`,
+        },
+      };
+    }
+
     case "security_report": {
       const { post, estate } = await incidentPost(db, uid, body.postId, "security");
       const where = post.location ? ` (${post.location})` : "";
@@ -498,9 +530,47 @@ export async function buildPush(db, uid, body) {
       };
     }
 
+    case "visitor_arrived":
+    case "visitor_left": {
+      const arrived = body.type === "visitor_arrived";
+      const { estateId, code } = body;
+      if (!isId(estateId) || !isPassCode(code)) throw new HttpError(400, "Bad pass reference");
+      const [guard, pass] = await Promise.all([
+        db.get(`estates/${estateId}/guards/${uid}`),
+        db.get(`estates/${estateId}/visitorPasses/${code}`),
+      ]);
+      if (!guard) throw new HttpError(403, "Not a guard at this estate");
+      if (!pass) throw new HttpError(404, "No such pass");
+      // Only straight after this guard really checked the visitor in or out.
+      const [stage, by, at] = arrived
+        ? ["inside", pass.checkedInBy, pass.checkedInAt]
+        : ["left", pass.checkedOutBy, pass.checkedOutAt];
+      if (pass.stage !== stage || by !== uid) throw new HttpError(409, "The pass isn't in that state");
+      if (!(Date.now() - Number(at || 0) < VISITOR_PUSH_MAX_AGE_MS)) throw new HttpError(410, "Too old to push");
+      const visitor = pass.visitorName || "Your visitor";
+      const title = arrived ? `🚪 ${visitor} has arrived` : `👋 ${visitor} has left`;
+      const message = arrived
+        ? `${pass.checkedInByName || "The guard"} checked them in at the gate.`
+        : `${pass.checkedOutByName || "The guard"} checked them out at the gate.`;
+      return {
+        key: `${body.type}_${estateId}_${code}`,
+        recipients: [pass.residentId],
+        payload: { title, body: message, deepLink: "localhive://visitors", tag: `visitor-${code}` },
+        inbox: { type: arrived ? "VISITOR_ARRIVED" : "VISITOR_LEFT", title, message, estateId, senderId: uid },
+      };
+    }
+
     default:
       throw new HttpError(400, "Unknown notify type");
   }
+}
+
+/** A check-in or check-out older than this is too stale to push. */
+const VISITOR_PUSH_MAX_AGE_MS = 10 * 60 * 1000;
+
+/** Visitor pass codes: six characters with no 0/O or 1/I to mix up. Matches the app and rules. */
+function isPassCode(value) {
+  return typeof value === "string" && /^[A-HJ-NP-Z2-9]{6}$/.test(value);
 }
 
 /** A bank change older than this is too stale to announce. */
@@ -546,6 +616,9 @@ async function emergencyFor(db, postId) {
   return { post };
 }
 
+/** How long after a post is written its new-post push can still go out. */
+const NEW_POST_MAX_AGE_MS = 10 * 60 * 1000;
+
 /** How long after an SOS is raised it can still be pushed. */
 const EMERGENCY_MAX_AGE_MS = 15 * 60 * 1000;
 
@@ -584,6 +657,9 @@ async function notificationAllowed(db, uid, note) {
     return !!member && member.estateId !== note.estateId;
   }
   if (note.type === "MENTION") return mentionAllowed(db, uid, note);
+  if (note.type === "COMMENT") return commentAllowed(db, uid, note);
+  // The old owner telling the new one, once ownership has actually moved to them.
+  if (note.type === "OWNERSHIP_TRANSFERRED") return admins.includes(uid) && estate.ownerId === note.recipientId && note.recipientId !== uid;
   // An admin telling a member of their estate that they removed one of the member's posts.
   if (note.type === "POST_REMOVED") {
     if (!admins.includes(uid) || note.recipientId === uid) return false;
@@ -596,7 +672,7 @@ async function notificationAllowed(db, uid, note) {
 
 /** Where tapping a notification's push lands. */
 function notificationLink(note) {
-  if (note.type === "MENTION" && isId(note.postId)) return `localhive://post/${note.postId}`;
+  if ((note.type === "MENTION" || note.type === "COMMENT") && isId(note.postId)) return `localhive://post/${note.postId}`;
   if (String(note.type || "").startsWith("PAYMENT_") && isId(note.levyId)) return `localhive://levy/${note.levyId}`;
   return "localhive://notifications";
 }
@@ -645,6 +721,27 @@ async function mentionAllowed(db, uid, note) {
   if (sender?.estateId !== note.estateId || recipient?.estateId !== note.estateId) return false;
   const source = note.commentId ? await db.get(`posts/${note.postId}/comments/${note.commentId}`) : post;
   return !!source && source.authorId === uid && Object.hasOwn(source.mentions || {}, note.recipientId);
+}
+
+/**
+ * A comment the caller wrote, told to the post's author, or for a reply, to the author of the
+ * comment it answers. Never to someone who blocked the commenter.
+ */
+async function commentAllowed(db, uid, note) {
+  if (!isId(note.postId) || !isId(note.commentId) || note.recipientId === uid) return false;
+  const [post, comment, sender, recipient, blocked] = await Promise.all([
+    db.get(`posts/${note.postId}`),
+    db.get(`posts/${note.postId}/comments/${note.commentId}`),
+    db.get(`users/${uid}`),
+    db.get(`users/${note.recipientId}`),
+    db.get(`users/${note.recipientId}/blocks/${uid}`),
+  ]);
+  if (!post || !comment || blocked || comment.authorId !== uid || post.estateId !== note.estateId) return false;
+  if (sender?.estateId !== note.estateId || recipient?.estateId !== note.estateId) return false;
+  if (post.authorId === note.recipientId) return true;
+  if (!isId(comment.parentId)) return false;
+  const parent = await db.get(`posts/${note.postId}/comments/${comment.parentId}`);
+  return parent?.authorId === note.recipientId;
 }
 
 /** Firestore ids from the app: no slashes, so a reference can't climb into another path. */

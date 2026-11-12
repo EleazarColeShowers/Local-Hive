@@ -4,6 +4,7 @@ import com.eleazar.localhive.domain.AppSettingsRepository
 import com.eleazar.localhive.domain.AuthRepository
 import com.eleazar.localhive.domain.UserRepository
 import dev.gitlive.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.delay
 
 /**
  * Keeps this device's FCM token on the signed-in user's profile, which is where the Worker looks
@@ -26,8 +27,21 @@ class PushTokenSync(
             userRepository.clearFcmToken(userId)
             return
         }
-        runCatching { messaging.getToken() }
-            .onSuccess { token -> userRepository.updateFcmToken(userId, token) }
+        // On iOS the token can't be issued until Apple has registered the device, which may not
+        // have happened yet this early in a launch, so try again a few times before giving up.
+        repeat(TOKEN_ATTEMPTS) { attempt ->
+            val token = runCatching { messaging.getToken() }.getOrNull()
+            if (token != null) {
+                userRepository.updateFcmToken(userId, token)
+                return
+            }
+            if (attempt < TOKEN_ATTEMPTS - 1) delay(TOKEN_RETRY_MS)
+        }
+    }
+
+    private companion object {
+        const val TOKEN_ATTEMPTS = 4
+        const val TOKEN_RETRY_MS = 5_000L
     }
 
     /** FCM issued a new token for this device. */

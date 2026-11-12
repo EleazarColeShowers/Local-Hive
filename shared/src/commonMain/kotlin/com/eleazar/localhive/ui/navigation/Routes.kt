@@ -52,6 +52,10 @@ sealed class Screen(val route: String) {
     object Polls : Screen("polls")
     object CreatePoll : Screen("create_poll")
     object Utilities : Screen("utilities")
+    object Visitors : Screen("visitors")
+
+    /** A security guard's only screen. Guards aren't members, so they never reach [Main]. */
+    object Gate : Screen("gate")
 
     object Notifications : Screen("notifications")
     object Settings : Screen("settings")

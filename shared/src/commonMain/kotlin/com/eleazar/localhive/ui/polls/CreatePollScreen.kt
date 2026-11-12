@@ -1,6 +1,8 @@
 package com.eleazar.localhive.ui.polls
 
 import com.eleazar.localhive.ui.components.charactersLeftSupport
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -83,6 +85,7 @@ fun CreatePollScreen(
             Spacer(Modifier.height(16.dp))
             OutlinedTextField(
                 value = question,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 onValueChange = { question = it.take(MAX_QUESTION_LENGTH) },
                 label = { Text("Question") },
                 supportingText = charactersLeftSupport(question.length, MAX_QUESTION_LENGTH),
@@ -99,6 +102,7 @@ fun CreatePollScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
                     OutlinedTextField(
                         value = option,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                         onValueChange = { text -> options = options.toMutableList().also { it[index] = text.take(80) } },
                         placeholder = { Text("Choice ${index + 1}") },
                         singleLine = true,

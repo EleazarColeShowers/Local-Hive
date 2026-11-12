@@ -1,5 +1,7 @@
 package com.eleazar.localhive.ui.feed
 
+import com.eleazar.localhive.ui.navigation.OnTabReselected
+import com.eleazar.localhive.domain.model.isEditable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -72,6 +74,8 @@ fun FeedScreen(
     val filter = FeedFilter.valueOf(filterName)
     val loadMore by rememberUpdatedState(onLoadMore)
     val listState = rememberLazyListState()
+    // Tapping Feed while already on it goes back to the newest posts.
+    OnTabReselected { listState.animateScrollToItem(0) }
     val accent = MaterialTheme.colorScheme.primary
     // The effect below outlives recompositions, so read posts through this rather than a stale capture.
     val posts by rememberUpdatedState(uiState.posts)
@@ -200,7 +204,9 @@ fun FeedScreen(
                                 authorIsAdmin = post.authorId in uiState.adminIds,
                                 pinned = post.id == pinned?.id,
                                 onMentionClick = onUserClick,
-                                onEdit = { onEditPost(post.id) }.takeIf { post.authorId == uiState.currentUserId },
+                                onEdit = { onEditPost(post.id) }.takeIf {
+                                    post.authorId == uiState.currentUserId && isEditable(post.createdAt, nowMillis())
+                                },
                                 onDelete = { reason: String -> onDeletePost(post.id, reason) }.takeIf { post.authorId == uiState.currentUserId || uiState.isAdmin },
                                 onReport = { reason: ReportReason, details: String -> onReport(Report.of(post, reason, details)) }
                                     .takeIf { post.authorId != uiState.currentUserId }

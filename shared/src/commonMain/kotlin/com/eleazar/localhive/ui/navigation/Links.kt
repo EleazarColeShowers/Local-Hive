@@ -15,6 +15,7 @@ fun routeForLink(link: String): String? {
         "notifications" -> Screen.Notifications.route
         "polls" -> Screen.Polls.route
         "utilities" -> Screen.Utilities.route
+        "visitors" -> Screen.Visitors.route
         else -> null
     }
 }

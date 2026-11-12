@@ -50,6 +50,15 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return true
     }
 
+    /**
+     * Apple registered the device for push. Firebase can't pick this up by itself in a SwiftUI app
+     * (its automatic hook-in misses the delegate adaptor), so hand it over, or it never issues an
+     * FCM token and the Worker has nowhere to send pushes.
+     */
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        Messaging.messaging().apnsToken = deviceToken
+    }
+
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         guard let fcmToken else { return }
         LocalHiveIos.shared.onPushToken(token: fcmToken)

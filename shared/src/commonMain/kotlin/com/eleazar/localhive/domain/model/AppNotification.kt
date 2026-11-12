@@ -18,7 +18,13 @@ enum class NotificationType {
     /** The estate's owner handed ownership to the recipient. */
     OWNERSHIP_TRANSFERRED,
     /** The treasurer changed where dues are paid. Raised by the Worker, never by the app. */
-    BANK_DETAILS_CHANGED
+    BANK_DETAILS_CHANGED,
+    /** Someone commented on the recipient's post, or replied to their comment. */
+    COMMENT,
+    /** A guard checked the recipient's visitor in at the gate. Raised by the Worker. */
+    VISITOR_ARRIVED,
+    /** A guard checked the recipient's visitor out. Raised by the Worker. */
+    VISITOR_LEFT
 }
 
 data class AppNotification(
@@ -29,7 +35,7 @@ data class AppNotification(
     val message: String = "",
     val estateId: String? = null,
     val relatedUserId: String? = null,
-    /** The post a [NotificationType.MENTION] points to. */
+    /** The post a [NotificationType.MENTION] or [NotificationType.COMMENT] points to. */
     val postId: String? = null,
     /** Set when the mention was in a comment on [postId]. */
     val commentId: String? = null,

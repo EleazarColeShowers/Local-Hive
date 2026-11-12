@@ -1,6 +1,8 @@
 package com.eleazar.localhive.ui.messages
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -741,6 +743,7 @@ private fun MessageComposer(
             ) {
                 TextField(
                     value = text,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     onValueChange = onTextChange,
                     placeholder = { Text("Message") },
                     modifier = Modifier.weight(1f).focusRequester(focusRequester),

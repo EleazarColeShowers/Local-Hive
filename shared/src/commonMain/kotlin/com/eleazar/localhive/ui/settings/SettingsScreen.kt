@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Feed
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowBack
@@ -68,6 +69,8 @@ fun SettingsScreen(
     onDeleteAccountDismissed: () -> Unit = {},
     lightAlerts: Boolean = false,
     onLightAlertsChange: (Boolean) -> Unit = {},
+    newPostAlerts: Boolean = false,
+    onNewPostAlertsChange: (Boolean) -> Unit = {},
     sosSound: SosSound = SosSound.SIREN,
     onSosSoundChange: (SosSound) -> Unit = {},
     sosPausedUntil: Long = 0L,
@@ -220,6 +223,29 @@ fun SettingsScreen(
                     Switch(
                         checked = lightAlerts,
                         onCheckedChange = onLightAlertsChange,
+                        colors = SwitchDefaults.colors(checkedTrackColor = hiveGreen)
+                    )
+                }
+                SettingsDivider(darkGray)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Feed, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("New posts in my estate", fontSize = 14.sp, color = darkGray)
+                        Text(
+                            "A notification for every new post. Announcements, alerts and comments come anyway",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = newPostAlerts,
+                        onCheckedChange = onNewPostAlertsChange,
                         colors = SwitchDefaults.colors(checkedTrackColor = hiveGreen)
                     )
                 }

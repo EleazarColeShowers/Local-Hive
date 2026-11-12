@@ -15,6 +15,8 @@ import com.eleazar.localhive.ui.feed.EditPostRoute
 import com.eleazar.localhive.ui.polls.CreatePollRoute
 import com.eleazar.localhive.ui.polls.PollsRoute
 import com.eleazar.localhive.ui.utilities.UtilitiesRoute
+import com.eleazar.localhive.ui.visitors.VisitorsRoute
+import com.eleazar.localhive.ui.gate.GateRoute
 import com.eleazar.localhive.ui.feed.EmergencyAlertRoute
 import com.eleazar.localhive.ui.finance.AddExpenseRoute
 import com.eleazar.localhive.ui.finance.CreateLevyRoute
@@ -34,8 +36,9 @@ object AppLocalHiveScreens : LocalHiveScreens {
     override fun Splash(
         onNavigateToOnboarding: () -> Unit,
         onNavigateToEstateSelection: () -> Unit,
-        onNavigateToMain: () -> Unit
-    ) = SplashRoute(onNavigateToOnboarding, onNavigateToEstateSelection, onNavigateToMain)
+        onNavigateToMain: () -> Unit,
+        onNavigateToGate: () -> Unit
+    ) = SplashRoute(onNavigateToOnboarding, onNavigateToEstateSelection, onNavigateToMain, onNavigateToGate)
 
     @Composable
     override fun SignUp(onNavigateToLogin: () -> Unit, onSignupSuccess: () -> Unit) =
@@ -50,8 +53,8 @@ object AppLocalHiveScreens : LocalHiveScreens {
         ProfileSetUpRoute(onProfileComplete = onProfileComplete)
 
     @Composable
-    override fun EstateSelection(onEstateJoined: () -> Unit) =
-        EstateSelectionRoute(onEstateJoined = onEstateJoined)
+    override fun EstateSelection(onEstateJoined: () -> Unit, onBecameGuard: () -> Unit) =
+        EstateSelectionRoute(onEstateJoined = onEstateJoined, onBecameGuard = onBecameGuard)
 
     @Composable
     override fun Main(actions: MainActions) = MainRoute(actions = actions)
@@ -73,6 +76,13 @@ object AppLocalHiveScreens : LocalHiveScreens {
 
     @Composable
     override fun Utilities(onBack: () -> Unit) = UtilitiesRoute(onBack = onBack)
+
+    @Composable
+    override fun Visitors(onBack: () -> Unit) = VisitorsRoute(onBack = onBack)
+
+    @Composable
+    override fun Gate(onSignedOut: () -> Unit, onLeftPost: () -> Unit) =
+        GateRoute(onSignedOut = onSignedOut, onLeftPost = onLeftPost)
 
     @Composable
     override fun EditPost(postId: String, onNavigateBack: () -> Unit) =
@@ -107,12 +117,14 @@ object AppLocalHiveScreens : LocalHiveScreens {
         onBack: () -> Unit,
         onNavigateToEstateAdmin: (estateId: String) -> Unit,
         onNavigateToPost: (postId: String) -> Unit,
-        onNavigateToLevy: (levyId: String) -> Unit
+        onNavigateToLevy: (levyId: String) -> Unit,
+        onNavigateToVisitors: () -> Unit
     ) = NotificationRoute(
         onBack = onBack,
         onNavigateToEstateAdmin = onNavigateToEstateAdmin,
         onNavigateToPost = onNavigateToPost,
-        onNavigateToLevy = onNavigateToLevy
+        onNavigateToLevy = onNavigateToLevy,
+        onNavigateToVisitors = onNavigateToVisitors
     )
 
     @Composable

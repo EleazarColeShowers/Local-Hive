@@ -107,6 +107,8 @@ fun EstateAdminScreen(
     onCopyCode: (code: String) -> Unit = {},
     onMessageShown: () -> Unit = {},
     onClearError: () -> Unit = {},
+    /** The Guards tab's content, which brings its own state. */
+    guardsTab: @Composable () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -205,9 +207,20 @@ fun EstateAdminScreen(
                     onClick = { selectedTab = 2; onClearError() },
                     text = {
                         Text(
-                            "Settings",
+                            "Guards",
                             fontWeight = if (selectedTab == 2) FontWeight.SemiBold else FontWeight.Normal,
                             color = if (selectedTab == 2) green else dark.copy(alpha = 0.5f)
+                        )
+                    }
+                )
+                Tab(
+                    selected = selectedTab == 3,
+                    onClick = { selectedTab = 3; onClearError() },
+                    text = {
+                        Text(
+                            "Settings",
+                            fontWeight = if (selectedTab == 3) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (selectedTab == 3) green else dark.copy(alpha = 0.5f)
                         )
                     }
                 )
@@ -251,7 +264,8 @@ fun EstateAdminScreen(
                     green = green,
                     cardBg = cardBg
                 )
-                2 -> EstateSettingsTab(
+                2 -> guardsTab()
+                3 -> EstateSettingsTab(
                     estate = estate,
                     inviteCode = inviteCode,
                     isSaving = isSaving,

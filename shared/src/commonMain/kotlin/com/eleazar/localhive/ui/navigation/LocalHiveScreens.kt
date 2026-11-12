@@ -13,7 +13,8 @@ interface LocalHiveScreens {
     fun Splash(
         onNavigateToOnboarding: () -> Unit,
         onNavigateToEstateSelection: () -> Unit,
-        onNavigateToMain: () -> Unit
+        onNavigateToMain: () -> Unit,
+        onNavigateToGate: () -> Unit
     )
 
     @Composable
@@ -26,7 +27,7 @@ interface LocalHiveScreens {
     fun ProfileSetup(onProfileComplete: () -> Unit)
 
     @Composable
-    fun EstateSelection(onEstateJoined: () -> Unit)
+    fun EstateSelection(onEstateJoined: () -> Unit, onBecameGuard: () -> Unit)
 
     /** The tabbed home screen. Use [MainTabsHost] for the tab navigation itself. */
     @Composable
@@ -68,7 +69,8 @@ interface LocalHiveScreens {
         onBack: () -> Unit,
         onNavigateToEstateAdmin: (estateId: String) -> Unit,
         onNavigateToPost: (postId: String) -> Unit,
-        onNavigateToLevy: (levyId: String) -> Unit
+        onNavigateToLevy: (levyId: String) -> Unit,
+        onNavigateToVisitors: () -> Unit
     )
 
     /** The estate's dues and expenses. */
@@ -114,6 +116,14 @@ interface LocalHiveScreens {
     /** "Is there light?": the estate's power status. */
     @Composable
     fun Utilities(onBack: () -> Unit)
+
+    /** A resident's visitor passes. */
+    @Composable
+    fun Visitors(onBack: () -> Unit)
+
+    /** A security guard checking visitors in and out. */
+    @Composable
+    fun Gate(onSignedOut: () -> Unit, onLeftPost: () -> Unit)
 }
 
 /** Where the Main screen and its tabs can lead in the app-level graph. */
@@ -128,6 +138,7 @@ class MainActions(
     val onEditPost: (postId: String) -> Unit,
     val onPolls: () -> Unit,
     val onUtilities: () -> Unit,
+    val onVisitors: () -> Unit,
     val onSettings: () -> Unit,
     val onAdminPanel: (estateId: String) -> Unit,
     val onFinances: () -> Unit,

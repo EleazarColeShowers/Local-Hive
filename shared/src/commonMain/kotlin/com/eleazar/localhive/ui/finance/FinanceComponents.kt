@@ -10,7 +10,12 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -76,4 +81,33 @@ fun ProofImage(url: Any, contentDescription: String, modifier: Modifier = Modifi
             .clickable(onClickLabel = "View full screen") { viewing = true }
     )
     if (viewing) ImageViewer(url, onDismiss = { viewing = false })
+}
+
+/** Shows a picked proof-of-payment photo so the payer can check it before it's sent. */
+@Composable
+fun ConfirmProofDialog(
+    image: String,
+    onSend: () -> Unit,
+    onChooseAnother: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Send this as proof?") },
+        text = {
+            Column {
+                Text("The treasurer will see this photo and confirm your payment.")
+                Spacer(Modifier.height(12.dp))
+                ProofImage(url = image, contentDescription = "Proof of payment")
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onSend) {
+                Text("Send", fontWeight = FontWeight.SemiBold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onChooseAnother) { Text("Choose another") }
+        }
+    )
 }

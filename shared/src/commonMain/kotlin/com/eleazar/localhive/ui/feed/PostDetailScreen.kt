@@ -1,6 +1,8 @@
 package com.eleazar.localhive.ui.feed
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -57,6 +59,9 @@ import com.eleazar.localhive.ui.report.ReportDialog
 import com.eleazar.localhive.ui.components.RoleBadge
 import com.eleazar.localhive.ui.components.ScreenGutter
 import com.eleazar.localhive.ui.util.relativeTime
+import com.eleazar.localhive.ui.util.nowMillis
+import com.eleazar.localhive.domain.model.isEditable
+import androidx.compose.material.icons.outlined.Edit
 
 private const val MAX_COMMENT_LENGTH = 1000
 
@@ -77,6 +82,8 @@ fun PostDetailScreen(
     onMarkFalseAlarm: () -> Unit = {},
     onClearFalseAlarm: () -> Unit = {},
     onDeleteComment: (commentId: String) -> Unit = {},
+    /** Saves the user's changes to their own comment. */
+    onEditComment: (commentId: String, content: String, mentions: Map<String, String>) -> Unit = { _, _, _ -> },
     onReport: (Report) -> Unit = {},
 ) {
     var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
@@ -86,16 +93,32 @@ fun PostDetailScreen(
     val suggestions = mentionQuery?.let { mentionSuggestions(uiState.members, it.query) }.orEmpty()
     val accent = MaterialTheme.colorScheme.primary
     var replyingTo by remember { mutableStateOf<Comment?>(null) }
+    // The user's own comment being changed in the composer, instead of a new one being written.
+    var editingComment by remember { mutableStateOf<Comment?>(null) }
     // A reply that's lost its comment (deleted, or blocked) is shown on its own instead.
     val threads = remember(uiState.comments) { commentThreads(uiState.comments) }
     val composerFocus = remember { FocusRequester() }
-    LaunchedEffect(replyingTo?.id) {
-        if (replyingTo != null) runCatching { composerFocus.requestFocus() }
+    LaunchedEffect(replyingTo?.id, editingComment?.id) {
+        if (replyingTo != null || editingComment != null) runCatching { composerFocus.requestFocus() }
+    }
+
+    fun startEdit(comment: Comment) {
+        replyingTo = null
+        editingComment = comment
+        draft = TextFieldValue(comment.content, TextRange(comment.content.length))
+        picked = comment.mentions
+    }
+
+    fun cancelEdit() {
+        editingComment = null
+        draft = TextFieldValue()
+        picked = emptyMap()
     }
 
     // Starts a reply with an @ of the person being answered, so they're told about it and it
     // reads as an answer to them even where replies aren't shown nested.
     fun startReply(comment: Comment) {
+        if (editingComment != null) cancelEdit()
         replyingTo = comment
         val member = uiState.members.firstOrNull { it.id == comment.authorId && it.id != uiState.currentUserId }
         val name = member?.mentionName?.takeIf { it.isNotEmpty() } ?: return
@@ -123,6 +146,23 @@ fun PostDetailScreen(
             Surface(color = MaterialTheme.colorScheme.surface) {
                 Column(modifier = Modifier.navigationBarsPadding().imePadding()) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    editingComment?.let {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Editing your comment",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(onClick = { cancelEdit() }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Filled.Close, contentDescription = "Cancel edit", modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
                     replyingTo?.let { target ->
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp),
@@ -162,6 +202,7 @@ fun PostDetailScreen(
                     ) {
                         TextField(
                             value = draft,
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                             // Matches the comment rule in firestore.rules.
                             onValueChange = { if (it.text.length <= MAX_COMMENT_LENGTH) draft = it },
                             placeholder = { Text(if (replyingTo != null) "Write a reply" else "Add a comment") },
@@ -179,7 +220,11 @@ fun PostDetailScreen(
                         Spacer(Modifier.width(8.dp))
                         FilledIconButton(
                             onClick = {
-                                if (commentText.isNotBlank()) {
+                                val editing = editingComment
+                                if (commentText.isNotBlank() && editing != null) {
+                                    onEditComment(editing.id, commentText.trim(), mentionsIn(commentText, picked))
+                                    cancelEdit()
+                                } else if (commentText.isNotBlank()) {
                                     // Replies all hang off the top-level comment, one level deep.
                                     val parentId = replyingTo?.let { it.parentId ?: it.id }
                                     onAddComment(commentText.trim(), mentionsIn(commentText, picked), parentId)
@@ -231,7 +276,7 @@ fun PostDetailScreen(
                         authorIsAdmin = post.authorId in uiState.adminIds,
                         playVideo = true,
                         onMentionClick = onUserClick,
-                        onEdit = onEditPost.takeIf { isMine },
+                        onEdit = onEditPost.takeIf { isMine && isEditable(post.createdAt, nowMillis()) },
                         onDelete = onDeletePost.takeIf { isMine || uiState.isAdmin },
                         onReport = { reason: ReportReason, details: String -> onReport(Report.of(post, reason, details)) }
                             .takeIf { !isMine },
@@ -303,6 +348,9 @@ fun PostDetailScreen(
                     ),
                     onUserClick = onUserClick,
                     onDelete = { onDeleteComment(comment.id) },
+                    onEdit = { startEdit(comment) }.takeIf {
+                        me != null && comment.authorId == me && isEditable(comment.createdAt, nowMillis())
+                    },
                     onReport = { reason: ReportReason, details: String ->
                         onReport(Report.of(comment, uiState.selectedPost?.id.orEmpty(), reason, details))
                     }.takeIf { me != null && comment.authorId != me }
@@ -337,6 +385,7 @@ private fun CommentRow(
     canDelete: Boolean,
     onUserClick: (userId: String) -> Unit,
     onDelete: () -> Unit,
+    onEdit: (() -> Unit)? = null,
     onReport: ((ReportReason, details: String) -> Unit)? = null
 ) {
     val accent = MaterialTheme.colorScheme.primary
@@ -382,7 +431,7 @@ private fun CommentRow(
                         val time = relativeTime(comment.createdAt)
                         if (time.isNotEmpty()) {
                             Text(
-                                "  ·  $time",
+                                "  ·  $time" + if (comment.editedAt > 0L) " · edited" else "",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                             )
@@ -432,6 +481,16 @@ private fun CommentRow(
                         onClick = {
                             menuOpen = false
                             onReply()
+                        }
+                    )
+                }
+                if (onEdit != null) {
+                    DropdownMenuItem(
+                        text = { Text("Edit") },
+                        leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            onEdit()
                         }
                     )
                 }

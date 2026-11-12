@@ -8,13 +8,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import org.koin.compose.viewmodel.koinViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.eleazar.localhive.ui.gate.GuardSignOnRoute
 
 @Composable
 fun EstateSelectionRoute(
     onEstateJoined: () -> Unit,
+    onBecameGuard: () -> Unit = {},
     viewModel: EstateViewModel = koinViewModel()
 ) {
     var showCreate by remember { mutableStateOf(false) }
+    var showGuard by remember { mutableStateOf(false) }
     var showJoin by remember { mutableStateOf(false) }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -30,6 +33,10 @@ fun EstateSelectionRoute(
         JoinEstateRoute(onSuccess = onEstateJoined, onBack = { showJoin = false }, viewModel = viewModel)
         return
     }
+    if (showGuard) {
+        GuardSignOnRoute(onSignedOn = onBecameGuard, onBack = { showGuard = false })
+        return
+    }
 
     val colors = rememberEstateColors()
 
@@ -38,7 +45,8 @@ fun EstateSelectionRoute(
         colors = colors,
         onCreateClick = { showCreate = true },
         onJoinClick = { showJoin = true },
-        onCancelRequest = { viewModel.cancelRequest() }
+        onCancelRequest = { viewModel.cancelRequest() },
+        onGuardClick = { showGuard = true }
     )
 }
 

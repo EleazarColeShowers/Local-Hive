@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -55,7 +56,8 @@ fun EstateSelectionScreen(
     onCreateClick: () -> Unit,
     onJoinClick: () -> Unit,
     onCancelRequest: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onGuardClick: () -> Unit = {}
 ) {
     val green = colors.hiveGreen
     val gold = colors.backgroundGold
@@ -84,7 +86,8 @@ fun EstateSelectionScreen(
                     green = green,
                     cardBg = cardBg,
                     onCreateClick = onCreateClick,
-                    onJoinClick = onJoinClick
+                    onJoinClick = onJoinClick,
+                    onGuardClick = onGuardClick
                 )
             }
         }
@@ -97,7 +100,8 @@ private fun SelectionContent(
     green: Color,
     cardBg: Color,
     onCreateClick: () -> Unit,
-    onJoinClick: () -> Unit
+    onJoinClick: () -> Unit,
+    onGuardClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -157,6 +161,17 @@ private fun SelectionContent(
             containerColor = cardBg,
             contentColor = dark,
             onClick = onCreateClick
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        EstateOptionCard(
+            icon = Icons.Outlined.Shield,
+            title = "I'm a security guard",
+            subtitle = "Work an estate's gate with a code from its admin",
+            containerColor = cardBg,
+            contentColor = dark,
+            onClick = onGuardClick
         )
     }
 }

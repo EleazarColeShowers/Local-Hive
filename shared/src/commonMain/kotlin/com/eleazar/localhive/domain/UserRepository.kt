@@ -24,6 +24,8 @@ interface UserRepository {
     suspend fun updateFcmToken(userId: String, token: String): Result<Unit>
     /** Whether the user gets a push when a neighbour reports the light is back. */
     suspend fun setLightAlerts(userId: String, enabled: Boolean): Result<Unit>
+    /** Turns the push for every new post in the estate on or off. */
+    suspend fun setNewPostAlerts(userId: String, enabled: Boolean): Result<Unit>
     /** How a neighbour's SOS sounds on the user's phone. */
     suspend fun setSosSound(userId: String, sound: SosSound): Result<Unit>
     /** SOS alerts only vibrate until [until]; 0 ends the pause. */

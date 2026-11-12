@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Badge
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.HowToVote
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
@@ -125,7 +126,8 @@ fun ProfileScreen(
     onFinances: () -> Unit,
     modifier: Modifier = Modifier,
     onPolls: () -> Unit = {},
-    onUtilities: () -> Unit = {}
+    onUtilities: () -> Unit = {},
+    onVisitors: () -> Unit = {}
 ) {
     var showEdit by remember { mutableStateOf(false) }
     var showCodeDialog by remember { mutableStateOf(false) }
@@ -221,7 +223,8 @@ fun ProfileScreen(
                     onAdminPanel = onAdminPanel,
                     onFinances = onFinances,
                     onPolls = onPolls,
-                    onUtilities = onUtilities
+                    onUtilities = onUtilities,
+                    onVisitors = onVisitors
                 )
             }
         }
@@ -318,7 +321,8 @@ private fun ViewContent(
     onAdminPanel: (String) -> Unit,
     onFinances: () -> Unit,
     onPolls: () -> Unit,
-    onUtilities: () -> Unit
+    onUtilities: () -> Unit,
+    onVisitors: () -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -432,6 +436,14 @@ private fun ViewContent(
                     subtitle = "Is there light? See and report it",
                     colors = colors,
                     onClick = onUtilities
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 72.dp))
+                ActionRow(
+                    icon = Icons.Outlined.Badge,
+                    title = "Visitors",
+                    subtitle = "Gate passes for people you're expecting",
+                    colors = colors,
+                    onClick = onVisitors
                 )
                 if (isAdmin) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

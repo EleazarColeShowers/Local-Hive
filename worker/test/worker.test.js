@@ -77,6 +77,23 @@ Object.assign(docs, {
   "notifications/r3": { senderId: "admin", recipientId: "other", type: "POST_REMOVED", estateId: "E1" },
   "posts/sec1": { authorId: "member", authorName: "Ada", estateId: "E1", category: "security", location: "Back fence", content: "Someone climbing in" },
 });
+// New-post alerts: "third" turned them on, "blocker" too but has blocked "member".
+Object.assign(docs, {
+  "users/third": { estateId: "E1", newPostAlerts: true },
+  "users/blocker": { estateId: "E1", newPostAlerts: true },
+  "posts/new1": { authorId: "member", authorName: "Ada", estateId: "E1", category: "question", content: "Anyone seen my cat?", createdAt: Date.now() },
+  "posts/old1": { authorId: "member", estateId: "E1", category: "", content: "Old news", createdAt: Date.now() - 60 * 60 * 1000 },
+  // Comments: "admin" comments on member's post t1 (c2), "third" replies to admin's comment c1 (c3).
+  "posts/t1/comments/c2": { authorId: "admin", content: "Nice" },
+  "posts/t1/comments/c3": { authorId: "third", content: "Agreed", parentId: "c1" },
+  "notifications/k1": { senderId: "admin", recipientId: "member", type: "COMMENT", estateId: "E1", postId: "t1", commentId: "c2", title: "Eleazar commented on your post", message: "Nice" },
+  "notifications/k2": { senderId: "third", recipientId: "admin", type: "COMMENT", estateId: "E1", postId: "t1", commentId: "c3" },
+  "notifications/k3": { senderId: "admin", recipientId: "third", type: "COMMENT", estateId: "E1", postId: "t1", commentId: "c2" },
+  "notifications/k4": { senderId: "member", recipientId: "member", type: "COMMENT", estateId: "E1", postId: "t1", commentId: "c2" },
+  "notifications/o1": { senderId: "admin", recipientId: "third", type: "OWNERSHIP_TRANSFERRED", estateId: "E1" },
+  "notifications/o2": { senderId: "admin", recipientId: "member", type: "OWNERSHIP_TRANSFERRED", estateId: "E1" },
+});
+docs["estates/E1"] = { ...docs["estates/E1"], ownerId: "third" };
 const db = fakeDb(docs);
 const status = async (promise) => promise.then(() => 200, (e) => e.status ?? 500);
 
@@ -456,4 +473,68 @@ test("public GET: terms of use forbid abuse and link to the other policies", asy
   assert.match(html, /no tolerance/);
   assert.match(html, /href="\/privacy"/);
   assert.match(html, /href="\/child-safety"/);
+});
+
+test("a new post goes only to members with new-post alerts on who haven't blocked the author", async () => {
+  const push = await buildPush(db, "member", { type: "post", postId: "new1" });
+  assert.deepEqual(push.recipients, ["third"]);
+  assert.match(push.payload.title, /Ada posted in Amali Estate/);
+  assert.equal(push.payload.deepLink, "localhive://post/new1");
+});
+
+test("new-post pushes only go out fresh, from the author, for ordinary posts", async () => {
+  assert.equal(await status(buildPush(db, "admin", { type: "post", postId: "new1" })), 403);
+  assert.equal(await status(buildPush(db, "member", { type: "post", postId: "old1" })), 410);
+  assert.equal(await status(buildPush(db, "admin", { type: "post", postId: "a1" })), 409);
+  assert.equal(await status(buildPush(db, "member", { type: "post", postId: "../a1" })), 400);
+});
+
+test("a comment notifies the post's author, and a reply the comment's author, and opens the post", async () => {
+  const push = await buildPush(db, "admin", { type: "notification", notificationId: "k1" });
+  assert.deepEqual(push.recipients, ["member"]);
+  assert.equal(push.payload.deepLink, "localhive://post/t1");
+  assert.deepEqual((await buildPush(db, "third", { type: "notification", notificationId: "k2" })).recipients, ["admin"]);
+});
+
+test("comment notices can't go to bystanders or come from someone else's comment", async () => {
+  assert.equal(await status(buildPush(db, "admin", { type: "notification", notificationId: "k3" })), 403);
+  assert.equal(await status(buildPush(db, "member", { type: "notification", notificationId: "k4" })), 403);
+});
+
+test("an ownership transfer tells the new owner only", async () => {
+  assert.deepEqual((await buildPush(db, "admin", { type: "notification", notificationId: "o1" })).recipients, ["third"]);
+  assert.equal(await status(buildPush(db, "admin", { type: "notification", notificationId: "o2" })), 403);
+});
+
+test("visitor pushes go to the resident, only from the guard who just checked them in or out", async () => {
+  const now = Date.now();
+  const gate = fakeDb({
+    "estates/E1/guards/guard": { userId: "guard", name: "Musa" },
+    "estates/E1/visitorPasses/ABC234": {
+      residentId: "member", visitorName: "Tolu", stage: "inside",
+      checkedInBy: "guard", checkedInByName: "Musa", checkedInAt: now,
+    },
+    "estates/E1/visitorPasses/XYZ789": {
+      residentId: "member", visitorName: "Bayo", stage: "left",
+      checkedInBy: "guard", checkedInAt: now - 60_000, checkedOutBy: "guard", checkedOutByName: "Musa", checkedOutAt: now,
+    },
+    "estates/E1/visitorPasses/QLD234": {
+      residentId: "member", visitorName: "Kemi", stage: "inside", checkedInBy: "guard", checkedInAt: now - 60 * 60 * 1000,
+    },
+  });
+
+  const arrived = await buildPush(gate, "guard", { type: "visitor_arrived", estateId: "E1", code: "ABC234" });
+  assert.deepEqual(arrived.recipients, ["member"]);
+  assert.match(arrived.payload.title, /Tolu has arrived/);
+  assert.equal(arrived.inbox.type, "VISITOR_ARRIVED");
+
+  const left = await buildPush(gate, "guard", { type: "visitor_left", estateId: "E1", code: "XYZ789" });
+  assert.deepEqual(left.recipients, ["member"]);
+  assert.equal(left.inbox.type, "VISITOR_LEFT");
+
+  // Not a guard there; wrong stage for the push; stale check-in; malformed code.
+  assert.equal(await status(buildPush(gate, "member", { type: "visitor_arrived", estateId: "E1", code: "ABC234" })), 403);
+  assert.equal(await status(buildPush(gate, "guard", { type: "visitor_left", estateId: "E1", code: "ABC234" })), 409);
+  assert.equal(await status(buildPush(gate, "guard", { type: "visitor_arrived", estateId: "E1", code: "QLD234" })), 410);
+  assert.equal(await status(buildPush(gate, "guard", { type: "visitor_arrived", estateId: "E1", code: "../x" })), 400);
 });

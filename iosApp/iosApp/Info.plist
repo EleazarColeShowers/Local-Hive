@@ -19,9 +19,7 @@
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.03</string>
-	<key>CFBundleVersion</key>
-	<string>2</string>
+	<string>1.05</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -33,17 +31,19 @@
 			</array>
 		</dict>
 	</array>
+	<key>CFBundleVersion</key>
+	<string>4</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>LocalHivePushEnabled</key>
+	<string>$(ENABLE_PUSH)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
 	</dict>
-	<key>LocalHivePushEnabled</key>
-	<string>$(ENABLE_PUSH)</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

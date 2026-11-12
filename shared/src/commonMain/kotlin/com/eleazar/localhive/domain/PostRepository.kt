@@ -27,6 +27,8 @@ interface PostRepository {
     fun getComments(postId: String): Flow<List<Comment>>
     /** Returns the new comment's id. */
     suspend fun addComment(comment: Comment): Result<String>
+    /** The author rewrites their comment, within [com.eleazar.localhive.domain.model.EDIT_WINDOW_MILLIS] of posting it. */
+    suspend fun updateComment(postId: String, commentId: String, content: String, mentions: Map<String, String>): Result<Unit>
     /** Removes a comment; open to its author, the post's author and the estate's admins. */
     suspend fun deleteComment(postId: String, commentId: String): Result<Unit>
     suspend fun toggleLike(postId: String, userId: String, currentlyLiked: Boolean): Result<Unit>

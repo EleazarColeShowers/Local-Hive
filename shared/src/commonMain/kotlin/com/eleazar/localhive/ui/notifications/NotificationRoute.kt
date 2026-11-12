@@ -14,6 +14,7 @@ fun NotificationRoute(
     onNavigateToEstateAdmin: (String) -> Unit,
     onNavigateToPost: (String) -> Unit = {},
     onNavigateToLevy: (String) -> Unit = {},
+    onNavigateToVisitors: () -> Unit = {},
     viewModel: NotificationViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -35,10 +36,12 @@ fun NotificationRoute(
                 notification.type == NotificationType.OWNERSHIP_TRANSFERRED
             if (opensAdminPanel && estateId != null) {
                 onNavigateToEstateAdmin(estateId)
-            } else if (notification.type == NotificationType.MENTION && postId != null) {
+            } else if ((notification.type == NotificationType.MENTION || notification.type == NotificationType.COMMENT) && postId != null) {
                 onNavigateToPost(postId)
             } else if (notification.type.name.startsWith("PAYMENT_")) {
                 notification.levyId?.let(onNavigateToLevy)
+            } else if (notification.type.name.startsWith("VISITOR_")) {
+                onNavigateToVisitors()
             }
         },
         onNotificationDismiss = { notificationId ->

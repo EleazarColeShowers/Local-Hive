@@ -1,5 +1,14 @@
 package com.eleazar.localhive.domain.model
 
+/**
+ * How long after posting the author can still change a post or comment. firestore.rules allows a
+ * couple of minutes more, for phones whose clocks run a little behind.
+ */
+const val EDIT_WINDOW_MILLIS = 30 * 60 * 1000L
+
+/** Whether something written at [createdAt] can still be edited at [now]. */
+fun isEditable(createdAt: Long, now: Long): Boolean = createdAt > 0L && now - createdAt < EDIT_WINDOW_MILLIS
+
 data class Post(
     val id: String = "",
     val authorId: String = "",

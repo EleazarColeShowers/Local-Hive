@@ -16,6 +16,7 @@ fun SplashRoute(
     onNavigateToOnboarding: () -> Unit,
     onNavigateToEstateSelection: () -> Unit,
     onNavigateToMain: () -> Unit,
+    onNavigateToGate: () -> Unit,
     viewModel: SplashViewModel = koinViewModel()
 ) {
     val authState by viewModel.authState.collectAsStateWithLifecycle()
@@ -30,6 +31,7 @@ fun SplashRoute(
             is SplashViewModel.AuthState.NotLoggedIn -> onNavigateToOnboarding()
             is SplashViewModel.AuthState.LoggedInNoEstate -> onNavigateToEstateSelection()
             is SplashViewModel.AuthState.LoggedInWithEstate -> onNavigateToMain()
+            is SplashViewModel.AuthState.GuardOnDuty -> onNavigateToGate()
             is SplashViewModel.AuthState.Loading -> {}
         }
     }

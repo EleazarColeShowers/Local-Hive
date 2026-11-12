@@ -47,8 +47,10 @@ internal fun DocumentSnapshot.toUser(): User = User(
     phone = string("phone"),
     fcmToken = string("fcmToken"),
     lightAlerts = boolean("lightAlerts") ?: false,
+    newPostAlerts = boolean("newPostAlerts") ?: false,
     sosSound = SosSound.fromKey(string("sosSound")),
-    sosPausedUntil = long("sosPausedUntil") ?: 0L
+    sosPausedUntil = long("sosPausedUntil") ?: 0L,
+    guardEstateId = string("guardEstateId")
 )
 
 /** Only the fields that are set, for merge writes that mustn't blank anything out. */
@@ -99,7 +101,8 @@ internal fun DocumentSnapshot.toComment(): Comment = Comment(
     content = string("content").orEmpty(),
     createdAt = long("createdAt") ?: 0L,
     mentions = stringMap("mentions").orEmpty(),
-    parentId = string("parentId")?.takeIf { it.isNotBlank() }
+    parentId = string("parentId")?.takeIf { it.isNotBlank() },
+    editedAt = long("editedAt") ?: 0L
 )
 
 internal fun DocumentSnapshot.toMessage(): Message = Message(

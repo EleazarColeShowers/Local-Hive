@@ -89,6 +89,11 @@ fun LocalHiveNavGraph(
                     navController.navigate(Screen.Main.route) {
                         popUpTo(Screen.Splash.route) { inclusive = true }
                     }
+                },
+                onNavigateToGate = {
+                    navController.navigate(Screen.Gate.route) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
                 }
             )
         }
@@ -126,7 +131,8 @@ fun LocalHiveNavGraph(
                     }
                 },
                 onLoginSuccess = { hasEstate ->
-                    val dest = if (hasEstate) Screen.Main.route else Screen.EstateSelection.route
+                    // Without an estate they may be a guard; the splash works out which.
+                    val dest = if (hasEstate) Screen.Main.route else Screen.Splash.route
                     navController.navigate(dest) { clearBackStack() }
                 }
             )
@@ -146,8 +152,22 @@ fun LocalHiveNavGraph(
             screens.EstateSelection(
                 onEstateJoined = {
                     navController.navigate(Screen.Main.route) { clearBackStack() }
+                },
+                onBecameGuard = {
+                    navController.navigate(Screen.Gate.route) { clearBackStack() }
                 }
             )
+        }
+
+        composable(Screen.Gate.route) {
+            screens.Gate(
+                onSignedOut = { navController.navigate(Screen.Splash.route) { clearBackStack() } },
+                onLeftPost = { navController.navigate(Screen.EstateSelection.route) { clearBackStack() } }
+            )
+        }
+
+        composable(Screen.Visitors.route) {
+            screens.Visitors(onBack = { navController.navigateUp() })
         }
 
         composable(Screen.Main.route) {
@@ -162,6 +182,7 @@ fun LocalHiveNavGraph(
                     onEditPost = { postId -> navController.navigate(Screen.EditPost.createRoute(postId)) },
                     onPolls = { navController.navigate(Screen.Polls.route) { launchSingleTop = true } },
                     onUtilities = { navController.navigate(Screen.Utilities.route) { launchSingleTop = true } },
+                    onVisitors = { navController.navigate(Screen.Visitors.route) { launchSingleTop = true } },
                     onSettings = { navController.navigate(Screen.Settings.route) },
                     onAdminPanel = { estateId -> navController.navigate(Screen.EstateAdmin.createRoute(estateId)) },
                     onFinances = { navController.navigate(Screen.Finances.route) },
@@ -304,7 +325,8 @@ fun LocalHiveNavGraph(
                     navController.navigate(Screen.EstateAdmin.createRoute(estateId))
                 },
                 onNavigateToPost = { postId -> navController.navigate(Screen.PostDetail.createRoute(postId)) },
-                onNavigateToLevy = { levyId -> navController.navigate(Screen.LevyDetail.createRoute(levyId)) }
+                onNavigateToLevy = { levyId -> navController.navigate(Screen.LevyDetail.createRoute(levyId)) },
+                onNavigateToVisitors = { navController.navigate(Screen.Visitors.route) { launchSingleTop = true } }
             )
         }
 

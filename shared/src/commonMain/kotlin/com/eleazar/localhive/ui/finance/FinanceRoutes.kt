@@ -51,7 +51,9 @@ fun LevyDetailRoute(
     viewModel: FinanceViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val pickProof = rememberMediaPicker(MediaKind.IMAGE) { viewModel.sendProof(it.uri) }
+    // A picked photo waits here for the payer to check it before it goes to the treasurer.
+    var pendingProof by rememberSaveable { mutableStateOf<String?>(null) }
+    val pickProof = rememberMediaPicker(MediaKind.IMAGE) { pendingProof = it.uri }
     val platform = rememberPlatformActions()
     LaunchedEffect(levyId) { viewModel.openLevy(levyId) }
     // Deleting the levy closes it.
@@ -75,6 +77,20 @@ fun LevyDetailRoute(
         onMessageShown = viewModel::consumeMessage,
         onErrorShown = viewModel::consumeError
     )
+    pendingProof?.let { proof ->
+        ConfirmProofDialog(
+            image = proof,
+            onSend = {
+                pendingProof = null
+                viewModel.sendProof(proof)
+            },
+            onChooseAnother = {
+                pendingProof = null
+                pickProof()
+            },
+            onDismiss = { pendingProof = null }
+        )
+    }
 }
 
 @Composable

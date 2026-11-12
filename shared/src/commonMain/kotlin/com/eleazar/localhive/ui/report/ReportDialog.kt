@@ -1,6 +1,8 @@
 package com.eleazar.localhive.ui.report
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -106,6 +108,7 @@ fun ReportDialog(
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = details,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     onValueChange = { details = it.take(MAX_REPORT_DETAILS) },
                     label = { Text(if (needsDetails) "Tell us more" else "Anything else? (optional)") },
                     minLines = 3,

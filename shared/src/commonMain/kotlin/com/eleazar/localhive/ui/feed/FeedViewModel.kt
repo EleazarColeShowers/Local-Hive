@@ -18,15 +18,21 @@ import com.eleazar.localhive.domain.model.NotificationType
 import com.eleazar.localhive.domain.model.Post
 import com.eleazar.localhive.domain.model.PostCategory
 import com.eleazar.localhive.domain.model.User
+import com.eleazar.localhive.domain.model.isEditable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import com.eleazar.localhive.domain.SosRepository
 import com.eleazar.localhive.ui.util.nowMillis
 
 private const val POST_PAGE_SIZE = 20L
+private const val REFRESH_TIMEOUT_MS = 15_000L
+/** Long enough for the pull indicator to register that a refresh happened. */
+private const val MIN_REFRESH_MS = 400L
 
 class FeedViewModel(
     private val postRepository: PostRepository,
@@ -171,12 +177,24 @@ class FeedViewModel(
      */
     fun refresh() {
         val state = _uiState.value
-        val estateId = state.estateId ?: return
         if (state.isRefreshing) return
+        // Always flip isRefreshing on and back off: the pull indicator only slides away when it
+        // sees that change, and stays stuck at the top if the flag never moves or moves too fast.
+        _uiState.update { it.copy(isRefreshing = true, refreshError = null) }
         viewModelScope.launch {
-            _uiState.update { it.copy(isRefreshing = true, refreshError = null) }
-            postRepository.fetchLatestPosts(estateId, POST_PAGE_SIZE)
+            val started = nowMillis()
+            val estateId = state.estateId
+            // A server read on a weak connection can wait for a long time; give up rather than spin forever.
+            val result = if (estateId == null) Result.success(null)
+            else withTimeoutOrNull(REFRESH_TIMEOUT_MS) { postRepository.fetchLatestPosts(estateId, POST_PAGE_SIZE) }
+                ?: Result.failure(Exception("Refresh timed out"))
+            delay((MIN_REFRESH_MS - (nowMillis() - started)).coerceAtLeast(0))
+            result
                 .onSuccess { fresh ->
+                    if (fresh == null) {
+                        _uiState.update { it.copy(isRefreshing = false) }
+                        return@onSuccess
+                    }
                     livePosts = fresh
                     olderPosts = emptyList()
                     _uiState.update {
@@ -324,6 +342,10 @@ class FeedViewModel(
         val state = _uiState.value
         val post = state.selectedPost?.takeIf { it.id == postId } ?: return
         if (state.isPosting) return
+        if (!isEditable(post.createdAt, nowMillis())) {
+            _uiState.update { it.copy(error = "Posts can only be edited for 30 minutes after posting") }
+            return
+        }
         viewModelScope.launch {
             _uiState.update { it.copy(isPosting = true, error = null) }
             val isIncident = PostCategory.fromKey(post.category)?.isIncident == true
@@ -501,9 +523,65 @@ class FeedViewModel(
             )
             postRepository.addComment(comment)
                 .onSuccess { commentId ->
-                    state.estateId?.let { notifyMentioned(mentions.keys, it, postId, commentId, content) }
+                    state.estateId?.let { estateId ->
+                        notifyMentioned(mentions.keys, estateId, postId, commentId, content)
+                        notifyCommented(comment, commentId, estateId)
+                    }
                 }
                 .onFailure { e -> _uiState.update { it.copy(error = e.friendlyMessage("Couldn't post your comment")) } }
+        }
+    }
+
+    /**
+     * Saves the author's changes to their comment, within the edit window. Anyone newly tagged is
+     * told; people already tagged aren't notified twice.
+     */
+    fun editComment(postId: String, commentId: String, content: String, mentions: Map<String, String>) {
+        val state = _uiState.value
+        val comment = allComments.find { it.id == commentId } ?: return
+        if (!isEditable(comment.createdAt, nowMillis())) {
+            _uiState.update { it.copy(error = "Comments can only be edited for 30 minutes after posting") }
+            return
+        }
+        viewModelScope.launch {
+            postRepository.updateComment(postId, commentId, content, mentions)
+                .onSuccess {
+                    state.estateId?.let { notifyMentioned(mentions.keys - comment.mentions.keys, it, postId, commentId, content) }
+                }
+                .onFailure { e -> _uiState.update { it.copy(error = e.friendlyMessage("Couldn't save your changes")) } }
+        }
+    }
+
+    /**
+     * Tells the post's author about a new comment, and for a reply, the author of the comment it
+     * answers. Anyone tagged in it already hears through their mention, so isn't told twice.
+     */
+    private fun notifyCommented(comment: Comment, commentId: String, estateId: String) {
+        val state = _uiState.value
+        val me = state.currentUserId ?: return
+        val name = state.currentUserName ?: "A neighbour"
+        val post = state.selectedPost?.takeIf { it.id == comment.postId } ?: state.posts.find { it.id == comment.postId }
+        val parentAuthor = comment.parentId?.let { parent -> allComments.find { it.id == parent }?.authorId }
+        val recipients = buildMap {
+            parentAuthor?.let { put(it, "$name replied to your comment") }
+            // The post's author hears about every comment on it, a reply included.
+            post?.authorId?.let { if (!containsKey(it)) put(it, "$name commented on your post") }
+        }.filterKeys { it != me && it !in comment.mentions }
+        recipients.forEach { (recipientId, title) ->
+            viewModelScope.launch {
+                notificationRepository.createNotification(
+                    AppNotification(
+                        recipientId = recipientId,
+                        type = NotificationType.COMMENT,
+                        title = title,
+                        message = comment.content.take(140),
+                        estateId = estateId,
+                        relatedUserId = me,
+                        postId = comment.postId,
+                        commentId = commentId
+                    )
+                )
+            }
         }
     }
 

@@ -23,6 +23,7 @@ data class SettingsUiState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val pushNotificationsEnabled: Boolean = true,
     val lightAlerts: Boolean = false,
+    val newPostAlerts: Boolean = false,
     val sosSound: SosSound = SosSound.SIREN,
     /** Until when SOS alerts only vibrate; 0 or past when not paused. */
     val sosPausedUntil: Long = 0L,
@@ -63,7 +64,7 @@ class SettingsViewModel(
             userRepository.getUser(userId).fold(
                 onSuccess = { user ->
                     _uiState.update {
-                        it.copy(user = user, lightAlerts = user.lightAlerts, sosSound = user.sosSound, sosPausedUntil = user.sosPausedUntil)
+                        it.copy(user = user, lightAlerts = user.lightAlerts, newPostAlerts = user.newPostAlerts, sosSound = user.sosSound, sosPausedUntil = user.sosPausedUntil)
                     }
                     user.estateId?.let { loadEstate(it) }
                 },
@@ -99,6 +100,16 @@ class SettingsViewModel(
         viewModelScope.launch {
             userRepository.setLightAlerts(userId, enabled).onFailure {
                 _uiState.update { it.copy(lightAlerts = !enabled) }
+            }
+        }
+    }
+
+    fun setNewPostAlerts(enabled: Boolean) {
+        val userId = authRepository.getCurrentUserId() ?: return
+        _uiState.update { it.copy(newPostAlerts = enabled) }
+        viewModelScope.launch {
+            userRepository.setNewPostAlerts(userId, enabled).onFailure {
+                _uiState.update { it.copy(newPostAlerts = !enabled) }
             }
         }
     }

@@ -13,5 +13,7 @@ data class Comment(
      * The top-level comment this one replies to, or null for a comment on the post itself.
      * Replies are one level deep: answering a reply joins the same thread.
      */
-    val parentId: String? = null
+    val parentId: String? = null,
+    /** When the author last changed the text, or 0 if they never have. */
+    val editedAt: Long = 0L
 )

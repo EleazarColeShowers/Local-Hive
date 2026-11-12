@@ -1,6 +1,8 @@
 package com.eleazar.localhive.ui.feed
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicTextField
@@ -228,6 +230,7 @@ fun CreatePostScreen(
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = location,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     onValueChange = { location = it.take(120) },
                     label = { Text("Where in the estate?") },
                     placeholder = { Text("e.g. Back fence by Block C") },
@@ -242,6 +245,7 @@ fun CreatePostScreen(
             // Bare field so the text starts on the same edge as the author row above.
             BasicTextField(
                 value = field,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 onValueChange = {
                     field = if (it.text.length <= MAX_POST_LENGTH) it
                     else TextFieldValue(it.text.take(MAX_POST_LENGTH), TextRange(MAX_POST_LENGTH))

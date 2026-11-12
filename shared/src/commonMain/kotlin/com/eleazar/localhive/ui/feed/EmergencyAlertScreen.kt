@@ -1,6 +1,8 @@
 package com.eleazar.localhive.ui.feed
 
 import com.eleazar.localhive.ui.components.charactersLeftSupport
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.selection.selectableGroup
@@ -188,6 +190,7 @@ fun EmergencyAlertScreen(
             Spacer(Modifier.height(10.dp))
             OutlinedTextField(
                 value = shownLocation,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 onValueChange = { location = it.take(120) },
                 label = { Text("Where?") },
                 placeholder = { Text("e.g. Block C, flat 4") },
@@ -198,6 +201,7 @@ fun EmergencyAlertScreen(
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = details,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 onValueChange = { details = it.take(MAX_DETAILS_LENGTH) },
                 label = { Text("Anything else? (optional)") },
                 supportingText = charactersLeftSupport(details.length, MAX_DETAILS_LENGTH),

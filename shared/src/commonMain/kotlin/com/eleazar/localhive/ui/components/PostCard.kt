@@ -1,6 +1,8 @@
 package com.eleazar.localhive.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -353,6 +355,7 @@ private fun ConfirmDeleteDialog(post: Post, isOwnPost: Boolean, onConfirm: (reas
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(
                         value = reason,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                         onValueChange = { reason = it.take(200) },
                         label = { Text("Reason (optional)") },
                         placeholder = { Text("e.g. Selling isn't allowed in the feed") },

@@ -93,6 +93,10 @@ class UserRepositoryImpl(
         firestore.users().document(userId).set(mapOf("lightAlerts" to enabled), merge = true)
     }
 
+    override suspend fun setNewPostAlerts(userId: String, enabled: Boolean): Result<Unit> = runCatching {
+        firestore.users().document(userId).set(mapOf("newPostAlerts" to enabled), merge = true)
+    }
+
     override suspend fun setSosSound(userId: String, sound: SosSound): Result<Unit> = runCatching {
         firestore.users().document(userId).set(mapOf("sosSound" to sound.key), merge = true)
     }
