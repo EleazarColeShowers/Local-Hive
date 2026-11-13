@@ -24,7 +24,10 @@ import platform.UIKit.UIImageJPEGRepresentation
 import platform.posix.memcpy
 
 actual fun logWarning(tag: String, message: String, error: Throwable?) {
-    NSLog("%@", "W/$tag: $message${error?.let { " ($it)" }.orEmpty()}")
+    // Kotlin passes NSLog's extra arguments as C strings, not NSStrings, so "%@" with a String
+    // argument crashes. The text goes in as the format itself, with any % escaped.
+    val text = "W/$tag: $message${error?.let { " ($it)" }.orEmpty()}"
+    NSLog(text.replace("%", "%%"))
 }
 
 class UserDefaultsStore : KeyValueStore {
