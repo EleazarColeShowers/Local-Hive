@@ -3,6 +3,7 @@
 #   FIREBASE_SERVICE_ACCOUNT  - the full JSON key for a Firebase service account
 #   CLOUDINARY_API_KEY        - from the Cloudinary dashboard
 #   CLOUDINARY_API_SECRET     - from the Cloudinary dashboard
+#   RESEND_API_KEY            - from resend.com; welcome emails are off until it's set
 name = "localhive"
 main = "src/index.js"
 compatibility_date = "2025-01-01"
@@ -20,6 +21,8 @@ FIREBASE_PROJECT_NUMBER = "1044932675647"
 FIREBASE_WEB_API_KEY = "AIzaSyBzlLfAgZrPvBlpnDMGePFGBENMcqCql3U"
 # Set to "true" once every installed app sends App Check tokens; then other callers are refused.
 APP_CHECK_REQUIRED = "false"
+# Who welcome emails come from. The domain must be verified in Resend.
+EMAIL_FROM = "LocalHive <hello@CHANGE-ME.com>"
 # Invite links (src/links.js). The fingerprints are the signing certificates Android trusts to
 # open /join links in the app: this Mac's debug key, then (add it) Play Console's app-signing key
 # from Test and release > App integrity.

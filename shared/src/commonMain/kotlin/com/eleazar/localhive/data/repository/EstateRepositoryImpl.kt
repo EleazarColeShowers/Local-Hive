@@ -1,5 +1,6 @@
 package com.eleazar.localhive.data.repository
 
+import com.eleazar.localhive.data.remote.LocalHiveApi
 import com.eleazar.localhive.domain.EstateRepository
 import com.eleazar.localhive.domain.NotificationRepository
 import com.eleazar.localhive.domain.OwnerMustHandOverException
@@ -26,7 +27,8 @@ import kotlinx.coroutines.flow.map
  */
 class EstateRepositoryImpl(
     private val firestore: FirebaseFirestore,
-    private val notificationRepository: NotificationRepository
+    private val notificationRepository: NotificationRepository,
+    private val api: LocalHiveApi
 ) : EstateRepository {
 
     private val estates get() = firestore.collection("estates")
@@ -51,6 +53,7 @@ class EstateRepositoryImpl(
             .set(inviteCodes.document(inviteCode), mapOf("estateId" to ref.id))
             .set(firestore.users().document(adminId), mapOf("estateId" to ref.id), merge = true)
             .commit()
+        api.welcomeEmailInBackground("type" to "estate", "estateId" to ref.id)
         estate
     }
 
@@ -82,6 +85,7 @@ class EstateRepositoryImpl(
             .set(firestore.users().document(userId), mapOf("estateId" to estateId), merge = true)
             .update(estates.document(estateId), "memberCount" to FieldValue.increment(1))
             .commit()
+        api.welcomeEmailInBackground("type" to "estate", "estateId" to estateId)
         estate.copy(memberCount = estate.memberCount + 1, inviteCode = code)
     }
 
@@ -216,6 +220,7 @@ class EstateRepositoryImpl(
             .update(firestore.users().document(userId), "estateId" to estateId)
             .update(estates.document(estateId), "memberCount" to FieldValue.increment(1))
             .commit()
+        api.welcomeEmailInBackground("type" to "estate", "estateId" to estateId, "userId" to userId)
         val estate = getEstate(estateId).getOrNull()
         notificationRepository.createNotification(
             AppNotification(

@@ -4,6 +4,7 @@ import { oversizedVideoIds, signUpload, UPLOAD_KINDS } from "./cloudinary.js";
 import { sendToUsers } from "./push.js";
 import { deleteAccount, requireRecentLogin } from "./account.js";
 import { publicResponse } from "./links.js";
+import { buildWelcomeEmail, sendWelcomeEmail } from "./email.js";
 
 /**
  * LocalHive's backend on Cloudflare's free tier, doing what Cloud Functions would on Firebase's
@@ -24,6 +25,7 @@ import { publicResponse } from "./links.js";
  *                           { type: "levy_reminder", estateId, levyId }
  *                           { type: "visitor_arrived" | "visitor_left", estateId, code } -> sends the push
  *   POST /delete-account    {}                                       -> deletes the caller's account
+ *   POST /welcome-email     { type: "account" } | { type: "estate", estateId, userId? } (see email.js)
  *   GET  /join/{code}, /.well-known/assetlinks.json                  -> invite links (see links.js)
  *   GET  /delete-account                                             -> delete an account from the web
  *
@@ -49,6 +51,7 @@ export default {
       if (path === "/upload-signature") return json(await uploadSignature(env, uid, body));
       if (path === "/notify") return json(await notify(env, uid, body));
       if (path === "/delete-account") return json(await removeAccount(env, uid, authTime));
+      if (path === "/welcome-email") return json(await welcomeEmail(env, uid, body));
       return json({ error: "Not found" }, 404);
     } catch (e) {
       const status = e instanceof HttpError ? e.status : 500;
@@ -147,6 +150,12 @@ async function uploadSignature(env, uid, { kind }) {
     folder: `localhive/${folder}/${uid}`,
     limits: UPLOAD_KINDS[kind].limits,
   });
+}
+
+async function welcomeEmail(env, uid, body) {
+  const db = new Firestore(env.FIREBASE_PROJECT_ID, await serviceAccessToken(env.FIREBASE_SERVICE_ACCOUNT));
+  const email = await buildWelcomeEmail(db, uid, body);
+  return { sent: email ? await sendWelcomeEmail(db, env, email) : false };
 }
 
 async function removeAccount(env, uid, authTime) {

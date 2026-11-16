@@ -35,6 +35,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.outlined.Delete
@@ -98,6 +100,8 @@ fun PostDetailScreen(
     // A reply that's lost its comment (deleted, or blocked) is shown on its own instead.
     val threads = remember(uiState.comments) { commentThreads(uiState.comments) }
     val composerFocus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(replyingTo?.id, editingComment?.id) {
         if (replyingTo != null || editingComment != null) runCatching { composerFocus.requestFocus() }
     }
@@ -220,6 +224,9 @@ fun PostDetailScreen(
                         Spacer(Modifier.width(8.dp))
                         FilledIconButton(
                             onClick = {
+                                // Put the keyboard away once the comment is sent, so the post is visible again.
+                                keyboard?.hide()
+                                focusManager.clearFocus()
                                 val editing = editingComment
                                 if (commentText.isNotBlank() && editing != null) {
                                     onEditComment(editing.id, commentText.trim(), mentionsIn(commentText, picked))

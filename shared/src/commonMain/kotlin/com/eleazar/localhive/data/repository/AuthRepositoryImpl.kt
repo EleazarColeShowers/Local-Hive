@@ -28,6 +28,7 @@ class AuthRepositoryImpl(
                 username = username
             )
             firestore.users().document(user.id).set(user.toFullMap())
+            api.welcomeEmailInBackground("type" to "account")
             Result.success(user)
         } catch (e: Exception) {
             Result.failure(e)

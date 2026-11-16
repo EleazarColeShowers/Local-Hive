@@ -103,6 +103,19 @@ class LocalHiveApi(
     }
 
     /**
+     * Asks the Worker to send a welcome email: `"type" to "account"` after sign-up, or
+     * `"type" to "estate", "estateId" to …` (plus `"userId"` when an admin approves someone) once
+     * they're in an estate. Best-effort: the Worker sends each one at most once.
+     */
+    fun welcomeEmailInBackground(vararg fields: Pair<String, String>) {
+        if (!isConfigured) return
+        pushScope.launch {
+            runCatching { post("/welcome-email", fields.toMap()) }
+                .onFailure { logWarning(TAG, "Welcome email request failed for ${fields.toMap()}", it) }
+        }
+    }
+
+    /**
      * Asks the Worker to push now and waits for the answer, for pushes the user is waiting on
      * (such as a levy reminder). Returns how many people it reached.
      */

@@ -17,8 +17,8 @@ android {
         applicationId = "com.eleazar.localhive"
         minSdk = 24
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.05"
+        versionCode = 7
+        versionName = "1.06"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
 
