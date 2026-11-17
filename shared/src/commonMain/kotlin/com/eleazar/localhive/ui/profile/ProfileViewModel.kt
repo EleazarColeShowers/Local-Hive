@@ -41,7 +41,8 @@ class ProfileViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             userRepository.getUser(userId).fold(
-                onSuccess = { user ->
+                onSuccess = { found ->
+                    val user = found.copy(email = authRepository.getCurrentUserEmail() ?: found.email)
                     _uiState.update { it.copy(user = user, isLoading = false) }
                     user.estateId?.let { loadEstate(it) }
                 },

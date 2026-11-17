@@ -34,19 +34,21 @@ import com.eleazar.localhive.ui.util.formatDate
 import com.eleazar.localhive.ui.util.nowMillis
 import com.eleazar.localhive.ui.util.parseNaira
 
-/** The treasurer setting a new charge for every resident. */
+/** The treasurer setting a new charge, on every member or on every flat. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateLevyScreen(
     uiState: FinanceUiState,
     onBack: () -> Unit,
-    onCreate: (title: String, amount: String, dueDate: Long, note: String) -> Unit,
+    onCreate: (title: String, amount: String, dueDate: Long, note: String, perFlat: Boolean) -> Unit,
 ) {
+    var perFlat by rememberSaveable { mutableStateOf(false) }
     var title by rememberSaveable { mutableStateOf("") }
     var amount by rememberSaveable { mutableStateOf("") }
     // A fortnight out by default, a common window for estate dues.
     var dueDate by rememberSaveable { mutableLongStateOf(nowMillis() + 14L * 24 * 60 * 60 * 1000) }
     var note by rememberSaveable { mutableStateOf("") }
-    val valid = title.isNotBlank() && (parseNaira(amount) ?: 0) > 0
+    val valid = title.isNotBlank() && (parseNaira(amount) ?: 0) > 0 && (!perFlat || uiState.buildings.isNotEmpty())
 
     FinanceForm(
         title = "New levy",
@@ -55,8 +57,30 @@ fun CreateLevyScreen(
         isSaving = uiState.isSaving,
         error = uiState.error,
         onBack = onBack,
-        onSave = { onCreate(title, amount, dueDate, note) }
+        onSave = { onCreate(title, amount, dueDate, note, perFlat) }
     ) {
+        Text("Who pays", style = MaterialTheme.typography.labelLarge)
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            SegmentedButton(
+                selected = !perFlat,
+                onClick = { perFlat = false },
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+            ) { Text("Each member") }
+            SegmentedButton(
+                selected = perFlat,
+                onClick = { perFlat = true },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+            ) { Text("Each flat") }
+        }
+        if (perFlat) {
+            Text(
+                if (uiState.buildings.isEmpty()) "Add the estate's buildings first (Dues & expenses › Buildings), so each flat can be charged."
+                else "Every flat in the estate's ${uiState.buildings.size} buildings (${uiState.totalFlats} flats) owes this. " +
+                    "Anyone in a building can pay for any of its flats.",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (uiState.buildings.isEmpty()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         OutlinedTextField(
             value = title,
             onValueChange = { title = it.take(80) },
@@ -66,7 +90,7 @@ fun CreateLevyScreen(
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
             modifier = Modifier.fillMaxWidth()
         )
-        AmountField(amount, onChange = { amount = it }, label = "Amount each resident pays")
+        AmountField(amount, onChange = { amount = it }, label = if (perFlat) "Amount each flat pays" else "Amount each member pays")
         DateField(label = "Due date", millis = dueDate, onChange = { dueDate = it })
         OutlinedTextField(
             value = note,
@@ -78,7 +102,8 @@ fun CreateLevyScreen(
             modifier = Modifier.fillMaxWidth()
         )
         Text(
-            "Every member will see this levy and what they owe. You can remind anyone who hasn't paid.",
+            "Every member will see this levy and what they owe. You can remind anyone who hasn't paid. " +
+                "Once someone has paid, the levy can't be deleted.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -153,7 +178,7 @@ fun AddExpenseScreen(
             }
         }
         Text(
-            "Every member can see expenses, so the estate knows where its money goes.",
+            "Every member can see expenses, so the estate knows where its money goes. You can delete one for a day after adding it; after that it stays.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

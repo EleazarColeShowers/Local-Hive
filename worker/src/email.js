@@ -15,13 +15,19 @@ const HONEY = "#E09E00";
 const CREAM = "#FAF3E1";
 const INK = "#2C2C2C";
 
-/** Works out who to email and with what, or returns null when there's nothing to send. */
-export async function buildWelcomeEmail(db, uid, body) {
+/**
+ * Works out who to email and with what, or returns null when there's nothing to send. Profiles
+ * from 1.07 on don't carry the email (neighbours can read them), so [emailOf] looks it up from
+ * the sign-in account; older profiles still have it.
+ */
+export async function buildWelcomeEmail(db, uid, body, emailOf = async () => null) {
+  const addressOf = async (id, user) => user?.email || (await emailOf(id));
   switch (body.type) {
     case "account": {
       const user = await db.get(`users/${uid}`);
-      if (!user?.email) return null;
-      return { key: `welcome_${uid}`, to: user.email, ...accountWelcome(firstName(user)) };
+      const to = user && (await addressOf(uid, user));
+      if (!to) return null;
+      return { key: `welcome_${uid}`, to, ...accountWelcome(firstName(user)) };
     }
     case "estate": {
       const { estateId } = body;
@@ -33,11 +39,13 @@ export async function buildWelcomeEmail(db, uid, body) {
       // Someone joining themselves, or an admin who just let them in.
       if (userId !== uid && !admins.includes(uid)) throw new HttpError(403, "Not your estate");
       // Only once they're actually in it.
-      if (user.estateId !== estateId || !user.email) return null;
+      if (user.estateId !== estateId) return null;
+      const to = await addressOf(userId, user);
+      if (!to) return null;
       const content = admins.includes(userId)
         ? estateCreated(firstName(user), estate.name || "your estate")
         : estateWelcome(firstName(user), estate.name || "your estate");
-      return { key: `welcome_${estateId}_${userId}`, to: user.email, ...content };
+      return { key: `welcome_${estateId}_${userId}`, to, ...content };
     }
     default:
       throw new HttpError(400, "Unknown email type");

@@ -3,6 +3,7 @@ package com.eleazar.localhive.domain
 import com.eleazar.localhive.domain.model.Estate
 import com.eleazar.localhive.domain.model.JoinMode
 import com.eleazar.localhive.domain.model.JoinRequest
+import com.eleazar.localhive.domain.model.RemovedMember
 import kotlinx.coroutines.flow.Flow
 
 interface EstateRepository {
@@ -32,6 +33,10 @@ interface EstateRepository {
     /** Fails for the owner, who stays an admin for as long as they're in the estate. */
     suspend fun removeAdmin(estateId: String, userId: String): Result<Unit>
     /** An admin taking [userId] out of the estate. Admins have to lose admin first. */
+    /** People an admin removed, newest first. Admins only. They can't rejoin with a code. */
+    fun observeRemoved(estateId: String): Flow<List<RemovedMember>>
+    /** Takes someone off the removed list, so they can use a code or be approved again. */
+    suspend fun letBackIn(estateId: String, userId: String): Result<Unit>
     suspend fun removeMember(estateId: String, userId: String): Result<Unit>
     /**
      * An admin appointing [userId] as the estate's one treasurer, replacing any other; null

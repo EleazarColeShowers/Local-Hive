@@ -70,6 +70,8 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.LaunchedEffect
 import com.eleazar.localhive.domain.model.JoinRequest
+import com.eleazar.localhive.domain.model.RemovedMember
+import com.eleazar.localhive.ui.util.formatDate
 import com.eleazar.localhive.domain.model.User
 import com.eleazar.localhive.ui.util.nowMillis
 import com.eleazar.localhive.domain.model.SosStanding
@@ -82,6 +84,7 @@ fun EstateAdminScreen(
     estate: Estate?,
     pendingRequests: List<JoinRequest>,
     members: List<User>,
+    removed: List<RemovedMember> = emptyList(),
     currentUserId: String,
     error: String?,
     colors: EstateColors,
@@ -91,6 +94,7 @@ fun EstateAdminScreen(
     onBack: () -> Unit,
     onApproveRequest: (userId: String) -> Unit,
     onDenyRequest: (userId: String) -> Unit,
+    onLetBackIn: (RemovedMember) -> Unit = {},
     onPromoteToAdmin: (userId: String) -> Unit,
     onRemoveAdmin: (userId: String) -> Unit = {},
     onRemoveMember: (userId: String) -> Unit = {},
@@ -240,8 +244,10 @@ fun EstateAdminScreen(
             when (selectedTab) {
                 0 -> RequestsTab(
                     requests = pendingRequests,
+                    removed = removed,
                     onApprove = onApproveRequest,
                     onDeny = onDenyRequest,
+                    onLetBackIn = onLetBackIn,
                     dark = dark,
                     green = green,
                     cardBg = cardBg
@@ -289,13 +295,15 @@ fun EstateAdminScreen(
 @Composable
 private fun RequestsTab(
     requests: List<JoinRequest>,
+    removed: List<RemovedMember>,
     onApprove: (String) -> Unit,
     onDeny: (String) -> Unit,
+    onLetBackIn: (RemovedMember) -> Unit,
     dark: Color,
     green: Color,
     cardBg: Color
 ) {
-    if (requests.isEmpty()) {
+    if (requests.isEmpty() && removed.isEmpty()) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
@@ -324,6 +332,7 @@ private fun RequestsTab(
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        val removedIds = removed.map { it.userId }.toSet()
         items(requests, key = { it.userId }) { request ->
             JoinRequestCard(
                 request = request,
@@ -333,6 +342,41 @@ private fun RequestsTab(
                 green = green,
                 cardBg = cardBg
             )
+            if (request.userId in removedIds) {
+                Text(
+                    "An admin removed this person before. Approving lets them back in.",
+                    color = dark.copy(alpha = 0.6f),
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                )
+            }
+        }
+        if (removed.isNotEmpty()) {
+            item(key = "removed-header") {
+                Column(modifier = Modifier.padding(top = 12.dp)) {
+                    Text("Removed", color = dark, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text(
+                        "They can't rejoin with an invite code until you let them back in. They can still ask to join.",
+                        color = dark.copy(alpha = 0.6f),
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+            }
+            items(removed, key = { "removed-${it.userId}" }) { member ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().background(cardBg, RoundedCornerShape(12.dp)).padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(member.name.ifBlank { "Former member" }, color = dark, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+                        if (member.removedAt > 0) {
+                            Text("Removed ${formatDate(member.removedAt, "d MMM yyyy")}", color = dark.copy(alpha = 0.5f), fontSize = 13.sp)
+                        }
+                    }
+                    TextButton(onClick = { onLetBackIn(member) }) { Text("Let back in", color = green) }
+                }
+            }
         }
     }
 }
@@ -627,7 +671,7 @@ private fun MemberCard(
             )
             MemberAction.REMOVE_MEMBER -> "Remove $name from the estate?" to
                 "They'll lose access to the feed, the directory and estate announcements, and get a notification. " +
-                "To come back they'll have to ask to join again or use an invite code."
+                "To come back they'll have to ask to join and be approved. The invite code won't work for them until you let them back in."
             MemberAction.RESTORE_SIREN -> "Restore $name's SOS siren?" to
                 "Their alerts will sound the siren again. Their false alarms so far stop counting; " +
                 "two more within 30 days and it's removed again."

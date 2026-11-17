@@ -9,7 +9,9 @@ import com.eleazar.localhive.domain.model.Estate
 import com.eleazar.localhive.domain.model.JoinMode
 import com.eleazar.localhive.domain.model.JoinRequest
 import com.eleazar.localhive.domain.model.NotificationType
+import com.eleazar.localhive.domain.model.RemovedMember
 import com.eleazar.localhive.ui.util.nowMillis
+import dev.gitlive.firebase.auth.FirebaseAuth
 import dev.gitlive.firebase.firestore.DocumentSnapshot
 import dev.gitlive.firebase.firestore.FieldValue
 import dev.gitlive.firebase.firestore.FirebaseFirestore
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.map
  */
 class EstateRepositoryImpl(
     private val firestore: FirebaseFirestore,
+    private val auth: FirebaseAuth,
     private val notificationRepository: NotificationRepository,
     private val api: LocalHiveApi
 ) : EstateRepository {
@@ -129,11 +132,13 @@ class EstateRepositoryImpl(
         }
         if (estate != null && estate.isTreasurer(userId)) estateUpdates += "treasurerId" to ""
 
-        // Dropping the request too means coming back needs a fresh approval or code.
+        // Dropping the request too means coming back needs a fresh approval or code. Their flat
+        // goes too; payments they made stay on the books.
         firestore.batch()
             .update(firestore.users().document(userId), "estateId" to FieldValue.delete)
             .update(estateRef, *estateUpdates.toTypedArray())
             .delete(requestRef(estateId, userId))
+            .delete(residentRef(estateId, userId))
             .commit()
     }
 
@@ -219,6 +224,8 @@ class EstateRepositoryImpl(
             .update(requestRef(estateId, userId), "status" to "approved", "reviewedAt" to nowMillis())
             .update(firestore.users().document(userId), "estateId" to estateId)
             .update(estates.document(estateId), "memberCount" to FieldValue.increment(1))
+            // Approving someone who was removed is the admin letting them back in.
+            .delete(removedRef(estateId, userId))
             .commit()
         api.welcomeEmailInBackground("type" to "estate", "estateId" to estateId, "userId" to userId)
         val estate = getEstate(estateId).getOrNull()
@@ -263,11 +270,20 @@ class EstateRepositoryImpl(
         if (estate.isAdmin(userId)) throw Exception("Remove their admin role first")
         val estateUpdates = mutableListOf<Pair<String, Any?>>("memberCount" to FieldValue.increment(-1))
         if (estate.isTreasurer(userId)) estateUpdates += "treasurerId" to ""
-        // Dropping the request too means coming back needs a fresh approval or code.
+        val name = runCatching { firestore.users().document(userId).get().toUser() }.getOrNull()
+            ?.let { it.displayName?.takeIf { n -> n.isNotBlank() } ?: it.username }
+            .orEmpty()
+        // Dropping the request too means coming back needs a fresh approval or code, and the
+        // removed list stops them using a code: only an admin can let them back in.
         firestore.batch()
             .update(firestore.users().document(userId), "estateId" to FieldValue.delete)
             .update(estates.document(estateId), *estateUpdates.toTypedArray())
             .delete(requestRef(estateId, userId))
+            .delete(residentRef(estateId, userId))
+            .set(
+                removedRef(estateId, userId),
+                mapOf("name" to name.take(100), "removedBy" to (auth.currentUser?.uid ?: ""), "at" to nowMillis())
+            )
             .commit()
         notificationRepository.createNotification(
             AppNotification(
@@ -365,6 +381,25 @@ class EstateRepositoryImpl(
             status = doc.string("status") ?: "pending"
         )
     }.getOrNull()
+
+    override fun observeRemoved(estateId: String): Flow<List<RemovedMember>> =
+        estates.document(estateId).collection("removed").snapshots
+            .map { snapshot ->
+                snapshot.documents.map { doc ->
+                    RemovedMember(userId = doc.id, name = doc.string("name").orEmpty(), removedAt = doc.long("at") ?: 0L)
+                }.sortedByDescending { it.removedAt }
+            }
+            .catch { emit(emptyList()) }
+
+    override suspend fun letBackIn(estateId: String, userId: String): Result<Unit> = runCatching {
+        removedRef(estateId, userId).delete()
+    }
+
+    private fun removedRef(estateId: String, userId: String) =
+        estates.document(estateId).collection("removed").document(userId)
+
+    private fun residentRef(estateId: String, userId: String) =
+        estates.document(estateId).collection("residents").document(userId)
 
     private fun requestRef(estateId: String, userId: String) =
         firestore.collection("joinRequests").document("${estateId}_${userId}")

@@ -17,6 +17,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.Apartment
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.Assessment
 import androidx.compose.material.icons.outlined.ReceiptLong
@@ -30,6 +33,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.eleazar.localhive.domain.EXPENSE_UNDO_WINDOW_MILLIS
+import com.eleazar.localhive.domain.model.Building
 import com.eleazar.localhive.domain.model.Expense
 import com.eleazar.localhive.domain.model.PaymentStatus
 import com.eleazar.localhive.ui.components.EmptyState
@@ -56,10 +61,15 @@ fun FinancesScreen(
     onMessageShown: () -> Unit,
     onErrorShown: () -> Unit,
     onRefresh: () -> Unit = {},
+    onBuildings: () -> Unit = {},
+    onActivity: () -> Unit = {},
+    onPickHome: (Building, Int) -> Unit = { _, _ -> },
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var openExpense by remember { mutableStateOf<Expense?>(null) }
     var editingBank by rememberSaveable { mutableStateOf(false) }
+    var pickingHome by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(uiState.message) {
@@ -79,12 +89,22 @@ fun FinancesScreen(
     openExpense?.let { expense ->
         ExpenseDialog(
             expense = expense,
-            canDelete = uiState.isTreasurer,
+            canDelete = uiState.isTreasurer && expense.canStillDelete(),
             onDelete = {
                 onDeleteExpense(expense)
                 openExpense = null
             },
             onDismiss = { openExpense = null }
+        )
+    }
+
+    if (pickingHome) {
+        HomePickerDialog(
+            buildings = uiState.buildings,
+            current = uiState.myResidence,
+            title = "Where do you live?",
+            onPick = { building, flat -> onPickHome(building, flat); pickingHome = false },
+            onDismiss = { pickingHome = false }
         )
     }
 
@@ -118,6 +138,23 @@ fun FinancesScreen(
                             Text("Statement")
                         }
                     }
+                    Box {
+                        IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
+                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Activity log") },
+                                leadingIcon = { Icon(Icons.Outlined.History, contentDescription = null) },
+                                onClick = { showMenu = false; onActivity() }
+                            )
+                            if (uiState.canManageBuildings) {
+                                DropdownMenuItem(
+                                    text = { Text("Buildings") },
+                                    leadingIcon = { Icon(Icons.Outlined.Apartment, contentDescription = null) },
+                                    onClick = { showMenu = false; onBuildings() }
+                                )
+                            }
+                        }
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
@@ -134,6 +171,7 @@ fun FinancesScreen(
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             TreasurerLine(uiState)
+            HomeLine(uiState, onPick = { pickingHome = true })
             BankDetailsCard(
                 bank = uiState.bank,
                 isTreasurer = uiState.isTreasurer,
@@ -177,6 +215,28 @@ private fun TreasurerLine(uiState: FinanceUiState) {
     )
 }
 
+/** Where the user lives, for dues charged per flat. Hidden until the estate has buildings. */
+@Composable
+private fun HomeLine(uiState: FinanceUiState, onPick: () -> Unit) {
+    if (uiState.buildings.isEmpty()) return
+    val home = uiState.myResidence
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Outlined.Apartment, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(8.dp))
+        Text(
+            if (home != null) "Your home: ${home.buildingName.ifBlank { uiState.myBuilding?.name.orEmpty() }}, flat ${home.flat}"
+            else "Which flat do you live in?",
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+        TextButton(onClick = onPick) { Text(if (home != null) "Change" else "Pick") }
+    }
+}
+
 @Composable
 private fun LevyList(uiState: FinanceUiState, onLevyClick: (String) -> Unit) {
     if (uiState.levies.isEmpty()) {
@@ -208,6 +268,7 @@ private fun LevyList(uiState: FinanceUiState, onLevyClick: (String) -> Unit) {
                     Text(
                         buildString {
                             append(formatNaira(row.levy.amount))
+                            if (row.levy.perFlat) append(" per flat")
                             if (row.levy.dueDate > 0) append(" · Due ${formatDate(row.levy.dueDate, "d MMM")}")
                         },
                         fontSize = 14.sp,
@@ -218,7 +279,8 @@ private fun LevyList(uiState: FinanceUiState, onLevyClick: (String) -> Unit) {
                 if (uiState.isTreasurer) {
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
-                            "${row.paidCount} of ${uiState.memberCount} paid",
+                            if (row.levy.perFlat) "${row.paidCount} of ${row.totalFlats} flats paid"
+                            else "${row.paidCount} of ${uiState.memberCount} paid",
                             fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -231,6 +293,8 @@ private fun LevyList(uiState: FinanceUiState, onLevyClick: (String) -> Unit) {
                             )
                         }
                     }
+                } else if (row.needsFlat) {
+                    Text("Pick your flat", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                 } else {
                     PaymentStatusLabel(row.myStatus)
                 }
@@ -298,9 +362,16 @@ private fun ExpenseDialog(expense: Expense, canDelete: Boolean, onDelete: () -> 
                 Text(formatDate(expense.spentAt, "EEEE, d MMMM yyyy"), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (expense.note.isNotBlank()) Text(expense.note)
                 expense.receiptUrl?.let { ProofImage(url = it, contentDescription = "Receipt") }
+                if (canDelete && !confirmDelete) {
+                    Text(
+                        "You can delete this until ${formatDate(expense.createdAt + EXPENSE_UNDO_WINDOW_MILLIS, "d MMM, h:mm a")}. After that it stays on the books.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 if (confirmDelete) {
                     Text(
-                        "Delete this expense? Everyone will stop seeing it.",
+                        "Delete this expense? It goes in the activity log, so members can see it was removed.",
                         color = MaterialTheme.colorScheme.error,
                         fontWeight = FontWeight.Medium
                     )

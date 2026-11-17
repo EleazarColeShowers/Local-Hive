@@ -33,3 +33,6 @@ interface MediaReader {
     /** The file's bytes, streamed rather than read into memory where the platform allows. */
     fun open(uri: String): ByteReadChannel
 }
+
+/** True on iOS, for the few things that differ by store, like where to get an update. */
+expect val isIos: Boolean

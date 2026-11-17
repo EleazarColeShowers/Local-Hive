@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { buildPush, estateNameLowerUpdates, falseAlarmsCostSiren, pollReminders, tooManyEmergencies } from "../src/index.js";
+import { buildPush, flatList, estateNameLowerUpdates, falseAlarmsCostSiren, pollReminders, tooManyEmergencies } from "../src/index.js";
 import { sosSoundFor } from "../src/push.js";
 import { MAX_VIDEO_BYTES, oversizedVideoIds, signUpload } from "../src/cloudinary.js";
 import { decodeValue } from "../src/firestore.js";
@@ -537,4 +537,94 @@ test("visitor pushes go to the resident, only from the guard who just checked th
   assert.equal(await status(buildPush(gate, "guard", { type: "visitor_left", estateId: "E1", code: "ABC234" })), 409);
   assert.equal(await status(buildPush(gate, "guard", { type: "visitor_arrived", estateId: "E1", code: "QLD234" })), 410);
   assert.equal(await status(buildPush(gate, "guard", { type: "visitor_arrived", estateId: "E1", code: "../x" })), 400);
+});
+
+test("notice words come from the documents behind them, never from the sender", async () => {
+  const forged = fakeDb({
+    ...docs,
+    "users/admin": { estateId: "E1", displayName: "Eleazar" },
+    "notifications/f1": {
+      senderId: "admin", recipientId: "member", type: "COMMENT", estateId: "E1", postId: "t1", commentId: "c2",
+      title: "Treasurer: dues now go to 0123456789", message: "Pay today or be locked out",
+    },
+  });
+  const push = await buildPush(forged, "admin", { type: "notification", notificationId: "f1" });
+  assert.equal(push.payload.title, "Eleazar commented on your post");
+  assert.equal(push.payload.body, "Nice");
+  assert.deepEqual(push.rewrite, {
+    path: "notifications/f1",
+    fields: { title: "Eleazar commented on your post", message: "Nice", verified: true },
+  });
+  // A reply is worded as one, and a tag quotes the real post.
+  assert.equal((await buildPush(forged, "third", { type: "notification", notificationId: "k2" })).payload.title, "A neighbour replied to your comment");
+  const tag = await buildPush(forged, "member", { type: "notification", notificationId: "m1" });
+  assert.equal(tag.payload.body, "@Ada look");
+  // Payment notices quote the levy and the real amount.
+  const proof = await buildPush(forged, "member", { type: "notification", notificationId: "p1" });
+  assert.match(proof.payload.body, /^Security levy · ₦5,000\./);
+});
+
+test("chat pushes are titled from the sender's profile", async () => {
+  const named = fakeDb({ ...docs, "users/admin": { estateId: "E1", displayName: "Real Name" } });
+  const push = await buildPush(named, "admin", { type: "message", chatId: "admin_member", messageId: "m1" });
+  assert.equal(push.payload.title, "Real Name");
+});
+
+// Per-flat dues: No. 12 has Ada ("member") in flat 1 and Bo ("blocker") in flat 2; "admin" hasn't said where they live.
+function flatDocs(overrides = {}) {
+  const now = Date.now();
+  return fakeDb({
+    ...docs,
+    "users/member": { estateId: "E1", displayName: "Ada" },
+    "estates/E1/buildings/B12": { name: "No. 12", flats: 4 },
+    "estates/E1/residents/member": { buildingId: "B12", flat: 1 },
+    "estates/E1/residents/blocker": { buildingId: "B12", flat: 2 },
+    "estates/E1/flatLevies/F1": { title: "Water", amount: 2000 },
+    "estates/E1/flatLevies/F1/proofs/g1": { payerId: "member", buildingId: "B12", flats: ["B12_1", "B12_2"], amount: 4000, submittedAt: now },
+    "estates/E1/flatLevies/F1/flats/B12_1": { buildingId: "B12", buildingName: "No. 12", flat: 1, amount: 2000, status: "paid", payerId: "member", groupId: "g1", reviewedAt: now },
+    "estates/E1/flatLevies/F1/flats/B12_2": { buildingId: "B12", buildingName: "No. 12", flat: 2, amount: 2000, status: "paid", payerId: "member", groupId: "g1", reviewedAt: now },
+    ...overrides,
+  });
+}
+
+test("proof for flats goes to the treasurer, worded from the proof itself", async () => {
+  const push = await buildPush(flatDocs(), "member", { type: "flat_proof", estateId: "E1", levyId: "F1", groupId: "g1" });
+  assert.deepEqual(push.recipients, ["third"]);
+  assert.equal(push.payload.title, "Ada sent proof of payment");
+  assert.equal(push.payload.body, "Water · 2 flats in No. 12 · ₦4,000. Check it and confirm.");
+  assert.equal(push.inbox.levyId, "F1");
+  assert.equal(await status(buildPush(flatDocs(), "admin", { type: "flat_proof", estateId: "E1", levyId: "F1", groupId: "g1" })), 403);
+});
+
+test("a confirmed flat payment tells the payer and everyone living in those flats, from the treasurer only", async () => {
+  const push = await buildPush(flatDocs(), "third", { type: "flat_reviewed", estateId: "E1", levyId: "F1", groupId: "g1" });
+  assert.deepEqual(push.recipients.sort(), ["blocker", "member"]);
+  assert.match(push.payload.body, /^₦4,000 for Water \(No\. 12 · Flats 1, 2\)/);
+  assert.equal(await status(buildPush(flatDocs(), "admin", { type: "flat_reviewed", estateId: "E1", levyId: "F1", groupId: "g1" })), 403);
+});
+
+test("a turned-down flat proof only goes back to whoever sent it", async () => {
+  const now = Date.now();
+  const db = flatDocs({
+    "estates/E1/flatLevies/F1/flats/B12_1": { buildingId: "B12", flat: 1, status: "rejected", payerId: "member", groupId: "g1", reviewedAt: now },
+    "estates/E1/flatLevies/F1/flats/B12_2": { buildingId: "B12", flat: 2, status: "rejected", payerId: "member", groupId: "g1", reviewedAt: now },
+  });
+  const push = await buildPush(db, "third", { type: "flat_reviewed", estateId: "E1", levyId: "F1", groupId: "g1" });
+  assert.deepEqual(push.recipients, ["member"]);
+  assert.equal(push.inbox.type, "PAYMENT_REJECTED");
+});
+
+test("flat levy reminders skip paid flats and reach members who haven't picked one", async () => {
+  const db = flatDocs({
+    "estates/E1/flatLevies/F1/flats/B12_2": { buildingId: "B12", flat: 2, status: "pending", payerId: "member", groupId: "g1" },
+  });
+  const push = await buildPush(db, "third", { type: "levy_reminder", estateId: "E1", levyId: "F1", flat: "true" });
+  // member's flat 1 is paid; blocker's flat 2 isn't; admin hasn't picked a flat.
+  assert.deepEqual(push.recipients.sort(), ["admin", "blocker"]);
+  assert.match(push.payload.body, /₦2,000 per flat/);
+});
+
+test("flat lists read like a receipt", () => {
+  assert.equal(flatList([{ buildingName: "No. 12", flat: 3 }, { buildingName: "No. 12", flat: 1 }]), "No. 12 · Flats 1, 3");
+  assert.equal(flatList([{ buildingName: "No. 12", flat: 2 }]), "No. 12 · Flat 2");
 });

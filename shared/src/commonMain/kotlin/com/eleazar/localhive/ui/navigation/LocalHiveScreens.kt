@@ -80,8 +80,18 @@ interface LocalHiveScreens {
         onLevyClick: (levyId: String) -> Unit,
         onCreateLevy: () -> Unit,
         onAddExpense: () -> Unit,
-        onStatement: () -> Unit
+        onStatement: () -> Unit,
+        onBuildings: () -> Unit,
+        onActivity: () -> Unit
     )
+
+    /** The estate's buildings and who lives where, for dues charged per flat. */
+    @Composable
+    fun Buildings(onBack: () -> Unit)
+
+    /** Everything the treasurer has done to the books, for every member. */
+    @Composable
+    fun FinanceLog(onBack: () -> Unit)
 
     @Composable
     fun LevyDetail(levyId: String, onBack: () -> Unit)

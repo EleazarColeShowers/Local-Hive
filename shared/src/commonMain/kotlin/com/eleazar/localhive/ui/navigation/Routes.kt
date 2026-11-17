@@ -47,6 +47,8 @@ sealed class Screen(val route: String) {
     }
     object CreateLevy : Screen("create_levy")
     object Statement : Screen("finance_statement")
+    object Buildings : Screen("finance_buildings")
+    object FinanceLog : Screen("finance_log")
     object AddExpense : Screen("add_expense")
 
     object Polls : Screen("polls")

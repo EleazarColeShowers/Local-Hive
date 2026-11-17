@@ -19,6 +19,8 @@ fun FinancesRoute(
     onCreateLevy: () -> Unit,
     onAddExpense: () -> Unit,
     onStatement: () -> Unit,
+    onBuildings: () -> Unit = {},
+    onActivity: () -> Unit = {},
     viewModel: FinanceViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -35,6 +37,9 @@ fun FinancesRoute(
         onAddExpense = onAddExpense,
         onDeleteExpense = viewModel::deleteExpense,
         onStatement = onStatement,
+        onBuildings = onBuildings,
+        onActivity = onActivity,
+        onPickHome = viewModel::pickHome,
         onCopyAccount = { platform.copyToClipboard("Account number", it, "Account number copied") },
         onSaveBank = viewModel::saveBankDetails,
         onRemoveBank = viewModel::removeBankDetails,
@@ -70,12 +75,19 @@ fun LevyDetailRoute(
         onConfirm = viewModel::confirmPayment,
         onReject = viewModel::rejectPayment,
         onMarkPaid = viewModel::markPaid,
+        onUndoPayment = viewModel::undoPayment,
         onRemind = viewModel::remindUnpaid,
         onDelete = viewModel::deleteLevy,
         onCopyAccount = { platform.copyToClipboard("Account number", it, "Account number copied") },
         onShareReceipt = { platform.shareText(it, "Share receipt") },
         onMessageShown = viewModel::consumeMessage,
-        onErrorShown = viewModel::consumeError
+        onErrorShown = viewModel::consumeError,
+        onToggleFlat = viewModel::toggleFlat,
+        onPickHome = viewModel::pickHome,
+        onConfirmProof = viewModel::confirmProof,
+        onRejectProof = viewModel::rejectProof,
+        onRecordFlatCash = viewModel::recordFlatCash,
+        onUndoFlatPayment = viewModel::undoFlatPayment
     )
     pendingProof?.let { proof ->
         ConfirmProofDialog(
@@ -122,6 +134,34 @@ fun CreateLevyRoute(
         }
     }
     CreateLevyScreen(uiState = uiState, onBack = onBack, onCreate = viewModel::createLevy)
+}
+
+@Composable
+fun BuildingsRoute(
+    onBack: () -> Unit,
+    viewModel: FinanceViewModel = koinViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    BuildingsScreen(
+        uiState = uiState,
+        onBack = onBack,
+        onSave = viewModel::saveBuilding,
+        onDelete = viewModel::deleteBuilding,
+        onMove = viewModel::moveResident,
+        onClear = viewModel::clearResident,
+        onMessageShown = viewModel::consumeMessage,
+        onErrorShown = viewModel::consumeError
+    )
+}
+
+@Composable
+fun FinanceLogRoute(
+    onBack: () -> Unit,
+    viewModel: FinanceViewModel = koinViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { viewModel.loadFinanceLog() }
+    FinanceLogScreen(uiState = uiState, onBack = onBack, onErrorShown = viewModel::consumeError)
 }
 
 @Composable

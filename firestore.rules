@@ -67,6 +67,16 @@ service cloud.firestore {
              && exists(/databases/$(database)/documents/estates/$(estateId)/guards/$(uid()));
     }
 
+    // Profiles from 1.07 on don't carry the email, since neighbours can read them. Switch this on
+    // once everyone has updated, so a 1.06 phone can't write it back.
+    function strictProfiles() {
+      return false;
+    }
+
+    function noEmail() {
+      return !strictProfiles() || !('email' in request.resource.data);
+    }
+
     match /users/{userId} {
       // Neighbours see each other; nobody sees residents of other estates.
       // Written against resource.data.estateId directly so the directory's
@@ -77,9 +87,10 @@ service cloud.firestore {
       );
       // New accounts start outside any estate and must join one through the flow below.
       allow create: if isSignedIn() && uid() == userId
-                    && request.resource.data.get('estateId', null) == null;
+                    && request.resource.data.get('estateId', null) == null
+                    && noEmail();
       allow update: if isSignedIn() && (
-        (uid() == userId && (
+        (uid() == userId && noEmail() && (
           !('estateId' in changedKeys())
           // Leaving.
           || request.resource.data.get('estateId', null) == null
@@ -126,16 +137,32 @@ service cloud.firestore {
           && detailsValid()
           && ownerKept())
         // Joining or leaving moves the tally by one and touches nothing else — in
-        // particular a member cannot write themselves into adminIds.
+        // particular a member cannot write themselves into adminIds. The caller's own profile
+        // must move into or out of the estate in the same batch, so the count can't be pushed
+        // around by someone who isn't coming or going.
         || (changedKeys().hasOnly(['memberCount'])
-            && (request.resource.data.memberCount == resource.data.memberCount + 1
-                || request.resource.data.memberCount == resource.data.memberCount - 1))
+            && ((request.resource.data.memberCount == resource.data.memberCount + 1 && joiningNow())
+                || (request.resource.data.memberCount == resource.data.memberCount - 1 && leavingNow())))
         // A treasurer who isn't an admin gives the role up as they leave, and nothing more.
         || (changedKeys().hasOnly(['memberCount', 'treasurerId'])
             && resource.data.get('treasurerId', '') == uid()
             && request.resource.data.get('treasurerId', '') == ''
-            && request.resource.data.memberCount == resource.data.memberCount - 1)
+            && request.resource.data.memberCount == resource.data.memberCount - 1
+            && leavingNow())
       );
+
+      // The caller's profile, before and after this batch.
+      function myEstateAfter() {
+        return getAfter(/databases/$(database)/documents/users/$(uid())).data.get('estateId', null);
+      }
+
+      function joiningNow() {
+        return myEstateId() != estateId && myEstateAfter() == estateId;
+      }
+
+      function leavingNow() {
+        return myEstateId() == estateId && myEstateAfter() != estateId;
+      }
       // Only the owner can delete the whole estate, so one rogue admin can't wipe it out.
       // Estates from before ownership was tracked belong to their first admin.
       allow delete: if isSignedIn()
@@ -174,43 +201,277 @@ service cloud.firestore {
                    && get(/databases/$(database)/documents/users/$(next)).data.get('estateId', null) == estateId);
       }
 
-      // Dues: the treasurer sets them; every member can see what's owed.
+      // ───── Money ─────
+      //
+      // The treasurer runs the books, and everything they do to them leaves an entry in the
+      // estate's finance log, which every member can read and nobody can change or delete.
+      // Writes that only the current app makes must carry their log entry now. Writes the
+      // previous app also makes (per-member levies, expenses, bank details) get the same check
+      // once strictFinance() is switched on, after everyone has updated.
+      function strictFinance() {
+        return false;
+      }
+
+      function logPath(entryId) {
+        return /databases/$(database)/documents/estates/$(estateId)/financeLog/$(entryId);
+      }
+
+      function logged(entryId) {
+        return existsAfter(logPath(entryId)) && getAfter(logPath(entryId)).data.by == uid();
+      }
+
+      function nowMs() {
+        return request.time.toMillis();
+      }
+
+      // A moment stamped by the app, within an hour of the server's clock.
+      function isFresh(millis) {
+        return millis is int && math.abs(millis - nowMs()) < 60 * 60 * 1000;
+      }
+
+      match /financeLog/{entryId} {
+        allow read: if isMemberOf(estateId);
+        allow create: if isTreasurerOf(estateId)
+                      && request.resource.data.keys().hasOnly(['action', 'summary', 'amount', 'by', 'byName', 'at'])
+                      && request.resource.data.by == uid()
+                      && isFresh(request.resource.data.at)
+                      && request.resource.data.action is string
+                      && request.resource.data.action.size() <= 40
+                      && request.resource.data.summary is string
+                      && request.resource.data.summary.size() <= 300
+                      && request.resource.data.get('amount', 0) is int
+                      && request.resource.data.get('byName', '') is string
+                      && request.resource.data.get('byName', '').size() <= 100;
+        allow update, delete: if false;
+      }
+
+      // Dues charged to every member: the treasurer sets them; every member can see what's owed.
+      // hasPayments goes on once a payment is confirmed, and from then on the levy can't be
+      // deleted, so a paid-up member's record can't be wiped out with it.
       match /levies/{levyId} {
         allow read: if isMemberOf(estateId);
-        allow create, update: if isTreasurerOf(estateId)
-                              && request.resource.data.title is string
-                              && request.resource.data.amount is int
-                              && request.resource.data.amount > 0;
-        allow delete: if isTreasurerOf(estateId);
+        allow create: if isTreasurerOf(estateId)
+                      && request.resource.data.title is string
+                      && request.resource.data.amount is int
+                      && request.resource.data.amount > 0
+                      && request.resource.data.get('hasPayments', false) == false
+                      && (!strictFinance() || logged('levy_' + levyId + '_created'));
+        allow update: if isTreasurerOf(estateId)
+                      && changedKeys().hasOnly(['hasPayments'])
+                      && request.resource.data.hasPayments == true;
+        allow delete: if isTreasurerOf(estateId)
+                      && resource.data.get('hasPayments', false) != true
+                      && (!strictFinance() || logged('levy_' + levyId + '_deleted'));
+
+        function levy() {
+          return get(/databases/$(database)/documents/estates/$(estateId)/levies/$(levyId)).data;
+        }
 
         // One per resident, keyed by their uid. Only they and the treasurer can see it.
         match /payments/{userId} {
           allow read: if isSignedIn() && (uid() == userId || isTreasurerOf(estateId));
-          // A resident sends proof for themselves. It always arrives pending, and can't be
-          // replaced once the treasurer has confirmed it.
+          // A resident sends proof for themselves, for the levy's amount. It always arrives
+          // pending, and can't be replaced once the treasurer has confirmed it.
           allow create, update: if (isSignedIn()
                                     && uid() == userId
                                     && isMemberOf(estateId)
                                     && request.resource.data.userId == uid()
                                     && request.resource.data.status == 'pending'
+                                    && request.resource.data.amount == levy().amount
                                     && request.resource.data.keys().hasOnly(
                                          ['userId', 'userName', 'levyId', 'amount', 'status', 'proofUrl', 'submittedAt'])
                                     && (resource == null || resource.data.status != 'paid'))
-                                // The treasurer confirms, rejects or records a cash payment.
+                                // The treasurer confirms, rejects or records a cash payment. Taking
+                                // back a confirmed payment needs a reason, which goes in the log.
                                 || (isTreasurerOf(estateId)
                                     && request.resource.data.userId == userId
-                                    && request.resource.data.status in ['pending', 'paid', 'rejected']);
-          allow delete: if isTreasurerOf(estateId);
+                                    && request.resource.data.status in ['pending', 'paid', 'rejected']
+                                    && (resource == null
+                                        || resource.data.status != 'paid'
+                                        || request.resource.data.status == 'paid'
+                                        || (request.resource.data.get('undoReason', '') is string
+                                            && request.resource.data.get('undoReason', '').size() > 0))
+                                    && (!strictFinance()
+                                        || (logged('pay_' + levyId + '_' + userId + '_' + string(request.resource.data.reviewedAt))
+                                            && (request.resource.data.status != 'paid'
+                                                || getAfter(/databases/$(database)/documents/estates/$(estateId)/levies/$(levyId)).data.get('hasPayments', false) == true))));
+          // A confirmed payment stays on the books.
+          allow delete: if isTreasurerOf(estateId) && resource.data.status != 'paid';
         }
       }
 
-      // Spending is logged by the treasurer and open to every member, for transparency.
+      // The estate's buildings, each with its number of flats, for dues charged per flat. The
+      // treasurer or an admin keeps the list.
+      match /buildings/{buildingId} {
+        allow read: if isMemberOf(estateId);
+        allow create, update: if (isTreasurerOf(estateId) || isEstateAdmin(estateId))
+                              && request.resource.data.keys().hasOnly(['name', 'flats', 'createdBy', 'createdAt'])
+                              && request.resource.data.name is string
+                              && request.resource.data.name.size() > 0
+                              && request.resource.data.name.size() <= 80
+                              && request.resource.data.flats is int
+                              && request.resource.data.flats >= 1
+                              && request.resource.data.flats <= 200;
+        allow delete: if isTreasurerOf(estateId) || isEstateAdmin(estateId);
+      }
+
+      // Where each member lives: one per member, keyed by their uid. They pick it themselves;
+      // the treasurer or an admin can correct a wrong pick.
+      function buildingOf(buildingId) {
+        return get(/databases/$(database)/documents/estates/$(estateId)/buildings/$(buildingId)).data;
+      }
+
+      function residentPath(userId) {
+        return /databases/$(database)/documents/estates/$(estateId)/residents/$(userId);
+      }
+
+      // The building the caller lives in, or '' if they haven't said.
+      function myBuilding() {
+        return exists(residentPath(uid())) ? get(residentPath(uid())).data.buildingId : '';
+      }
+
+      match /residents/{userId} {
+        allow read: if isMemberOf(estateId);
+        allow create, update: if isMemberOf(estateId)
+                              && (uid() == userId || isTreasurerOf(estateId) || isEstateAdmin(estateId))
+                              && request.resource.data.keys().hasOnly(['buildingId', 'buildingName', 'flat', 'userName', 'setBy', 'at'])
+                              && request.resource.data.setBy == uid()
+                              && request.resource.data.buildingId is string
+                              && request.resource.data.flat is int
+                              && request.resource.data.flat >= 1
+                              && request.resource.data.flat <= buildingOf(request.resource.data.buildingId).flats
+                              && request.resource.data.get('userName', '') is string
+                              && request.resource.data.get('userName', '').size() <= 100;
+        allow delete: if isSignedIn()
+                      && (uid() == userId || isTreasurerOf(estateId) || isEstateAdmin(estateId));
+      }
+
+      // Dues charged per flat: each flat in every building owes [amount]. Kept apart from
+      // levies so the previous app, which can't show them properly, doesn't see them at all.
+      match /flatLevies/{levyId} {
+        function flatLevy() {
+          return get(/databases/$(database)/documents/estates/$(estateId)/flatLevies/$(levyId)).data;
+        }
+
+        function flatLevyAfter() {
+          return getAfter(/databases/$(database)/documents/estates/$(estateId)/flatLevies/$(levyId)).data;
+        }
+
+        allow read: if isMemberOf(estateId);
+        allow create: if isTreasurerOf(estateId)
+                      && request.resource.data.keys().hasOnly(['title', 'amount', 'dueDate', 'note', 'createdBy', 'createdAt', 'hasPayments'])
+                      && request.resource.data.title is string
+                      && request.resource.data.title.size() > 0
+                      && request.resource.data.title.size() <= 80
+                      && request.resource.data.amount is int
+                      && request.resource.data.amount > 0
+                      && request.resource.data.createdBy == uid()
+                      && request.resource.data.hasPayments == false
+                      && logged('levy_' + levyId + '_created');
+        allow update: if isTreasurerOf(estateId)
+                      && changedKeys().hasOnly(['hasPayments'])
+                      && request.resource.data.hasPayments == true;
+        allow delete: if isTreasurerOf(estateId)
+                      && resource.data.get('hasPayments', false) != true
+                      && logged('levy_' + levyId + '_deleted');
+
+        // One per flat, keyed "<buildingId>_<flat>". Neighbours in the same building can see
+        // which flats have paid, and who paid; the proof itself is kept in proofs below.
+        match /flats/{flatId} {
+          function flatValid(data) {
+            return data.keys().hasOnly(['buildingId', 'buildingName', 'flat', 'levyId', 'amount', 'status', 'payerId',
+                                        'payerName', 'groupId', 'submittedAt', 'reviewedAt', 'confirmedByName', 'undoReason'])
+                   && data.buildingId is string
+                   && data.flat is int
+                   && flatId == data.buildingId + '_' + string(data.flat)
+                   && data.flat >= 1
+                   && data.flat <= buildingOf(data.buildingId).flats
+                   && data.levyId == levyId
+                   && data.amount == flatLevy().amount
+                   && data.groupId is string
+                   && data.groupId.size() <= 100
+                   && data.get('payerName', '') is string
+                   && data.get('payerName', '').size() <= 100
+                   && data.get('buildingName', '') is string
+                   && data.get('buildingName', '').size() <= 80;
+          }
+
+          allow read: if isTreasurerOf(estateId)
+                      || (isMemberOf(estateId) && resource.data.buildingId == myBuilding());
+          // A resident sends proof for flats in their own building that haven't paid or are
+          // waiting: never over a payment someone else already has in. The proof goes in the
+          // same batch.
+          allow create, update: if (isMemberOf(estateId)
+                                    && flatValid(request.resource.data)
+                                    && request.resource.data.buildingId == myBuilding()
+                                    && request.resource.data.status == 'pending'
+                                    && request.resource.data.payerId == uid()
+                                    && isFresh(request.resource.data.submittedAt)
+                                    && request.resource.data.get('reviewedAt', 0) == 0
+                                    && !('undoReason' in request.resource.data)
+                                    && (resource == null || resource.data.status == 'rejected')
+                                    && getAfter(/databases/$(database)/documents/estates/$(estateId)/flatLevies/$(levyId)/proofs/$(request.resource.data.groupId)).data.payerId == uid())
+                                // The treasurer confirms or rejects proof, records a cash payment,
+                                // or takes a confirmation back with a reason. Every change is
+                                // logged, and a confirmation marks the levy as paid into.
+                                || (isTreasurerOf(estateId)
+                                    && flatValid(request.resource.data)
+                                    && request.resource.data.status in ['paid', 'rejected', 'pending']
+                                    && isFresh(request.resource.data.reviewedAt)
+                                    && (resource == null
+                                        || resource.data.status != 'paid'
+                                        || request.resource.data.status == 'paid'
+                                        || (request.resource.data.get('undoReason', '') is string
+                                            && request.resource.data.get('undoReason', '').size() > 0))
+                                    && (request.resource.data.status != 'paid' || flatLevyAfter().get('hasPayments', false) == true)
+                                    && logged('flat_' + levyId + '_' + request.resource.data.groupId + '_' + string(request.resource.data.reviewedAt)));
+          allow delete: if false;
+        }
+
+        // One proof of payment, covering one or more flats. Only the payer and the treasurer
+        // can see it, since a bank screenshot can show account details.
+        match /proofs/{groupId} {
+          allow read: if isSignedIn() && (resource.data.payerId == uid() || isTreasurerOf(estateId));
+          allow create: if isMemberOf(estateId)
+                        && request.resource.data.keys().hasOnly(['payerId', 'payerName', 'buildingId', 'flats', 'amount', 'proofUrl', 'submittedAt'])
+                        && request.resource.data.payerId == uid()
+                        && request.resource.data.buildingId == myBuilding()
+                        && request.resource.data.flats is list
+                        && request.resource.data.flats.size() >= 1
+                        && request.resource.data.flats.size() <= 200
+                        && request.resource.data.amount == flatLevy().amount * request.resource.data.flats.size()
+                        && request.resource.data.proofUrl is string
+                        && request.resource.data.proofUrl.size() <= 1000
+                        && isFresh(request.resource.data.submittedAt);
+          allow update, delete: if false;
+        }
+      }
+
+      // Spending is logged by the treasurer and open to every member, for transparency. An
+      // expense can be taken back within a day of adding it, for mistakes; after that it stays.
       match /expenses/{expenseId} {
         allow read: if isMemberOf(estateId);
-        allow create, update: if isTreasurerOf(estateId)
-                              && request.resource.data.amount is int
-                              && request.resource.data.amount > 0;
-        allow delete: if isTreasurerOf(estateId);
+        allow create: if isTreasurerOf(estateId)
+                      && request.resource.data.amount is int
+                      && request.resource.data.amount > 0
+                      && isFresh(request.resource.data.createdAt)
+                      && (!strictFinance() || logged('expense_' + expenseId + '_added'));
+        allow update: if false;
+        allow delete: if isTreasurerOf(estateId)
+                      && nowMs() < resource.data.get('createdAt', 0) + 24 * 60 * 60 * 1000
+                      && (!strictFinance() || logged('expense_' + expenseId + '_deleted'));
+      }
+
+      // People an admin removed. They can't let themselves back in with an invite code; an
+      // admin approving a request from them clears this.
+      match /removed/{userId} {
+        allow read: if isEstateAdmin(estateId);
+        allow create: if isEstateAdmin(estateId)
+                      && request.resource.data.keys().hasOnly(['name', 'removedBy', 'at'])
+                      && request.resource.data.removedBy == uid()
+                      && isFresh(request.resource.data.at);
+        allow update: if false;
+        allow delete: if isEstateAdmin(estateId);
       }
 
       // Members-only details: the current invite code, which admins set, and where to pay
@@ -228,7 +489,8 @@ service cloud.firestore {
                                   && math.abs(request.resource.data.updatedAt - request.time.toMillis()) < 60 * 60 * 1000
                                   && request.resource.data.accountNumber is string
                                   && request.resource.data.accountNumber.size() > 0
-                                  && request.resource.data.accountNumber.size() <= 20);
+                                  && request.resource.data.accountNumber.size() <= 20
+                                  && (!strictFinance() || logged('bank_' + string(request.resource.data.updatedAt))));
         allow delete: if (docId != 'bank' && isEstateAdminAfter(estateId))
                       || (docId == 'bank' && isTreasurerOf(estateId));
       }
@@ -513,6 +775,13 @@ service cloud.firestore {
       }
     }
 
+    // App-wide settings set from the console, such as the oldest app version still allowed.
+    // Readable before sign-in, so an outdated app can say so on its first screen.
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Maps an invite code to its estate. Fetchable only by someone who already knows the
     // code — listing is off, so codes cannot be enumerated.
     match /inviteCodes/{code} {
@@ -584,7 +853,9 @@ service cloud.firestore {
                && ((data.status == 'pending' && mode != 'code')
                    || (data.status == 'approved'
                        && mode != 'request'
-                       && inviteCodeOpens(data.get('inviteCode', null), data.estateId)));
+                       && inviteCodeOpens(data.get('inviteCode', null), data.estateId)
+                       // Someone an admin removed needs an admin to let them back in.
+                       && !exists(/databases/$(database)/documents/estates/$(data.estateId)/removed/$(uid()))));
       }
 
       allow read: if isRequester() || isEstateAdmin(resource.data.estateId);
@@ -698,6 +969,28 @@ service cloud.firestore {
                || (after == false && isEstateAdmin(resource.data.estateId) && !existsAfter(falseAlarmPath()));
       }
 
+      function likeToggleValid() {
+        let before = resource.data.get('likedBy', []).toSet();
+        let after = request.resource.data.get('likedBy', []).toSet();
+        let count = resource.data.get('likeCount', 0);
+        return (after.difference(before) == [uid()].toSet()
+                && before.difference(after).size() == 0
+                && request.resource.data.likeCount == count + 1)
+               || (before.difference(after) == [uid()].toSet()
+                   && after.difference(before).size() == 0
+                   && request.resource.data.likeCount == count - 1);
+      }
+
+      // Only admins move a report between open, handling and resolved. The one thing an author
+      // may do is close their own emergency, saying they're safe now, stamped with their own id.
+      function authorStatusChangeValid() {
+        let data = request.resource.data;
+        return !changedKeys().hasAny(['incidentStatus', 'statusUpdatedBy', 'statusUpdatedByName', 'statusUpdatedAt'])
+               || (resource.data.get('category', '') == 'emergency'
+                   && data.get('incidentStatus', '') == 'resolved'
+                   && data.statusUpdatedBy == uid());
+      }
+
       // The composer stops at 2,000 characters (MAX_POST_LENGTH in CreatePostScreen).
       function contentValid() {
         return request.resource.data.get('content', '') is string
@@ -723,7 +1016,11 @@ service cloud.firestore {
           // An old post can't be turned into an emergency, which would pin it to everyone's feed.
           && (request.resource.data.get('category', '') != 'emergency'
               || resource.data.get('category', '') == 'emergency')
-          && falseAlarmChangeValid())
+          && falseAlarmChangeValid()
+          // Likes, comment counts and responders go through their own rules below, for
+          // everyone, the author included.
+          && !changedKeys().hasAny(['likedBy', 'likeCount', 'commentCount', 'responders'])
+          && authorStatusChangeValid())
         // Admins move a security report or emergency from open to resolved, or mark an emergency a
         // false alarm (or take that back), and change nothing else.
         || (isIncident(resource.data.get('category', ''))
@@ -733,10 +1030,13 @@ service cloud.firestore {
             && falseAlarmChangeValid()
             && request.resource.data.incidentStatus in ['open', 'handling', 'resolved']
             && request.resource.data.statusUpdatedBy == uid())
-        // A neighbour may like a post or comment on it. Neither may rewrite its body.
+        // A neighbour may like a post or comment on it. Neither may rewrite its body. A like
+        // adds the caller, and only the caller, and counts one; an unlike takes one off.
         || (isMemberOf(resource.data.estateId) && (
-             changedKeys().hasOnly(['likedBy', 'likeCount'])
-             || changedKeys().hasOnly(['commentCount'])
+             (changedKeys().hasOnly(['likedBy', 'likeCount']) && likeToggleValid())
+             || (changedKeys().hasOnly(['commentCount'])
+                 && (request.resource.data.commentCount == resource.data.get('commentCount', 0) + 1
+                     || request.resource.data.commentCount == resource.data.get('commentCount', 0) - 1))
            ))
         // A neighbour says they're on their way to an emergency: they add themselves, by name,
         // and touch nobody else's entry.

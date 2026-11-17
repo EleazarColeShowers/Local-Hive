@@ -1,6 +1,8 @@
 package com.eleazar.localhive.ui.finance
 
 import com.eleazar.localhive.domain.model.Expense
+import com.eleazar.localhive.domain.model.FlatPayment
+import com.eleazar.localhive.domain.model.flatSummary
 import com.eleazar.localhive.domain.model.Levy
 import com.eleazar.localhive.domain.model.LevyPayment
 import com.eleazar.localhive.ui.util.formatDate
@@ -28,6 +30,16 @@ data class StatementEntry(
             member = payment.userName,
             amount = payment.amount,
             receiptNumber = payment.receiptNumber
+        )
+
+        /** One proof's worth of flats on a per-flat levy, as one line. */
+        fun flatIncome(levy: Levy, payments: List<FlatPayment>) = StatementEntry(
+            id = "in-${levy.id}-${payments.first().groupId}",
+            at = payments.maxOf { it.receivedAt },
+            title = levy.title,
+            member = listOf(payments.first().payerName.ifBlank { "Cash" }, flatSummary(payments)).joinToString(" · "),
+            amount = payments.sumOf { it.amount },
+            receiptNumber = flatReceiptNumber(levy.id, payments.first().groupId)
         )
 
         fun expense(expense: Expense) = StatementEntry(
@@ -96,3 +108,7 @@ private fun csvField(value: String): String {
     val safe = if (value.firstOrNull() in setOf('=', '+', '-', '@') && value.toLongOrNull() == null) "'$value" else value
     return if (safe.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) "\"" + safe.replace("\"", "\"\"") + "\"" else safe
 }
+
+/** Stable for a levy and one proof, so a receipt shared twice carries the same number. */
+fun flatReceiptNumber(levyId: String, groupId: String): String =
+    "LH-" + (levyId.take(4) + groupId.takeLast(4)).uppercase()

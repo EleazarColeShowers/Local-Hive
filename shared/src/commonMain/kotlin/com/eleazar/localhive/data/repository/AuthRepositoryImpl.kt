@@ -94,6 +94,8 @@ class AuthRepositoryImpl(
 
     override fun getCurrentUserId(): String? = firebaseAuth.currentUser?.uid
 
+    override fun getCurrentUserEmail(): String? = firebaseAuth.currentUser?.email
+
     override suspend fun getUserProfile(userId: String): Result<User> {
         return try {
             val doc = firestore.users().document(userId).get()
@@ -115,8 +117,8 @@ class AuthRepositoryImpl(
 
     private fun FirebaseUser.toUser() = User(id = uid, email = email, displayName = displayName)
 
+    // No email: neighbours can read profiles, and the sign-in account already has it.
     private fun User.toFullMap(): Map<String, Any?> = mapOf(
-        "email" to email,
         "displayName" to displayName,
         "username" to username,
         "profileImageUrl" to profileImageUrl,

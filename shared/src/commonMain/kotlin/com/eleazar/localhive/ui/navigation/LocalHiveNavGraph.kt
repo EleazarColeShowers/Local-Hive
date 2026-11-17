@@ -336,12 +336,22 @@ fun LocalHiveNavGraph(
                 onLevyClick = { levyId -> navController.navigate(Screen.LevyDetail.createRoute(levyId)) },
                 onCreateLevy = { navController.navigate(Screen.CreateLevy.route) },
                 onAddExpense = { navController.navigate(Screen.AddExpense.route) },
-                onStatement = { navController.navigate(Screen.Statement.route) }
+                onStatement = { navController.navigate(Screen.Statement.route) },
+                onBuildings = { navController.navigate(Screen.Buildings.route) },
+                onActivity = { navController.navigate(Screen.FinanceLog.route) }
             )
         }
 
         composable(Screen.Statement.route) {
             screens.Statement(onBack = { navController.navigateUp() })
+        }
+
+        composable(Screen.Buildings.route) {
+            screens.Buildings(onBack = { navController.navigateUp() })
+        }
+
+        composable(Screen.FinanceLog.route) {
+            screens.FinanceLog(onBack = { navController.navigateUp() })
         }
 
         composable(

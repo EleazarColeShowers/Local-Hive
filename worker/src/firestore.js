@@ -202,7 +202,8 @@ function encodeFields(fields) {
   const out = {};
   for (const [key, value] of Object.entries(fields)) {
     if (typeof value === "number") out[key] = { integerValue: String(Math.trunc(value)) };
-    else out[key] = { stringValue: String(value) };
+    // Booleans stay booleans, so the app's `isRead == false` query finds these notices.
+    else out[key] = encodeValue(value);
   }
   return out;
 }

@@ -53,9 +53,11 @@ internal fun DocumentSnapshot.toUser(): User = User(
     guardEstateId = string("guardEstateId")
 )
 
-/** Only the fields that are set, for merge writes that mustn't blank anything out. */
+/**
+ * Only the fields that are set, for merge writes that mustn't blank anything out. Never the
+ * email: neighbours can read profiles, and the sign-in account already has it.
+ */
 internal fun User.toNonNullMap(): Map<String, Any> = buildMap {
-    email?.let { put("email", it) }
     displayName?.let { put("displayName", it) }
     username?.let { put("username", it) }
     profileImageUrl?.let { put("profileImageUrl", it) }

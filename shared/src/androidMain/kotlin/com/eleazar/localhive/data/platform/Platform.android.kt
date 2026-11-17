@@ -83,3 +83,5 @@ class AndroidMediaReader(private val context: Context) : MediaReader {
     override fun open(uri: String): ByteReadChannel =
         (context.contentResolver.openInputStream(Uri.parse(uri)) ?: error("Couldn't read that file")).toByteReadChannel()
 }
+
+actual val isIos: Boolean = false

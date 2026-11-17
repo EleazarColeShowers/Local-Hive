@@ -31,6 +31,7 @@ fun EstateAdminRoute(
     EstateAdminScreen(
         estate = uiState.estate,
         pendingRequests = uiState.pendingRequests,
+        removed = uiState.removed,
         members = uiState.members,
         sosStandings = uiState.sosStandings,
         currentUserId = currentUserId,
@@ -42,6 +43,7 @@ fun EstateAdminRoute(
         onBack = onBack,
         onApproveRequest = { userId -> viewModel.approveRequest(estateId, userId) },
         onDenyRequest = { userId -> viewModel.denyRequest(estateId, userId) },
+        onLetBackIn = { member -> viewModel.letBackIn(estateId, member) },
         onPromoteToAdmin = { userId -> viewModel.promoteToAdmin(estateId, userId) },
         onRemoveAdmin = { userId -> viewModel.removeAdmin(estateId, userId) },
         onRemoveMember = { userId -> viewModel.removeMember(estateId, userId) },

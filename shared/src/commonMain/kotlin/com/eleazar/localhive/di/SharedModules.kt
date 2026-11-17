@@ -4,7 +4,9 @@ import com.eleazar.localhive.data.remote.LocalHiveApi
 import com.eleazar.localhive.data.remote.PushTokenSync
 import com.eleazar.localhive.data.repository.AppSettingsRepositoryImpl
 import com.eleazar.localhive.data.repository.AuthRepositoryImpl
+import com.eleazar.localhive.data.repository.AppConfigRepositoryImpl
 import com.eleazar.localhive.data.repository.EstateRepositoryImpl
+import com.eleazar.localhive.domain.AppConfigRepository
 import com.eleazar.localhive.data.repository.FinanceRepositoryImpl
 import com.eleazar.localhive.data.repository.GateRepositoryImpl
 import com.eleazar.localhive.data.repository.MessageRepositoryImpl
@@ -97,6 +99,7 @@ fun dataModule(apiBaseUrl: String) = module {
     singleOf(::NotificationRepositoryImpl) bind NotificationRepository::class
     singleOf(::StorageRepositoryImpl) bind StorageRepository::class
     singleOf(::FinanceRepositoryImpl) bind FinanceRepository::class
+    singleOf(::AppConfigRepositoryImpl) bind AppConfigRepository::class
     singleOf(::AppSettingsRepositoryImpl) bind AppSettingsRepository::class
     singleOf(::PollRepositoryImpl) bind PollRepository::class
     singleOf(::UtilityRepositoryImpl) bind UtilityRepository::class

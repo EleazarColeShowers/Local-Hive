@@ -62,7 +62,8 @@ class SettingsViewModel(
         val userId = authRepository.getCurrentUserId() ?: return
         viewModelScope.launch {
             userRepository.getUser(userId).fold(
-                onSuccess = { user ->
+                onSuccess = { found ->
+                    val user = found.copy(email = authRepository.getCurrentUserEmail() ?: found.email)
                     _uiState.update {
                         it.copy(user = user, lightAlerts = user.lightAlerts, newPostAlerts = user.newPostAlerts, sosSound = user.sosSound, sosPausedUntil = user.sosPausedUntil)
                     }

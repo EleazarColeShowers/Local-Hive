@@ -22,7 +22,8 @@ import { buildWelcomeEmail, sendWelcomeEmail } from "./email.js";
  *                           { type: "sos_responding", postId }
  *                           { type: "sos_safe", postId }
  *                           { type: "sos_false_alarm", postId }
- *                           { type: "levy_reminder", estateId, levyId }
+ *                           { type: "levy_reminder", estateId, levyId, flat? }
+ *                           { type: "flat_proof" | "flat_reviewed", estateId, levyId, groupId }
  *                           { type: "visitor_arrived" | "visitor_left", estateId, code } -> sends the push
  *   POST /delete-account    {}                                       -> deletes the caller's account
  *   POST /welcome-email     { type: "account" } | { type: "estate", estateId, userId? } (see email.js)
@@ -153,8 +154,9 @@ async function uploadSignature(env, uid, { kind }) {
 }
 
 async function welcomeEmail(env, uid, body) {
-  const db = new Firestore(env.FIREBASE_PROJECT_ID, await serviceAccessToken(env.FIREBASE_SERVICE_ACCOUNT));
-  const email = await buildWelcomeEmail(db, uid, body);
+  const accessToken = await serviceAccessToken(env.FIREBASE_SERVICE_ACCOUNT);
+  const db = new Firestore(env.FIREBASE_PROJECT_ID, accessToken);
+  const email = await buildWelcomeEmail(db, uid, body, (id) => signInEmail(env, accessToken, id));
   return { sent: email ? await sendWelcomeEmail(db, env, email) : false };
 }
 
@@ -178,6 +180,23 @@ async function removeAccount(env, uid, authTime) {
   });
   console.log(`account ${uid} deleted`);
   return result;
+}
+
+/** The email on someone's sign-in account, or null. Profiles don't keep it, since neighbours can read them. */
+async function signInEmail(env, accessToken, uid) {
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/accounts:lookup`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ localId: [uid] }),
+    }
+  );
+  if (!response.ok) {
+    console.error(`Auth lookup: ${response.status} ${await response.text()}`);
+    return null;
+  }
+  return (await response.json()).users?.[0]?.email || null;
 }
 
 /** Every photo and video the user uploaded, which lives under their own folder for each upload kind. */
@@ -228,6 +247,7 @@ async function notify(env, uid, body) {
   // Once-only: a retry, or someone replaying the request, can't send the same push again.
   if (!(await db.createOnce(`pushes/${push.key}`, { by: uid, at: Date.now() }))) return { sent: 0, duplicate: true };
 
+  if (push.rewrite) await db.commit([{ update: push.rewrite.path, fields: push.rewrite.fields }]);
   if (push.inbox) await leaveInInbox(db, push.key, push.recipients, push.inbox);
   const sent = await sendToUsers(db, env, push.recipients, push.payload);
   console.log(`push ${push.key}: ${sent}/${push.recipients.length} delivered`);
@@ -235,11 +255,12 @@ async function notify(env, uid, body) {
 }
 
 /** One notification document per recipient, for notices the app can't raise itself. */
-async function leaveInInbox(db, key, recipients, { type, title, message, estateId, senderId }) {
+async function leaveInInbox(db, key, recipients, { type, title, message, estateId, senderId, levyId }) {
   const createdAt = Date.now();
   await Promise.all(recipients.map((recipientId) =>
     db.createOnce(`notifications/${key}_${recipientId}`, {
-      recipientId, senderId, type, title, message, estateId, createdAt, isRead: false,
+      recipientId, senderId, type, title, message, estateId, createdAt, isRead: false, verified: true,
+      ...(levyId ? { levyId } : {}),
     })
   ));
 }
@@ -258,11 +279,13 @@ export async function buildPush(db, uid, body) {
       if (message.senderId !== uid || !(chat.participants || []).includes(uid)) {
         throw new HttpError(403, "Not your message");
       }
+      // From the sender's profile: either participant can write the chat's own copy of names.
+      const sender = await db.get(`users/${uid}`);
       return {
         key: `message_${messageId}`,
         recipients: (chat.participants || []).filter((id) => id !== uid),
         payload: {
-          title: (chat.participantNames || {})[uid] || "A neighbour",
+          title: displayName(sender, (chat.participantNames || {})[uid] || "A neighbour"),
           body: message.content || "Sent you a message",
           deepLink: `localhive://chat/${chatId}`,
           // One tag per chat, so a burst of messages collapses into a single entry.
@@ -278,15 +301,20 @@ export async function buildPush(db, uid, body) {
       if (!note) throw new HttpError(404, "No such notification");
       if (note.senderId !== uid) throw new HttpError(403, "Not your notification");
       if (!(await notificationAllowed(db, uid, note))) throw new HttpError(403, "Not allowed");
+      // The words come from what really happened, never from the sender, so a neighbour can't
+      // dress a comment up as "the treasurer says pay into this account".
+      const { title, message } = await noticeText(db, uid, note);
       return {
         key: `notification_${notificationId}`,
         recipients: [note.recipientId],
         payload: {
-          title: note.title || "LocalHive",
-          body: note.message || "",
+          title,
+          body: message,
           deepLink: notificationLink(note),
           tag: `notification-${notificationId}`,
         },
+        // The copy in the recipient's notifications gets the same words, marked as checked.
+        rewrite: { path: `notifications/${notificationId}`, fields: { title, message, verified: true } },
       };
     }
 
@@ -492,7 +520,73 @@ export async function buildPush(db, uid, body) {
       };
     }
 
+    case "flat_proof": {
+      const { estateId, levyId, groupId } = body;
+      if (!isId(estateId) || !isId(levyId) || !isId(groupId)) throw new HttpError(400, "Bad payment reference");
+      const levyPath = `estates/${estateId}/flatLevies/${levyId}`;
+      const [estate, levy, proof, payer] = await Promise.all([
+        db.get(`estates/${estateId}`), db.get(levyPath), db.get(`${levyPath}/proofs/${groupId}`), db.get(`users/${uid}`),
+      ]);
+      if (!estate || !levy || !proof) throw new HttpError(404, "No such payment");
+      if (proof.payerId !== uid || payer?.estateId !== estateId) throw new HttpError(403, "Not your payment");
+      if (!(Date.now() - Number(proof.submittedAt || 0) < FLAT_PUSH_MAX_AGE_MS)) throw new HttpError(410, "Too old to push");
+      if (!estate.treasurerId || estate.treasurerId === uid) return null;
+      const building = await db.get(`estates/${estateId}/buildings/${proof.buildingId}`);
+      const flats = (proof.flats || []).length;
+      const title = `${displayName(payer)} sent proof of payment`;
+      const message = `${levy.title || "Levy"} · ${flats === 1 ? "1 flat" : `${flats} flats`} in ${building?.name || "their building"}` +
+        ` · ${naira(proof.amount)}. Check it and confirm.`;
+      return {
+        key: `flat_proof_${groupId}`,
+        recipients: [estate.treasurerId],
+        payload: { title, body: message, deepLink: `localhive://levy/${levyId}`, tag: `levy-${levyId}` },
+        inbox: { type: "PAYMENT_SUBMITTED", title, message, estateId, senderId: uid, levyId },
+      };
+    }
+
+    case "flat_reviewed": {
+      const { estateId, levyId, groupId } = body;
+      if (!isId(estateId) || !isId(levyId) || !isId(groupId)) throw new HttpError(400, "Bad payment reference");
+      const levyPath = `estates/${estateId}/flatLevies/${levyId}`;
+      const [estate, levy, flats] = await Promise.all([
+        db.get(`estates/${estateId}`), db.get(levyPath),
+        db.query("flats", [["groupId", "EQUAL", groupId]], { parent: levyPath }),
+      ]);
+      if (!estate || !levy || flats.length === 0) throw new HttpError(404, "No such payment");
+      if (!estate.treasurerId || estate.treasurerId !== uid) throw new HttpError(403, "Only the treasurer reviews payments");
+      const status = flats[0].data.status;
+      const reviewedAt = Math.max(...flats.map((f) => Number(f.data.reviewedAt || 0)));
+      if (!["paid", "rejected"].includes(status) || flats.some((f) => f.data.status !== status)) {
+        throw new HttpError(409, "The payment isn't in that state");
+      }
+      if (!(Date.now() - reviewedAt < FLAT_PUSH_MAX_AGE_MS)) throw new HttpError(410, "Too old to push");
+      const payerId = flats[0].data.payerId;
+      // Everyone living in a flat this covers hears it's paid; a turned-down proof only goes back to whoever sent it.
+      const covered = new Set(flats.map((f) => `${f.data.buildingId}_${f.data.flat}`));
+      const [members, residents] = await Promise.all([
+        db.idsWhere("users", "estateId", estateId),
+        db.query("residents", [], { parent: `estates/${estateId}` }),
+      ]);
+      const living = residents
+        .filter(({ data }) => covered.has(`${data.buildingId}_${data.flat}`))
+        .map(({ path }) => path.split("/").pop());
+      const candidates = status === "paid" ? [payerId, ...living] : [payerId];
+      const recipients = [...new Set(candidates)].filter((id) => isId(id) && id !== uid && members.includes(id));
+      const amount = naira(flats.reduce((sum, f) => sum + Number(f.data.amount || 0), 0));
+      const which = flatList(flats.map((f) => f.data));
+      const [title, message] = status === "paid"
+        ? ["Payment confirmed", `${amount} for ${levy.title || "the levy"} (${which}) has been received. The receipt is on the levy. Thank you!`]
+        : ["Proof of payment not accepted", `The treasurer couldn't confirm the payment for ${levy.title || "the levy"} (${which}). Please check and send it again.`];
+      return {
+        key: `flat_reviewed_${groupId}_${reviewedAt}`,
+        recipients,
+        payload: { title, body: message, deepLink: `localhive://levy/${levyId}`, tag: `levy-${levyId}` },
+        inbox: { type: status === "paid" ? "PAYMENT_CONFIRMED" : "PAYMENT_REJECTED", title, message, estateId, senderId: uid, levyId },
+      };
+    }
+
     case "levy_reminder": {
+      if (body.flat === true || body.flat === "true") return flatLevyReminder(db, uid, body);
       const { estateId, levyId } = body;
       if (!isId(estateId) || !isId(levyId)) throw new HttpError(400, "Bad levy reference");
       const [estate, levy] = await Promise.all([db.get(`estates/${estateId}`), db.get(`estates/${estateId}/levies/${levyId}`)]);
@@ -584,6 +678,53 @@ function isPassCode(value) {
 
 /** A bank change older than this is too stale to announce. */
 const BANK_CHANGE_MAX_AGE_MS = 60 * 60 * 1000;
+
+/** A flat payment sent or reviewed longer ago than this is too stale to push. */
+const FLAT_PUSH_MAX_AGE_MS = 60 * 60 * 1000;
+
+/** "No. 12 · Flats 1, 3" for flats in one building, the way receipts name them. */
+export function flatList(flats) {
+  const byBuilding = new Map();
+  for (const f of flats) {
+    const name = f.buildingName || "Building";
+    byBuilding.set(name, [...(byBuilding.get(name) || []), Number(f.flat)]);
+  }
+  return [...byBuilding.entries()]
+    .map(([name, numbers]) => {
+      const sorted = numbers.sort((a, b) => a - b);
+      return `${name} · ${sorted.length === 1 ? "Flat" : "Flats"} ${sorted.join(", ")}`;
+    })
+    .join("; ");
+}
+
+/**
+ * A reminder for a per-flat levy: to everyone living in a flat that hasn't paid, and to members
+ * who haven't said where they live yet. Once a day per levy, from the treasurer only.
+ */
+async function flatLevyReminder(db, uid, { estateId, levyId }) {
+  if (!isId(estateId) || !isId(levyId)) throw new HttpError(400, "Bad levy reference");
+  const levyPath = `estates/${estateId}/flatLevies/${levyId}`;
+  const [estate, levy] = await Promise.all([db.get(`estates/${estateId}`), db.get(levyPath)]);
+  if (!estate || !levy) throw new HttpError(404, "No such levy");
+  if (!estate.treasurerId || estate.treasurerId !== uid) throw new HttpError(403, "Only the treasurer can send reminders");
+  const [members, residents, flats] = await Promise.all([
+    db.idsWhere("users", "estateId", estateId),
+    db.query("residents", [], { parent: `estates/${estateId}` }),
+    db.query("flats", [], { parent: levyPath }),
+  ]);
+  const paid = new Set(flats.filter((f) => f.data.status === "paid").map((f) => f.path.split("/").pop()));
+  const home = new Map(residents.map(({ path, data }) => [path.split("/").pop(), `${data.buildingId}_${data.flat}`]));
+  return {
+    key: `levy_reminder_${levyId}_${new Date().toISOString().slice(0, 10)}`,
+    recipients: members.filter((id) => id !== uid && !(home.has(id) && paid.has(home.get(id)))),
+    payload: {
+      title: `Reminder: ${levy.title || "Estate levy"}`,
+      body: `${naira(levy.amount)} per flat is still due. Tap to pay, or to say which flat is yours.`,
+      deepLink: `localhive://levy/${levyId}`,
+      tag: `levy-${levyId}`,
+    },
+  };
+}
 
 /**
  * How many SOS alerts one person can raise in [EMERGENCY_WINDOW_MS]. Generous enough for a real
@@ -684,6 +825,95 @@ function notificationLink(note) {
   if ((note.type === "MENTION" || note.type === "COMMENT") && isId(note.postId)) return `localhive://post/${note.postId}`;
   if (String(note.type || "").startsWith("PAYMENT_") && isId(note.levyId)) return `localhive://levy/${note.levyId}`;
   return "localhive://notifications";
+}
+
+/** What a person is called in the app, read from their profile rather than from anything they sent. */
+function displayName(user, fallback = "A neighbour") {
+  const name = String(user?.displayName || user?.username || "").trim();
+  return name ? name.slice(0, 60) : fallback;
+}
+
+/** At most [max] characters, with an ellipsis when cut. */
+function excerpt(text, max = 140) {
+  const clean = String(text || "").trim();
+  return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+}
+
+/**
+ * A notice's title and message, written here from the documents behind it. Only an admin's reason
+ * for removing a post is taken as written, since it is the admin's own words to the author.
+ * Call only after [notificationAllowed] has passed.
+ */
+export async function noticeText(db, uid, note) {
+  const [estate, sender] = await Promise.all([db.get(`estates/${note.estateId}`), db.get(`users/${uid}`)]);
+  const estateName = estate?.name || "the estate";
+  const name = displayName(sender);
+  switch (note.type) {
+    case "JOIN_REQUEST":
+      return { title: "New join request", message: `${displayName(sender, "Someone")} wants to join ${estateName}` };
+    case "REQUEST_APPROVED":
+      return { title: "Request approved", message: `Your request to join ${estateName} has been approved` };
+    case "REQUEST_DENIED":
+      return { title: "Request denied", message: `Your request to join ${estateName} was denied` };
+    case "MEMBER_REMOVED":
+      return {
+        title: `Removed from ${estateName}`,
+        message: `An admin removed you from ${estateName}.`,
+      };
+    case "OWNERSHIP_TRANSFERRED":
+      return {
+        title: `You now own ${estateName}`,
+        message: `Ownership of ${estateName} was handed to you. You're an admin for as long as you stay.`,
+      };
+    case "POST_REMOVED":
+      return { title: "An admin removed your post", message: excerpt(note.message, 300) || "It no longer appears in the feed." };
+    case "MENTION": {
+      const source = note.commentId
+        ? await db.get(`posts/${note.postId}/comments/${note.commentId}`)
+        : await db.get(`posts/${note.postId}`);
+      return {
+        title: `${name} tagged you in a ${note.commentId ? "comment" : "post"}`,
+        message: excerpt(source?.content),
+      };
+    }
+    case "COMMENT": {
+      const [post, comment] = await Promise.all([
+        db.get(`posts/${note.postId}`),
+        db.get(`posts/${note.postId}/comments/${note.commentId}`),
+      ]);
+      const onTheirPost = post?.authorId === note.recipientId;
+      return {
+        title: onTheirPost ? `${name} commented on your post` : `${name} replied to your comment`,
+        message: excerpt(comment?.content),
+      };
+    }
+    case "PAYMENT_SUBMITTED":
+    case "PAYMENT_CONFIRMED":
+    case "PAYMENT_REJECTED": {
+      const payer = note.type === "PAYMENT_SUBMITTED" ? uid : note.recipientId;
+      const [levy, payment] = await Promise.all([
+        db.get(`estates/${note.estateId}/levies/${note.levyId}`),
+        db.get(`estates/${note.estateId}/levies/${note.levyId}/payments/${payer}`),
+      ]);
+      const levyTitle = levy?.title || "the levy";
+      const amount = naira(payment?.amount || levy?.amount);
+      if (note.type === "PAYMENT_SUBMITTED") {
+        return { title: `${name} sent proof of payment`, message: `${levyTitle} · ${amount}. Check it and confirm.` };
+      }
+      if (note.type === "PAYMENT_CONFIRMED") {
+        return {
+          title: "Payment confirmed",
+          message: `Your ${amount} for ${levyTitle} has been received. Your receipt is on the levy. Thank you!`,
+        };
+      }
+      return {
+        title: "Proof of payment not accepted",
+        message: `The treasurer couldn't confirm your payment for ${levyTitle}. Please check and send it again.`,
+      };
+    }
+    default:
+      return { title: "LocalHive", message: "" };
+  }
 }
 
 /**

@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.catch
 import com.eleazar.localhive.domain.model.SosStanding
+import com.eleazar.localhive.domain.model.RemovedMember
 import com.eleazar.localhive.domain.SosRepository
 
 data class EstateUiState(
@@ -30,6 +31,8 @@ data class EstateUiState(
     val requestedEstateIds: Set<String> = emptySet(),
     val pendingRequest: JoinRequest? = null,
     val pendingRequests: List<JoinRequest> = emptyList(),
+    /** People an admin removed, who need letting back in before they can rejoin. Admins only. */
+    val removed: List<RemovedMember> = emptyList(),
     val members: List<User> = emptyList(),
     val isApproved: Boolean = false,
     /** The estate's current invite code, for the admin panel; blank until loaded. */
@@ -179,7 +182,16 @@ class EstateViewModel(
                 _uiState.update { it.copy(pendingRequests = requests) }
             }
         }
+        viewModelScope.launch {
+            estateRepository.observeRemoved(estateId).collect { removed ->
+                _uiState.update { it.copy(removed = removed) }
+            }
+        }
     }
+
+    /** Lets someone an admin removed use an invite code or be approved again. */
+    fun letBackIn(estateId: String, member: RemovedMember) =
+        adminChange("${member.name.ifBlank { "They" }} can join again") { estateRepository.letBackIn(estateId, member.userId) }
 
     fun loadMembers(estateId: String) {
         viewModelScope.launch {

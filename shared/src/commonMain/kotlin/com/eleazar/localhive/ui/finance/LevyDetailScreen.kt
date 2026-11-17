@@ -30,7 +30,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.eleazar.localhive.domain.model.Building
+import com.eleazar.localhive.domain.model.FlatPayment
 import com.eleazar.localhive.domain.model.LevyPayment
+import com.eleazar.localhive.domain.model.flatSummary
 import com.eleazar.localhive.domain.model.PaymentStatus
 import com.eleazar.localhive.ui.components.Avatar
 import com.eleazar.localhive.ui.util.formatDate
@@ -53,12 +56,19 @@ fun LevyDetailScreen(
     onConfirm: (MemberPayment) -> Unit,
     onReject: (MemberPayment) -> Unit,
     onMarkPaid: (MemberPayment) -> Unit,
+    onUndoPayment: (MemberPayment, reason: String) -> Unit,
     onRemind: () -> Unit,
     onDelete: () -> Unit,
     onCopyAccount: (String) -> Unit,
     onShareReceipt: (text: String) -> Unit,
     onMessageShown: () -> Unit,
     onErrorShown: () -> Unit,
+    onToggleFlat: (Int) -> Unit = {},
+    onPickHome: (Building, Int) -> Unit = { _, _ -> },
+    onConfirmProof: (ProofToReview) -> Unit = {},
+    onRejectProof: (ProofToReview) -> Unit = {},
+    onRecordFlatCash: (FlatRow) -> Unit = {},
+    onUndoFlatPayment: (FlatPayment, reason: String) -> Unit = { _, _ -> },
 ) {
     val levy = uiState.levy
     val snackbar = remember { SnackbarHostState() }
@@ -66,8 +76,13 @@ fun LevyDetailScreen(
     var markingPaid by remember { mutableStateOf<MemberPayment?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
-    /** Whose receipt is open, with the name it's made out to. */
-    var receipt by remember { mutableStateOf<Pair<LevyPayment, String>?>(null) }
+    /** The open receipt, and for the treasurer, how to take the payment back. */
+    var receipt by remember { mutableStateOf<Pair<ReceiptDetails, (() -> Unit)?>?>(null) }
+    /** A confirmed payment the treasurer is taking back: who it's for, and what to do with the reason. */
+    var undoing by remember { mutableStateOf<Pair<String, (String) -> Unit>?>(null) }
+    var reviewingProof by remember { mutableStateOf<ProofToReview?>(null) }
+    var cashFor by remember { mutableStateOf<FlatRow?>(null) }
+    var pickingHome by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.message) {
         uiState.message?.let { snackbar.showSnackbar(it); onMessageShown() }
@@ -109,17 +124,62 @@ fun LevyDetailScreen(
         )
     }
 
-    receipt?.let { (payment, payer) ->
-        if (levy != null) {
-            ReceiptDialog(
-                estateName = uiState.estateName,
-                levy = levy,
-                payment = payment,
-                payerName = payer,
-                onShare = onShareReceipt,
-                onDismiss = { receipt = null }
-            )
-        }
+    receipt?.let { (details, undo) ->
+        ReceiptDialog(
+            estateName = uiState.estateName,
+            receipt = details,
+            onShare = onShareReceipt,
+            onDismiss = { receipt = null },
+            onTakeBack = undo?.let { { receipt = null; it() } }
+        )
+    }
+
+    undoing?.let { (who, onUndo) ->
+        TakeBackDialog(who = who, onConfirm = { reason -> onUndo(reason); undoing = null }, onDismiss = { undoing = null })
+    }
+
+    reviewingProof?.let { review ->
+        AlertDialog(
+            onDismissRequest = { reviewingProof = null },
+            title = { Text("Proof from ${review.payerName}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "${flatSummary(review.payments)} · ${formatNaira(review.total)}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    review.proof?.proofUrl?.takeIf { it.isNotBlank() }?.let { ProofImage(url = it, contentDescription = "Proof of payment") }
+                    Text("Check the amount and name match your account before confirming.", fontSize = 14.sp)
+                }
+            },
+            confirmButton = { Button(onClick = { onConfirmProof(review); reviewingProof = null }) { Text("Confirm paid") } },
+            dismissButton = {
+                TextButton(
+                    onClick = { onRejectProof(review); reviewingProof = null },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text("Not accepted") }
+            }
+        )
+    }
+
+    cashFor?.let { row ->
+        AlertDialog(
+            onDismissRequest = { cashFor = null },
+            title = { Text("Mark ${row.building.name}, flat ${row.flat} as paid?") },
+            text = { Text("Use this for cash, or a transfer you've already seen. Everyone living there will be told it's confirmed.") },
+            confirmButton = { Button(onClick = { onRecordFlatCash(row); cashFor = null }) { Text("Mark paid") } },
+            dismissButton = { TextButton(onClick = { cashFor = null }) { Text("Cancel") } }
+        )
+    }
+
+    if (pickingHome) {
+        HomePickerDialog(
+            buildings = uiState.buildings,
+            current = uiState.myResidence,
+            title = "Where do you live?",
+            onPick = { building, flat -> onPickHome(building, flat); pickingHome = false },
+            onDismiss = { pickingHome = false }
+        )
     }
 
     if (confirmDelete && levy != null) {
@@ -147,7 +207,8 @@ fun LevyDetailScreen(
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
                 actions = {
-                    if (uiState.isTreasurer && levy != null) {
+                    // Once someone has paid, the levy stays on the books.
+                    if (uiState.isTreasurer && levy != null && !levy.hasPayments) {
                         Box {
                             IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
                             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
@@ -177,7 +238,12 @@ fun LevyDetailScreen(
                 item(key = "summary") {
                     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                         Text(levy.title, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-                        Text(formatNaira(levy.amount), fontSize = 30.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+                        Text(
+                            if (levy.perFlat) "${formatNaira(levy.amount)} per flat" else formatNaira(levy.amount),
+                            fontSize = 30.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
                         if (levy.dueDate > 0) {
                             Text(
                                 "Due ${formatDate(levy.dueDate, "EEEE, d MMMM yyyy")}",
@@ -191,27 +257,64 @@ fun LevyDetailScreen(
                     }
                 }
 
-                if (!uiState.isTreasurer) {
-                    item(key = "mine") {
+                val flatReceiptFor = { payment: FlatPayment ->
+                    val group = uiState.flatPayments.filter { it.groupId == payment.groupId }.ifEmpty { listOf(payment) }
+                    val undo = if (uiState.isTreasurer) ({ undoing = flatSummary(group) to { reason: String -> onUndoFlatPayment(payment, reason) } }) else null
+                    receipt = flatReceipt(levy, group) to undo
+                }
+                when {
+                    levy.perFlat && uiState.isTreasurer -> {
+                        item(key = "progress") { FlatTreasurerSummary(uiState, onRemind) }
+                        if (uiState.proofsToReview.isNotEmpty()) {
+                            item(key = "review") { ProofsToReview(uiState.proofsToReview, onReview = { reviewingProof = it }) }
+                        }
+                        item(key = "buildings") {
+                            BuildingPaymentList(
+                                uiState,
+                                onMarkPaid = { cashFor = it },
+                                onViewReceipt = flatReceiptFor,
+                                onReview = { row -> uiState.proofsToReview.firstOrNull { r -> r.groupId == row.payment?.groupId }?.let { reviewingProof = it } }
+                            )
+                        }
+                    }
+                    levy.perFlat -> item(key = "mine") {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(top = 12.dp))
+                        MyFlatPayment(
+                            uiState,
+                            onPickHome = { pickingHome = true },
+                            onToggleFlat = onToggleFlat,
+                            onSendProof = onSendProof,
+                            onCopyAccount = onCopyAccount,
+                            onViewReceipt = flatReceiptFor
+                        )
+                    }
+                    !uiState.isTreasurer -> item(key = "mine") {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(top = 12.dp))
                         MyPayment(
                             uiState,
                             onSendProof,
                             onCopyAccount,
-                            onViewReceipt = { payment -> receipt = payment to payment.userName.ifBlank { "You" } }
+                            onViewReceipt = { payment -> receipt = memberReceipt(levy, payment, payment.userName.ifBlank { "You" }) to null }
                         )
                     }
-                } else {
-                    item(key = "progress") {
-                        TreasurerSummary(uiState, onRemind)
-                    }
-                    item(key = "members") {
-                        MemberFilterRow(
-                            uiState,
-                            onReview = { reviewing = it },
-                            onMarkPaid = { markingPaid = it },
-                            onViewReceipt = { member -> member.payment?.let { receipt = it to member.name } }
-                        )
+                    else -> {
+                        item(key = "progress") {
+                            TreasurerSummary(uiState, onRemind)
+                        }
+                        item(key = "members") {
+                            MemberFilterRow(
+                                uiState,
+                                onReview = { reviewing = it },
+                                onMarkPaid = { markingPaid = it },
+                                onViewReceipt = { member ->
+                                    member.payment?.let { payment ->
+                                        receipt = memberReceipt(levy, payment, member.name) to {
+                                            undoing = member.name to { reason: String -> onUndoPayment(member, reason) }
+                                        }
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }

@@ -48,3 +48,10 @@ test("nothing is sent before they're in the estate", async () => {
 test("unknown types are refused", async () => {
   await assert.rejects(buildWelcomeEmail(db, "admin", { type: "spam" }), /Unknown email type/);
 });
+
+test("a profile without an email is welcomed at its sign-in address", async () => {
+  const db = { get: async (path) => (path === "users/new" ? { displayName: "Ngozi Eze" } : null) };
+  const email = await buildWelcomeEmail(db, "new", { type: "account" }, async (id) => (id === "new" ? "ngozi@example.com" : null));
+  assert.equal(email.to, "ngozi@example.com");
+  assert.equal(await buildWelcomeEmail(db, "new", { type: "account" }), null);
+});

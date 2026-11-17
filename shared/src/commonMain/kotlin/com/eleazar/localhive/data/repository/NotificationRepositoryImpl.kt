@@ -69,13 +69,17 @@ class NotificationRepositoryImpl(
     }
 
     private fun mapDocToNotification(doc: DocumentSnapshot): AppNotification? = runCatching {
+        val type = runCatching { NotificationType.valueOf(doc.string("type").orEmpty()) }
+            .getOrDefault(NotificationType.JOIN_REQUEST)
+        // A neighbour writes these, so until the Worker has checked one and put its own words
+        // in (verified), it reads as plain "what happened", never the sender's text.
+        val trusted = doc.boolean("verified") == true || type !in NEIGHBOUR_RAISED
         AppNotification(
             id = doc.id,
             recipientId = doc.string("recipientId").orEmpty(),
-            type = runCatching { NotificationType.valueOf(doc.string("type").orEmpty()) }
-                .getOrDefault(NotificationType.JOIN_REQUEST),
-            title = doc.string("title").orEmpty(),
-            message = doc.string("message").orEmpty(),
+            type = type,
+            title = if (trusted) doc.string("title").orEmpty() else uncheckedTitle(type),
+            message = if (trusted) doc.string("message").orEmpty() else "",
             estateId = doc.string("estateId"),
             relatedUserId = doc.string("relatedUserId"),
             postId = doc.string("postId"),
@@ -85,4 +89,22 @@ class NotificationRepositoryImpl(
             isRead = doc.boolean("isRead") ?: false
         )
     }.getOrNull()
+
+    private companion object {
+        /** Notices any member can raise, as opposed to an admin or the treasurer. */
+        val NEIGHBOUR_RAISED = setOf(
+            NotificationType.MENTION,
+            NotificationType.COMMENT,
+            NotificationType.JOIN_REQUEST,
+            NotificationType.PAYMENT_SUBMITTED
+        )
+
+        fun uncheckedTitle(type: NotificationType): String = when (type) {
+            NotificationType.MENTION -> "A neighbour tagged you"
+            NotificationType.COMMENT -> "New comment"
+            NotificationType.JOIN_REQUEST -> "New join request"
+            NotificationType.PAYMENT_SUBMITTED -> "Proof of payment to check"
+            else -> "LocalHive"
+        }
+    }
 }

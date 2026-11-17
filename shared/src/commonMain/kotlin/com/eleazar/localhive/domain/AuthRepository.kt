@@ -13,6 +13,11 @@ interface AuthRepository {
      */
     suspend fun deleteAccount(password: String): Result<Unit>
     fun getCurrentUserId(): String?
+    /**
+     * The signed-in user's email, from their sign-in account. It isn't kept on the profile
+     * document, which neighbours can read.
+     */
+    fun getCurrentUserEmail(): String?
     suspend fun getUserProfile(userId: String): Result<User>
     suspend fun saveUserProfile(user: User): Result<Unit>
 }

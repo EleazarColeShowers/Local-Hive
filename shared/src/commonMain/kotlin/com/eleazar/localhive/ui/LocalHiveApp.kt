@@ -9,7 +9,14 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.remember
+import com.eleazar.localhive.data.platform.isIos
+import com.eleazar.localhive.domain.AppConfig
+import com.eleazar.localhive.domain.AppConfigRepository
 import com.eleazar.localhive.domain.AppSettingsRepository
+import com.eleazar.localhive.domain.isOutdated
+import com.eleazar.localhive.ui.platform.rememberPlatformActions
+import com.eleazar.localhive.ui.update.UpdateRequiredScreen
 import com.eleazar.localhive.domain.ThemeMode
 import com.eleazar.localhive.ui.navigation.AppLocalHiveScreens
 import com.eleazar.localhive.ui.navigation.LocalHiveNavGraph
@@ -39,6 +46,10 @@ fun LocalHiveApp(
     }
     SideEffect { onDarkThemeChange(darkTheme) }
 
+    val configRepository: AppConfigRepository = koinInject()
+    val config by remember(configRepository) { configRepository.observeConfig() }.collectAsStateWithLifecycle(AppConfig())
+    val installed = rememberPlatformActions().appVersion
+
     LocalHiveTheme(darkTheme = darkTheme) {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -52,5 +63,12 @@ fun LocalHiveApp(
             )
         }
         overlay()
+        // Over everything, once the estate's data has moved on past what this version understands.
+        if (isOutdated(installed, config.minVersion)) {
+            val storeUrl = if (isIos) config.iosUrl else config.androidUrl.ifBlank { PLAY_STORE_URL }
+            UpdateRequiredScreen(installed = installed, storeUrl = storeUrl)
+        }
     }
 }
+
+private const val PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.eleazar.localhive"
