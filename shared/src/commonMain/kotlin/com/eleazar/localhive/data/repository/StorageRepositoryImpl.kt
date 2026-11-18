@@ -6,6 +6,7 @@ import com.eleazar.localhive.data.remote.UploadSignature
 import com.eleazar.localhive.data.remote.string
 import com.eleazar.localhive.domain.StorageRepository
 import com.eleazar.localhive.domain.UploadedVideo
+import com.eleazar.localhive.domain.VideoUploadStage
 import io.ktor.client.plugins.onUpload
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.forms.ChannelProvider
@@ -23,9 +24,25 @@ import kotlinx.coroutines.withContext
 
 /**
  * Cloudinary's free plan only resizes and re-encodes videos up to 40 MB on the fly, which is
- * what makes them stream as a light MP4. That's about two minutes of 1080p phone video.
+ * what makes them stream as a light MP4. Videos are shrunk on the phone first (see
+ * [MediaReader.shrinkVideo]), which fits about three and a half minutes in that.
  */
 private const val MAX_VIDEO_BYTES = 40L * 1024 * 1024
+
+/** The longest video that can be shared, with some room under [MAX_VIDEO_BYTES] once shrunk. */
+private const val MAX_VIDEO_MINUTES = 3
+
+/**
+ * The video bitrate to shrink a video of [durationMillis] to: as sharp as 2 Mbit/s for short
+ * clips, and lower for long ones so they still fit in [MAX_VIDEO_BYTES] with room to spare.
+ */
+internal fun videoBitrateFor(durationMillis: Long): Int {
+    if (durationMillis <= 0) return 1_200_000
+    val seconds = durationMillis / 1000.0
+    // 85% of the limit, since encoders overshoot a little, less the audio (96 kbit/s, plus headroom).
+    val fits = MAX_VIDEO_BYTES * 0.85 * 8 / seconds - 128_000
+    return fits.toInt().coerceIn(600_000, 2_000_000)
+}
 
 /**
  * Photos live on Cloudinary's free plan (Firebase Storage needs the paid Blaze plan).
@@ -47,45 +64,63 @@ class StorageRepositoryImpl(
     override suspend fun uploadReceipt(userId: String, image: String): Result<String> =
         upload(kind = "receipt", image = image, maxSide = 2000, delivery = "c_limit,w_1600,f_auto,q_auto")
 
-    override suspend fun uploadPostVideo(userId: String, video: String, onProgress: (Float) -> Unit): Result<UploadedVideo> =
-        withContext(Dispatchers.IO) {
+    override suspend fun uploadPostVideo(
+        userId: String,
+        video: String,
+        onProgress: (VideoUploadStage, Float) -> Unit
+    ): Result<UploadedVideo> = withContext(Dispatchers.IO) {
+        var copy: String? = null
+        try {
             runCatching {
                 if (!api.isConfigured) error("Video uploads aren't set up yet")
-                val size = media.sizeOf(video)
-                if (size > MAX_VIDEO_BYTES) {
-                    error("That video is too long to share. Keep it under ${MAX_VIDEO_BYTES / (1024 * 1024)} MB (about two minutes).")
+                val duration = media.videoDurationMillis(video)
+                if (duration > MAX_VIDEO_MINUTES * 60_000L) {
+                    error("That video is too long to share. Keep it under $MAX_VIDEO_MINUTES minutes.")
                 }
-                val type = media.mimeTypeOf(video) ?: "video/mp4"
-                val signed = api.uploadSignature("video")
+                onProgress(VideoUploadStage.PREPARING, 0f)
+                copy = media.shrinkVideo(video, videoBitrateFor(duration)) { onProgress(VideoUploadStage.PREPARING, it) }
+                uploadVideoFile(copy ?: video) { onProgress(VideoUploadStage.UPLOADING, it) }
+            }
+        } finally {
+            copy?.let { runCatching { media.deleteCopy(it) } }
+        }
+    }
 
-                val response = api.http.submitFormWithBinaryData(
-                    url = "https://api.cloudinary.com/v1_1/${signed.cloudName}/video/upload",
-                    formData = formData {
-                        // Streamed from disk rather than read into memory: videos run to tens of megabytes.
-                        append(
-                            "file",
-                            ChannelProvider(size.takeIf { it > 0 }) { media.open(video) },
-                            fileHeaders("video", type)
-                        )
-                        appendSignature(signed)
-                    }
-                ) {
-                    // Cloudinary only answers once it has stored the whole video, which can take a while.
-                    timeout { socketTimeoutMillis = 2 * 60_000 }
-                    onUpload { sent, total ->
-                        val length = total ?: size
-                        if (length > 0) onProgress((sent.toFloat() / length).coerceAtMost(1f))
-                    }
-                }
-                // Without its extension, so the URL can ask Cloudinary for whichever format it needs.
-                val base = secureUrl(response).substringBeforeLast('.')
-                UploadedVideo(
-                    // Re-encoded as a phone-sized MP4, which every Android and iOS player can stream.
-                    url = base.replaceFirst("/video/upload/", "/video/upload/c_limit,w_720,q_auto/") + ".mp4",
-                    thumbnailUrl = base.replaceFirst("/video/upload/", "/video/upload/so_0,c_limit,w_1280,q_auto/") + ".jpg"
+    private suspend fun uploadVideoFile(video: String, onProgress: (Float) -> Unit): UploadedVideo {
+        val size = media.sizeOf(video)
+        if (size > MAX_VIDEO_BYTES) {
+            error("That video is too big to share. Try a shorter one, under $MAX_VIDEO_MINUTES minutes.")
+        }
+        val type = media.mimeTypeOf(video) ?: "video/mp4"
+        val signed = api.uploadSignature("video")
+
+        val response = api.http.submitFormWithBinaryData(
+            url = "https://api.cloudinary.com/v1_1/${signed.cloudName}/video/upload",
+            formData = formData {
+                // Streamed from disk rather than read into memory: videos run to tens of megabytes.
+                append(
+                    "file",
+                    ChannelProvider(size.takeIf { it > 0 }) { media.open(video) },
+                    fileHeaders("video", type)
                 )
+                appendSignature(signed)
+            }
+        ) {
+            // Cloudinary only answers once it has stored the whole video, which can take a while.
+            timeout { socketTimeoutMillis = 2 * 60_000 }
+            onUpload { sent, total ->
+                val length = total ?: size
+                if (length > 0) onProgress((sent.toFloat() / length).coerceAtMost(1f))
             }
         }
+        // Without its extension, so the URL can ask Cloudinary for whichever format it needs.
+        val base = secureUrl(response).substringBeforeLast('.')
+        return UploadedVideo(
+            // Re-encoded as a phone-sized MP4, which every Android and iOS player can stream.
+            url = base.replaceFirst("/video/upload/", "/video/upload/c_limit,w_720,q_auto/") + ".mp4",
+            thumbnailUrl = base.replaceFirst("/video/upload/", "/video/upload/so_0,c_limit,w_1280,q_auto/") + ".jpg"
+        )
+    }
 
     /**
      * @param delivery Cloudinary transformation baked into the returned URL, so every screen

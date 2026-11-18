@@ -41,7 +41,27 @@ interface MediaReader {
 
     /** The file's bytes, streamed rather than read into memory where the platform allows. */
     fun open(uri: String): ByteReadChannel
+
+    /** A video's length in milliseconds, or -1 when it can't be told. */
+    fun videoDurationMillis(uri: String): Long
+
+    /**
+     * Re-encodes a video as a smaller MP4 for uploading: 720p on its short side at about
+     * [bitrate] bits per second, reporting progress from 0 to 1. Phone cameras record at 10–100
+     * Mbit/s, so this usually cuts a video to a tenth of its size or less and saves mobile data.
+     *
+     * Returns the copy's URI, or null when the original is already about that small or the phone
+     * couldn't re-encode it; the original is uploaded instead then. The copy is the caller's to
+     * [deleteCopy] once done with it.
+     */
+    suspend fun shrinkVideo(uri: String, bitrate: Int, onProgress: (Float) -> Unit): String?
+
+    /** Removes a copy made by [shrinkVideo]. */
+    fun deleteCopy(uri: String)
 }
+
+/** Short side of an uploaded video, in pixels. Cloudinary plays them at 720 wide anyway. */
+const val VIDEO_UPLOAD_SHORT_SIDE = 720
 
 /** True on iOS, for the few things that differ by store, like where to get an update. */
 expect val isIos: Boolean

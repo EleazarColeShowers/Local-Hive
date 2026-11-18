@@ -82,6 +82,17 @@ class IosMediaReader : MediaReader {
         return ByteReadChannel(data.toByteArray())
     }
 
+    override fun videoDurationMillis(uri: String): Long = iosVideoDurationMillis(urlOf(uri))
+
+    override suspend fun shrinkVideo(uri: String, bitrate: Int, onProgress: (Float) -> Unit): String? =
+        withContext(Dispatchers.Default) { iosShrinkVideo(urlOf(uri), bitrate, onProgress) }
+
+    override fun deleteCopy(uri: String) {
+        NSFileManager.defaultManager.removeItemAtPath(pathOf(uri), error = null)
+    }
+
+    private fun urlOf(uri: String): NSURL = NSURL.fileURLWithPath(pathOf(uri))
+
     private fun pathOf(uri: String): String =
         if (uri.startsWith("file:")) NSURL.URLWithString(uri)?.path ?: uri.removePrefix("file://") else uri
 }

@@ -160,6 +160,7 @@ fun CreatePostScreen(
                             val progress = uiState.uploadProgress
                             Text(
                                 when {
+                                    progress != null && uiState.preparingVideo -> "Preparing ${(progress * 100).toInt()}%"
                                     progress != null -> "Uploading ${(progress * 100).toInt()}%"
                                     editing -> "Saving"
                                     else -> "Posting"

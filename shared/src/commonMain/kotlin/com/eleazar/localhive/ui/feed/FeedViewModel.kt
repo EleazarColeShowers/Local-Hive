@@ -9,6 +9,7 @@ import com.eleazar.localhive.domain.NotificationRepository
 import com.eleazar.localhive.domain.PostRepository
 import com.eleazar.localhive.domain.StorageRepository
 import com.eleazar.localhive.domain.UploadedVideo
+import com.eleazar.localhive.domain.VideoUploadStage
 import com.eleazar.localhive.domain.UserRepository
 import com.eleazar.localhive.domain.model.AppNotification
 import com.eleazar.localhive.domain.model.Comment
@@ -238,18 +239,20 @@ class FeedViewModel(
         val estateId = state.estateId ?: return
         val userId = state.currentUserId ?: return
         viewModelScope.launch {
-            _uiState.update { it.copy(isPosting = true, error = null, uploadProgress = if (isVideo) 0f else null) }
+            _uiState.update { it.copy(isPosting = true, error = null, uploadProgress = if (isVideo) 0f else null, preparingVideo = isVideo) }
 
             fun fail(e: Throwable, fallback: String) {
-                _uiState.update { it.copy(isPosting = false, uploadProgress = null, error = e.friendlyMessage(fallback)) }
+                _uiState.update { it.copy(isPosting = false, uploadProgress = null, preparingVideo = false, error = e.friendlyMessage(fallback)) }
             }
 
             // Upload first: a post that referenced a failed upload would render a broken image.
             var imageUrl: String? = null
             var video: UploadedVideo? = null
             if (mediaUri != null && isVideo) {
-                video = storageRepository.uploadPostVideo(userId, mediaUri) { progress ->
-                    _uiState.update { it.copy(uploadProgress = progress) }
+                video = storageRepository.uploadPostVideo(userId, mediaUri) { stage, progress ->
+                    _uiState.update {
+                        it.copy(uploadProgress = progress, preparingVideo = stage == VideoUploadStage.PREPARING)
+                    }
                 }.getOrElse { e -> fail(e, "Couldn't upload the video"); return@launch }
             } else if (mediaUri != null) {
                 imageUrl = storageRepository.uploadPostImage(userId, mediaUri)
@@ -274,7 +277,7 @@ class FeedViewModel(
             postRepository.createPost(post)
                 .onSuccess { postId ->
                     notifyMentioned(mentions.keys, estateId, postId, commentId = null, content)
-                    _uiState.update { it.copy(isPosting = false, uploadProgress = null, postCreated = true) }
+                    _uiState.update { it.copy(isPosting = false, uploadProgress = null, preparingVideo = false, postCreated = true) }
                 }
                 .onFailure { e -> fail(e, "Failed to create post") }
         }

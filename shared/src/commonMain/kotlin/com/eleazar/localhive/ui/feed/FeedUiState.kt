@@ -33,8 +33,10 @@ data class FeedUiState(
     val selectedPost: Post? = null,
     val comments: List<Comment> = emptyList(),
     val isPosting: Boolean = false,
-    /** 0–1 while a video is uploading; null when there's no upload to report. */
+    /** 0–1 while a video is being prepared or uploaded; null when there's no upload to report. */
     val uploadProgress: Float? = null,
+    /** The video is being shrunk on the phone, before its upload starts. */
+    val preparingVideo: Boolean = false,
     /** A post was published or an edit saved, so the composer can close. */
     val postCreated: Boolean = false,
     /** An SOS was posted to the feed but its push was refused; why, to tell the sender. */

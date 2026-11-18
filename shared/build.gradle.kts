@@ -58,6 +58,9 @@ kotlin {
             // Video playback for posts.
             implementation("androidx.media3:media3-exoplayer:1.4.1")
             implementation("androidx.media3:media3-ui:1.4.1")
+            // Shrinks videos on the phone before they upload.
+            implementation("androidx.media3:media3-transformer:1.4.1")
+            implementation("androidx.media3:media3-effect:1.4.1")
             // Photo picker and reading what it returns.
             implementation(libs.androidx.activity.compose)
             implementation("androidx.exifinterface:exifinterface:1.3.7")
