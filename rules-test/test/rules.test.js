@@ -322,3 +322,26 @@ test("approving a removed member lets them back in (1.07), and 1.06's approval s
   old.update(doc(db, "estates/E1"), { memberCount: increment(1) });
   await assertSucceeds(old.commit());
 });
+
+test("the treasurer can post an announcement; an ordinary member can't", async () => {
+  const post = (author) => ({ authorId: author, estateId: "E1", category: "announcement", content: "Dues", createdAt: Date.now() });
+  await assertSucceeds(setDoc(doc(as("treasurer"), "posts/a1"), post("treasurer")));
+  await assertSucceeds(setDoc(doc(as("admin"), "posts/a2"), post("admin")));
+  await assertFails(setDoc(doc(as("ada"), "posts/a3"), post("ada")));
+});
+
+test("a guard sees the estate's emergencies, and only those, and can say they're on the way", async () => {
+  await env.withSecurityRulesDisabled((ctx) =>
+    setDoc(doc(ctx.firestore(), "estates/E1/guards/stranger"), { userId: "stranger", name: "Musa", code: "X", addedAt: 0 }));
+  const guard = as("stranger");
+  await assertSucceeds(getDoc(doc(guard, "posts/sos1")));
+  await assertSucceeds(getDocs(query(collection(guard, "posts"),
+    where("estateId", "==", "E1"), where("category", "==", "emergency"))));
+  await assertFails(getDoc(doc(guard, "posts/p1")));
+  await assertFails(getDoc(doc(guard, "posts/sec1")));
+  await assertFails(getDocs(query(collection(guard, "posts"), where("estateId", "==", "E1"))));
+  await assertSucceeds(updateDoc(doc(guard, "posts/sos1"), { "responders.stranger": "Musa" }));
+  await assertFails(updateDoc(doc(guard, "posts/sos1"), { "responders.ada": "Ada" }));
+  // Not a guard there: still nothing.
+  await assertFails(getDoc(doc(as("kicked"), "posts/sos1")));
+});

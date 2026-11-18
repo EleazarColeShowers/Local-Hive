@@ -1,5 +1,8 @@
 package com.eleazar.localhive.ui.feed
 
+import kotlinx.coroutines.delay
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.foundation.text.KeyboardOptions
@@ -74,6 +77,11 @@ fun CreatePostScreen(
     initialCategoryKey: String? = null,
     initialLocation: String = "",
     initialMentions: Map<String, String> = emptyMap(),
+    /** The text came back from an unfinished post, so say so. */
+    restoredDraft: Boolean = false,
+    /** Saves the unfinished post as it's written; null where there's nothing to keep, as when editing. */
+    onDraftChanged: ((text: String, categoryKey: String?, location: String) -> Unit)? = null,
+    onDiscardDraft: () -> Unit = {},
 ) {
     var field by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         val start = initialContent.take(MAX_POST_LENGTH)
@@ -97,13 +105,39 @@ fun CreatePostScreen(
 
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
+    // Saved a moment after typing stops, not on every key.
+    LaunchedEffect(content, categoryKey, location) {
+        val save = onDraftChanged ?: return@LaunchedEffect
+        delay(400)
+        save(content, categoryKey, location)
+    }
+    var askKeepDraft by remember { mutableStateOf(false) }
+    val close = {
+        if (onDraftChanged != null && content.isNotBlank()) askKeepDraft = true else onNavigateBack()
+    }
+    if (askKeepDraft) {
+        AlertDialog(
+            onDismissRequest = { askKeepDraft = false },
+            title = { Text("Keep this post for later?") },
+            text = { Text("It'll be here the next time you tap Post. Photos and videos aren't kept.") },
+            confirmButton = {
+                TextButton(onClick = { askKeepDraft = false; onNavigateBack() }) { Text("Keep draft") }
+            },
+            dismissButton = {
+                TextButton(onClick = { askKeepDraft = false; onDiscardDraft(); onNavigateBack() }) {
+                    Text("Discard", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        )
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text(if (editing) "Edit post" else "New post", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack, enabled = !uiState.isPosting) {
+                    IconButton(onClick = close, enabled = !uiState.isPosting) {
                         Icon(Icons.Default.Close, contentDescription = "Discard")
                     }
                 },
@@ -184,6 +218,14 @@ fun CreatePostScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = ScreenGutter, vertical = 8.dp)
         ) {
+            if (restoredDraft) {
+                Text(
+                    "Picking up your unfinished post",
+                    fontSize = 13.sp,
+                    color = muted,
+                    modifier = Modifier.padding(bottom = 10.dp)
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Avatar(imageUrl = uiState.currentUserImageUrl, name = uiState.currentUserName, size = 44.dp)
                 Spacer(Modifier.width(12.dp))
@@ -216,8 +258,8 @@ fun CreatePostScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Announcements are offered to admins only; the rules refuse them from anyone else.
-                PostCategory.entries.filter { it.inComposer && (!it.adminOnly || uiState.isAdmin) }.forEach { option ->
+                // Announcements are offered to admins and the treasurer only; the rules refuse them from anyone else.
+                PostCategory.entries.filter { it.inComposer && (!it.adminOnly || uiState.canAnnounce) }.forEach { option ->
                     CategoryTag(
                         category = option,
                         selected = category == option,

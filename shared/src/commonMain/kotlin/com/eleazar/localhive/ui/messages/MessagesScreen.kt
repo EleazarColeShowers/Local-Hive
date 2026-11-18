@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.messages
 
+import com.eleazar.localhive.ui.components.RowSkeletons
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -99,9 +100,7 @@ fun MessagesScreen(
 
         PullToRefreshBox(isRefreshing = isRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
             when {
-                isLoading && chats.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = colors.hiveGreen)
-                }
+                isLoading && chats.isEmpty() -> RowSkeletons(Modifier.fillMaxSize())
                 error != null && chats.isEmpty() -> EmptyState(
                     icon = Icons.Outlined.CloudOff,
                     title = "Couldn't load your messages",

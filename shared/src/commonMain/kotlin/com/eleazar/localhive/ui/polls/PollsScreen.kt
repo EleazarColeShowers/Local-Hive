@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.polls
 
+import com.eleazar.localhive.ui.components.CardSkeletons
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -77,9 +78,7 @@ fun PollsScreen(
         }
     ) { padding ->
         when {
-            uiState.isLoading -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-            }
+            uiState.isLoading -> CardSkeletons(Modifier.fillMaxSize().padding(padding))
             uiState.polls.isEmpty() -> EmptyState(
                 icon = Icons.Outlined.HowToVote,
                 title = "No polls yet",

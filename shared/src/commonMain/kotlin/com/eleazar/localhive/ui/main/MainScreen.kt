@@ -4,6 +4,20 @@ package com.eleazar.localhive.ui.main
 // SHARED MODULE  (bare UI: no Hilt, no NavController, no R.* resources)
 // ───────────────────────────────────────────────────────────────────────────
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -71,6 +85,8 @@ fun MainScreen(
     onNotificationsClick: () -> Unit,
     onCreatePostClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** No working internet: a strip above the tabs says so, so nothing looks broken. */
+    offline: Boolean = false,
     content: @Composable (PaddingValues) -> Unit
 ) {
     val edgeToEdge = tabs.firstOrNull { it.route == currentRoute }?.edgeToEdge == true
@@ -84,6 +100,10 @@ fun MainScreen(
             ScaffoldDefaults.contentWindowInsets
         },
         bottomBar = {
+            Column {
+            AnimatedVisibility(visible = offline, enter = expandVertically(), exit = shrinkVertically()) {
+                OfflineStrip()
+            }
             MainBottomBar(
                 tabs = tabs,
                 currentRoute = currentRoute,
@@ -91,6 +111,7 @@ fun MainScreen(
                 onTabSelected = onTabSelected,
                 onCreatePostClick = onCreatePostClick
             )
+            }
         },
         content = { padding ->
             // Each tab's ScreenHeader shows the bell beside its title.
@@ -103,6 +124,31 @@ fun MainScreen(
             }
         }
     )
+}
+
+/** Quiet grey line above the tabs while there's no internet; what's on screen is the saved copy. */
+@Composable
+private fun OfflineStrip() {
+    Surface(color = MaterialTheme.colorScheme.inverseSurface, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                Icons.Outlined.CloudOff,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.inverseOnSurface,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "You're offline. Showing what's saved on your phone.",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.inverseOnSurface
+            )
+        }
+    }
 }
 
 @Composable
@@ -198,7 +244,8 @@ private fun RowScope.MainNavItem(
         colors = NavigationBarItemDefaults.colors(
             selectedIconColor = colors.accent,
             selectedTextColor = colors.accent,
-            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+            // No pill behind the chosen tab: its filled icon and colour are enough.
+            indicatorColor = Color.Transparent,
             unselectedIconColor = inactive,
             unselectedTextColor = inactive
         )

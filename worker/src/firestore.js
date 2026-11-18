@@ -124,6 +124,28 @@ export class Firestore {
   }
 
   /**
+   * Adds one to [field] on [path], creating the document if needed, and returns the new count.
+   * Atomic, so two requests at once can't both see the old number.
+   */
+  async bump(path, field) {
+    const response = await fetch(`${this.base}:commit`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify({
+        writes: [{
+          transform: {
+            document: `${this.root}/${path}`,
+            fieldTransforms: [{ fieldPath: quotePath(field), increment: { integerValue: "1" } }],
+          },
+        }],
+      }),
+    });
+    if (!response.ok) throw new Error(`Firestore bump ${path}: ${response.status} ${await response.text()}`);
+    const result = (await response.json()).writeResults?.[0]?.transformResults?.[0];
+    return Number(result?.integerValue ?? 0);
+  }
+
+  /**
    * Creates [path] only if it doesn't exist yet. Returns false when it already did — used as a
    * once-only marker so the same push can't be triggered twice.
    */

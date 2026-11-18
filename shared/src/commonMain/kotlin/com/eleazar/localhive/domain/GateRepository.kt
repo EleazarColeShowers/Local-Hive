@@ -3,6 +3,7 @@ package com.eleazar.localhive.domain
 import com.eleazar.localhive.domain.model.Guard
 import com.eleazar.localhive.domain.model.GuardInvite
 import com.eleazar.localhive.domain.model.GuardPost
+import com.eleazar.localhive.domain.model.Post
 import com.eleazar.localhive.domain.model.User
 import com.eleazar.localhive.domain.model.VisitorPass
 import kotlinx.coroutines.flow.Flow
@@ -59,6 +60,12 @@ interface GateRepository {
     suspend fun checkIn(estateId: String, code: String, guardId: String, guardName: String): Result<Unit>
 
     suspend fun checkOut(estateId: String, code: String, guardId: String, guardName: String): Result<Unit>
+
+    /** The estate's emergencies still going on, newest first. Guards see these and no other posts. */
+    fun observeLiveEmergencies(estateId: String): Flow<List<Post>>
+
+    /** The guard is on their way to an emergency; tells the person who raised it. */
+    suspend fun respondToEmergency(postId: String, guardId: String, guardName: String): Result<Unit>
 
     // ── Admins ──
 

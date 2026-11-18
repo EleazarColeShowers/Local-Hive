@@ -102,7 +102,7 @@ class FeedViewModel(
             estateRepository.observeEstate(estateId).collect { estate ->
                 if (estate != null) {
                     _uiState.update {
-                        it.copy(estateName = estate.name, memberCount = estate.memberCount, adminIds = estate.adminIds.toSet())
+                        it.copy(estateName = estate.name, memberCount = estate.memberCount, adminIds = estate.adminIds.toSet(), treasurerId = estate.treasurerId)
                     }
                 }
             }

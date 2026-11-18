@@ -8,6 +8,9 @@ import com.eleazar.localhive.domain.model.GuardInvite
 import com.eleazar.localhive.domain.model.GuardPost
 import com.eleazar.localhive.domain.model.PASS_CODE_LENGTH
 import com.eleazar.localhive.domain.model.PassStage
+import com.eleazar.localhive.domain.model.IncidentStatus
+import com.eleazar.localhive.domain.model.Post
+import com.eleazar.localhive.domain.model.PostCategory
 import com.eleazar.localhive.domain.model.User
 import com.eleazar.localhive.domain.model.VisitorPass
 import com.eleazar.localhive.domain.model.isValidCode
@@ -28,6 +31,9 @@ import kotlinx.coroutines.flow.map
 
 /** How long an admin's guard code works for. */
 private const val GUARD_CODE_LIFETIME_MILLIS = 24 * 60 * 60 * 1000L
+
+/** An emergency nobody marks resolved drops off the gate after this, as it does off the feed. */
+private const val EMERGENCY_WINDOW_MILLIS = 24 * 60 * 60 * 1000L
 
 /** Codes are random, so a clash with one already taken is rare; a few tries is plenty. */
 private const val CODE_ATTEMPTS = 4
@@ -194,6 +200,27 @@ class GateRepositoryImpl(
             )
             api.notifyInBackground("type" to "visitor_left", "estateId" to estateId, "code" to code)
         }
+
+    override fun observeLiveEmergencies(estateId: String): Flow<List<Post>> =
+        // Both filters are needed: the rules only let a guard read a post that is an emergency.
+        firestore.collection("posts")
+            .where { "estateId" equalTo estateId }
+            .where { "category" equalTo PostCategory.EMERGENCY.key }
+            .snapshots
+            .map { snapshot ->
+                val now = nowMillis()
+                snapshot.documents.map { it.toPost() }
+                    .filter {
+                        it.incidentStatus != IncidentStatus.RESOLVED.key && !it.falseAlarm
+                            && now - it.createdAt < EMERGENCY_WINDOW_MILLIS
+                    }
+                    .sortedByDescending { it.createdAt }
+            }
+
+    override suspend fun respondToEmergency(postId: String, guardId: String, guardName: String): Result<Unit> = runCatching {
+        firestore.collection("posts").document(postId).update("responders.$guardId" to guardName)
+        api.notifyInBackground("type" to "sos_responding", "postId" to postId)
+    }
 
     // ── Admins ──
 

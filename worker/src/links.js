@@ -24,7 +24,7 @@ export function publicResponse(request, env) {
   if (path === "/child-safety" || path === "/child-safety/") return childSafetyPage();
   if (path === "/terms" || path === "/terms/") return termsPage();
   const code = inviteCodeIn(path);
-  if (code) return new Response(joinPage(code, env.ANDROID_PACKAGE), { headers: PAGE_HEADERS });
+  if (code) return new Response(joinPage(code, env.ANDROID_PACKAGE, env.IOS_APP_STORE_URL), { headers: PAGE_HEADERS });
   return null;
 }
 
@@ -71,9 +71,14 @@ const PAGE_HEADERS = {
   "Referrer-Policy": "no-referrer",
 };
 
-export function joinPage(code, pkg) {
+/**
+ * iPhones can't carry the code through the App Store install the way Play does, so the page
+ * copies it on the way to the store, and offers to open the installed app straight at the code.
+ */
+export function joinPage(code, pkg, appStoreUrl) {
   const play = playStoreUrl(pkg, code);
   const app = appIntentUrl(pkg, code);
+  const appStore = appStoreUrl || play;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -115,12 +120,17 @@ export function joinPage(code, pkg) {
     <small>New to LocalHive? Install it, sign up, and you'll go straight to joining.</small>
   </div>
   <div class="other">
-    <p>LocalHive is on Android for now; the iPhone app is coming soon.</p>
-    <a class="button secondary" href="${play}">View on Google Play</a>
+    <a class="button copy-then-go" href="${appStore}">Get it on the App Store</a>
+    <a class="button secondary" href="localhive://join/${code}">Already have it? Open LocalHive</a>
+    <small>After you sign up, come back here and tap <b>Open LocalHive</b>, or type the code ${code}.</small>
   </div>
 </main>
 <script>
   if (!/Android/i.test(navigator.userAgent)) document.body.classList.add("ios");
+  // Copied on the way to the App Store, so it can be pasted after signing up.
+  for (const link of document.querySelectorAll(".copy-then-go")) {
+    link.addEventListener("click", () => { try { navigator.clipboard.writeText("${code}"); } catch (e) {} });
+  }
 </script>
 </body>
 </html>`;

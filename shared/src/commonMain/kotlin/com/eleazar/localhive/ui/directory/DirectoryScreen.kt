@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.directory
 
+import com.eleazar.localhive.ui.components.RowSkeletons
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -78,11 +79,7 @@ fun DirectoryScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             when {
-                uiState.isLoading -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = accent)
-                    }
-                }
+                uiState.isLoading -> RowSkeletons(Modifier.fillMaxSize())
                 uiState.filteredMembers.isEmpty() && uiState.searchQuery.isBlank() -> EmptyState(
                     icon = Icons.Outlined.Groups,
                     title = "No neighbours yet",

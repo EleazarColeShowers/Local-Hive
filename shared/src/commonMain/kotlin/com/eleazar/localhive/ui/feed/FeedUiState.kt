@@ -26,6 +26,8 @@ data class FeedUiState(
     val memberCount: Int = 0,
     /** Current admins, so posts and comments can be badged and the composer can offer announcements. */
     val adminIds: Set<String> = emptySet(),
+    /** The estate's treasurer, who may post announcements too (about dues, say). */
+    val treasurerId: String = "",
     /** Other members of the estate, who can be tagged with `@`. */
     val members: List<User> = emptyList(),
     val selectedPost: Post? = null,
@@ -45,4 +47,7 @@ data class FeedUiState(
     val sosStanding: SosStanding = SosStanding()
 ) {
     val isAdmin: Boolean get() = currentUserId != null && currentUserId in adminIds
+
+    /** Admins and the treasurer speak for the estate. Matches the rules. */
+    val canAnnounce: Boolean get() = isAdmin || (!currentUserId.isNullOrBlank() && currentUserId == treasurerId)
 }

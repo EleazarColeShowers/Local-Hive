@@ -281,6 +281,7 @@ fun PostDetailScreen(
                         onCommentClick = {},
                         onClick = {},
                         authorIsAdmin = post.authorId in uiState.adminIds,
+                        authorIsTreasurer = post.authorId == uiState.treasurerId,
                         playVideo = true,
                         onMentionClick = onUserClick,
                         onEdit = onEditPost.takeIf { isMine && isEditable(post.createdAt, nowMillis()) },

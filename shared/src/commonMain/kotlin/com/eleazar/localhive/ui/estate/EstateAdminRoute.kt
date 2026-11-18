@@ -1,5 +1,7 @@
 package com.eleazar.localhive.ui.estate
 
+import com.eleazar.localhive.data.remote.LocalHiveApi
+import org.koin.compose.koinInject
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -16,6 +18,7 @@ fun EstateAdminRoute(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val currentUserId = remember { viewModel.getCurrentUserId() ?: "" }
+    val api: LocalHiveApi = koinInject()
 
     LaunchedEffect(estateId) {
         viewModel.loadEstate(estateId)
@@ -55,6 +58,15 @@ fun EstateAdminRoute(
         onSetJoinMode = { mode -> viewModel.setJoinMode(estateId, mode) },
         onRegenerateCode = { viewModel.regenerateInviteCode(estateId) },
         onCopyCode = { code -> platform.copyToClipboard("Invite Code", code, "Code copied!") },
+        onShareCode = { code ->
+            val name = uiState.estate?.name ?: "our estate"
+            val link = api.inviteLink(code)
+            platform.shareText(
+                if (link != null) "Join $name on LocalHive, our estate app: $link\n\nInvite code: $code"
+                else "Join $name on LocalHive! Use code: $code",
+                "Share invite link"
+            )
+        },
         onMessageShown = { viewModel.consumeMessage() },
         onClearError = { viewModel.clearError() },
         guardsTab = {

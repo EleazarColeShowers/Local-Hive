@@ -109,6 +109,7 @@ fun EstateAdminScreen(
     onSetJoinMode: (JoinMode) -> Unit = {},
     onRegenerateCode: () -> Unit = {},
     onCopyCode: (code: String) -> Unit = {},
+    onShareCode: (code: String) -> Unit = {},
     onMessageShown: () -> Unit = {},
     onClearError: () -> Unit = {},
     /** The Guards tab's content, which brings its own state. */
@@ -279,6 +280,7 @@ fun EstateAdminScreen(
                     onSetJoinMode = onSetJoinMode,
                     onRegenerateCode = onRegenerateCode,
                     onCopyCode = onCopyCode,
+                    onShareCode = onShareCode,
                     dark = dark,
                     green = green,
                     cardBg = cardBg
@@ -495,7 +497,7 @@ private fun MembersTab(
                 "Admins can approve requests, post announcements, make others admins and remove members. " +
                     "The owner always stays an admin, and an admin has to lose admin before they can be removed. " +
                     "The owner can hand ownership to any member from that member's menu. " +
-                    "The treasurer, who can be anyone, sets dues, confirms payments and logs expenses. " +
+                    "The treasurer, who can be anyone, sets dues, confirms payments, logs expenses and can post announcements. " +
                     "Two false alarms in 30 days and a member's SOS alerts go out without the siren; " +
                     "admins can restore it, or turn someone's SOS alerts off altogether.",
                 fontSize = 13.sp,

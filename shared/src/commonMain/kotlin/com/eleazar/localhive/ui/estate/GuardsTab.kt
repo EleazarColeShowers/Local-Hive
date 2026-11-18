@@ -105,7 +105,7 @@ private fun GuardsTab(
             Text(
                 "Guards check visitors in and out at the gate. They don't join $estateName: they can't see the " +
                     "feed, chats, dues or the member list. They see one visitor pass at a time, when the visitor gives them its code, " +
-                    "and who is inside right now.",
+                    "and who is inside right now. They also get residents' SOS alerts, so they can go and help.",
                 fontSize = 14.sp,
                 color = dark.copy(alpha = 0.7f)
             )

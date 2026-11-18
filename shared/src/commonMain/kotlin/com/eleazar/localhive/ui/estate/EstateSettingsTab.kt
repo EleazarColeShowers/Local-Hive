@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.estate
 
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -57,6 +58,7 @@ internal fun EstateSettingsTab(
     onSetJoinMode: (JoinMode) -> Unit,
     onRegenerateCode: () -> Unit,
     onCopyCode: (String) -> Unit,
+    onShareCode: (String) -> Unit = {},
     dark: Color,
     green: Color,
     cardBg: Color
@@ -163,6 +165,24 @@ internal fun EstateSettingsTab(
                             Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy code", tint = green)
                         }
                     }
+                }
+                if (inviteCode.isNotBlank() && estate.joinMode.acceptsCodes) {
+                    // The link installs the app if needed and opens straight at joining with this code.
+                    Button(
+                        onClick = { onShareCode(inviteCode) },
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = green),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Share invite link")
+                    }
+                    Text(
+                        "Send it on WhatsApp or anywhere. Neighbours tap it, install LocalHive, sign up, and join with one tap.",
+                        fontSize = 13.sp,
+                        color = dark.copy(alpha = 0.6f)
+                    )
                 }
                 Text(
                     "If the code has been shared somewhere it shouldn't have, make a new one. The old code stops working " +

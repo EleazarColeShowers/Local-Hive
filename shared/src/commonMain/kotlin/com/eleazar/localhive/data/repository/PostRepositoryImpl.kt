@@ -17,6 +17,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
+/** The gaps firestore.rules enforces between one person's posts, and between their comments. */
+private const val POST_GAP_MILLIS = 20_000L
+private const val COMMENT_GAP_MILLIS = 3_000L
+
 /** Firestore's cap on writes in one batch. */
 private const val BATCH_LIMIT = 500
 
@@ -26,6 +30,12 @@ class PostRepositoryImpl(
 ) : PostRepository {
 
     private val posts get() = firestore.collection("posts")
+    private fun postingLimits(userId: String) = firestore.collection("postingLimits").document(userId)
+
+    // When this phone last posted and commented, so a too-quick second try gets a clear message
+    // instead of the rules' bare refusal.
+    private var lastPostAt = 0L
+    private var lastCommentAt = 0L
 
     override fun getPostsForEstate(estateId: String, limit: Long): Flow<List<Post>> =
         posts
@@ -56,7 +66,22 @@ class PostRepositoryImpl(
 
     override suspend fun createPost(post: Post): Result<String> = runCatching {
         val ref = posts.document
-        ref.set(post.toMap())
+        val isEmergency = post.category == PostCategory.EMERGENCY.key
+        if (isEmergency) {
+            // An SOS never waits on the gap between posts.
+            ref.set(post.toMap())
+        } else {
+            check(nowMillis() - lastPostAt >= POST_GAP_MILLIS) { "You just posted. Wait a few seconds before posting again." }
+            firestore.batch()
+                .set(ref, post.toMap())
+                .set(
+                    postingLimits(post.authorId),
+                    mapOf("lastPostAt" to FieldValue.serverTimestamp, "lastPostId" to ref.id),
+                    merge = true
+                )
+                .commit()
+            lastPostAt = nowMillis()
+        }
         // Pushes for the categories that need one; the Worker re-reads the post to check it.
         // An emergency's goes out from alertEmergency, so the sender hears if it's refused.
         when (PostCategory.fromKey(post.category)) {
@@ -133,9 +158,18 @@ class PostRepositoryImpl(
             .map { snapshot -> snapshot.documents.map { it.toComment() } }
 
     override suspend fun addComment(comment: Comment): Result<String> = runCatching {
+        check(nowMillis() - lastCommentAt >= COMMENT_GAP_MILLIS) { "Wait a moment before commenting again." }
         val ref = posts.document(comment.postId).collection("comments").document
-        ref.set(comment.toMap())
-        posts.document(comment.postId).update("commentCount" to FieldValue.increment(1))
+        firestore.batch()
+            .set(ref, comment.toMap())
+            .update(posts.document(comment.postId), "commentCount" to FieldValue.increment(1))
+            .set(
+                postingLimits(comment.authorId),
+                mapOf("lastCommentAt" to FieldValue.serverTimestamp, "lastCommentId" to ref.id),
+                merge = true
+            )
+            .commit()
+        lastCommentAt = nowMillis()
         ref.id
     }
 

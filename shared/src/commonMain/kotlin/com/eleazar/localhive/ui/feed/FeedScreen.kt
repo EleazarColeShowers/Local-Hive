@@ -1,9 +1,19 @@
 package com.eleazar.localhive.ui.feed
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import com.eleazar.localhive.ui.navigation.OnTabReselected
 import com.eleazar.localhive.domain.model.isEditable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,7 +31,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.eleazar.localhive.ui.components.ComposePrompt
 import com.eleazar.localhive.ui.components.EmergencyBanner
 import com.eleazar.localhive.domain.model.Report
 import com.eleazar.localhive.domain.model.ReportReason
@@ -35,7 +44,13 @@ import com.eleazar.localhive.domain.model.UtilityKind
 import com.eleazar.localhive.domain.model.UtilityStatus
 import com.eleazar.localhive.ui.components.EmptyState
 import com.eleazar.localhive.ui.components.PostCard
-import com.eleazar.localhive.ui.components.ScreenHeader
+import com.eleazar.localhive.ui.components.LocalHeaderActions
+import com.eleazar.localhive.ui.components.PostSkeletons
+import com.eleazar.localhive.ui.components.ScreenGutter
+import com.eleazar.localhive.ui.theme.HoneyInk
+import com.eleazar.localhive.ui.util.formatDate
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.style.TextOverflow
 import com.eleazar.localhive.domain.model.IncidentStatus
 import com.eleazar.localhive.domain.model.PostCategory
 import com.eleazar.localhive.ui.theme.AlertRed
@@ -89,6 +104,22 @@ fun FeedScreen(
             }
     }
 
+    // Neighbours posting while you're scrolled down get a pill at the top instead of moving the list.
+    val scope = rememberCoroutineScope()
+    var newPostsWaiting by remember { mutableStateOf(false) }
+    var seenNewestId by remember { mutableStateOf(uiState.posts.firstOrNull()?.id) }
+    val newest = uiState.posts.firstOrNull()
+    LaunchedEffect(newest?.id) {
+        if (newest == null) return@LaunchedEffect
+        if (seenNewestId != null && newest.id != seenNewestId
+            && newest.authorId != uiState.currentUserId && listState.firstVisibleItemIndex > 2
+        ) newPostsWaiting = true
+        seenNewestId = newest.id
+    }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex }.collect { if (it <= 1) newPostsWaiting = false }
+    }
+
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(uiState.refreshError) {
         val error = uiState.refreshError ?: return@LaunchedEffect
@@ -108,9 +139,13 @@ fun FeedScreen(
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
                 item(key = "header") {
-                    ScreenHeader(title = uiState.estateName ?: "LocalHive", action = {
-                        if (uiState.estateId != null) SosButton(onClick = onEmergency)
-                    })
+                    FeedHeader(
+                        firstName = uiState.currentUserName?.trim()?.substringBefore(' ')?.takeIf { it.isNotBlank() },
+                        estateName = uiState.estateName ?: "LocalHive",
+                        memberCount = uiState.memberCount,
+                        showSos = uiState.estateId != null,
+                        onEmergency = onEmergency
+                    )
                 }
                 val emergencies = uiState.posts.filter {
                     it.category == PostCategory.EMERGENCY.key
@@ -135,23 +170,13 @@ fun FeedScreen(
                         modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)
                     )
                 }
-                item(key = "compose") {
-                    ComposePrompt(
-                        name = uiState.currentUserName,
-                        photoUrl = uiState.currentUserImageUrl,
-                        onClick = onCreatePost
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                }
                 if (uiState.posts.isNotEmpty() || filter != FeedFilter.ALL) item(key = "filters") {
                     FeedFilterRow(selected = filter, onSelect = { filterName = it.name })
                 }
 
                 when {
                     uiState.isLoading && uiState.posts.isEmpty() -> item(key = "loading") {
-                        Box(modifier = Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = accent)
-                        }
+                        PostSkeletons()
                     }
                     uiState.posts.isEmpty() -> item(key = "empty") {
                         EmptyState(
@@ -202,7 +227,9 @@ fun FeedScreen(
                                 onCommentClick = { onPostClick(post.id) },
                                 onClick = { onPostClick(post.id) },
                                 authorIsAdmin = post.authorId in uiState.adminIds,
+                                authorIsTreasurer = post.authorId == uiState.treasurerId,
                                 pinned = post.id == pinned?.id,
+                                compact = true,
                                 onMentionClick = onUserClick,
                                 onEdit = { onEditPost(post.id) }.takeIf {
                                     post.authorId == uiState.currentUserId && isEditable(post.createdAt, nowMillis())
@@ -232,7 +259,87 @@ fun FeedScreen(
                 }
             }
         }
+        AnimatedVisibility(
+            visible = newPostsWaiting,
+            enter = fadeIn() + slideInVertically { -it },
+            exit = fadeOut() + slideOutVertically { -it },
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp)
+        ) {
+            Surface(
+                onClick = {
+                    newPostsWaiting = false
+                    scope.launch { listState.animateScrollToItem(0) }
+                },
+                shape = RoundedCornerShape(50),
+                color = accent,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shadowElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(start = 12.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.ArrowUpward, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("New posts", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                }
+            }
+        }
         SnackbarHost(snackbar, modifier = Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+/** "Good evening, Ada" over the estate's name, with the SOS button beside them. */
+@Composable
+private fun FeedHeader(
+    firstName: String?,
+    estateName: String,
+    memberCount: Int,
+    showSos: Boolean,
+    onEmergency: () -> Unit
+) {
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val honey = if (dark) MaterialTheme.colorScheme.secondary else HoneyInk
+    val hour = formatDate(nowMillis(), "H").toIntOrNull() ?: 12
+    val greeting = when (hour) {
+        in 5..11 -> "Good morning"
+        in 12..16 -> "Good afternoon"
+        else -> "Good evening"
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = ScreenGutter, end = 4.dp, top = 12.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                if (firstName != null) "$greeting, $firstName" else greeting,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = honey,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                estateName,
+                fontSize = 26.sp,
+                lineHeight = 32.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (memberCount > 0) {
+                Text(
+                    if (memberCount == 1) "1 neighbour" else "$memberCount neighbours",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (showSos) SosButton(onClick = onEmergency)
+        LocalHeaderActions.current(this)
     }
 }
 
@@ -271,28 +378,42 @@ private enum class FeedFilter(val label: String, val categories: Set<PostCategor
     fun matches(post: Post): Boolean = this == ALL || PostCategory.fromKey(post.category) in categories
 }
 
+/** Text tabs with a green underline under the chosen one; a line under the row closes it off from the posts. */
 @Composable
 private fun FeedFilterRow(selected: FeedFilter, onSelect: (FeedFilter) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        FeedFilter.entries.forEach { option ->
-            FilterChip(
-                selected = option == selected,
-                onClick = { onSelect(option) },
-                label = { Text(option.label) },
-                shape = RoundedCornerShape(50),
-                // Unselected chips are text only, so the row reads as a quiet control, not a second toolbar.
-                border = if (option == selected) null else FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = false,
-                    borderColor = MaterialTheme.colorScheme.outlineVariant
-                )
-            )
+    val accent = MaterialTheme.colorScheme.primary
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 4.dp)
+        ) {
+            FeedFilter.entries.forEach { option ->
+                val isSelected = option == selected
+                Column(
+                    modifier = Modifier
+                        .clickable(onClickLabel = "Show ${option.label.lowercase()}") { onSelect(option) }
+                        .padding(horizontal = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        option.label,
+                        fontSize = 15.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) MaterialTheme.colorScheme.onBackground else muted,
+                        modifier = Modifier.padding(top = 10.dp, bottom = 9.dp)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .height(3.dp)
+                            .width(if (isSelected) 28.dp else 0.dp)
+                            .background(accent, RoundedCornerShape(50))
+                    )
+                }
+            }
         }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
 }

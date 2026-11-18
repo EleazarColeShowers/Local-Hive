@@ -28,10 +28,13 @@ fun GateRoute(
         onClearLookup = viewModel::clearLookup,
         onCheckIn = viewModel::checkIn,
         onCheckOut = viewModel::checkOut,
+        onRespond = viewModel::respond,
         onMessageShown = viewModel::consumeMessage,
         onRetry = viewModel::retry,
         onLeavePost = viewModel::leavePost,
-        onSignOut = viewModel::signOut
+        onSignOut = viewModel::signOut,
+        onDeleteAccount = viewModel::deleteAccount,
+        onDeleteAccountDismissed = viewModel::clearDeleteAccountError
     )
 }
 

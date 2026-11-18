@@ -1,5 +1,6 @@
 package com.eleazar.localhive.di
 
+import com.eleazar.localhive.data.repository.PostDraftStore
 import com.eleazar.localhive.data.remote.LocalHiveApi
 import com.eleazar.localhive.data.remote.PushTokenSync
 import com.eleazar.localhive.data.repository.AppSettingsRepositoryImpl
@@ -106,6 +107,7 @@ fun dataModule(apiBaseUrl: String) = module {
     singleOf(::ReportRepositoryImpl) bind ReportRepository::class
     singleOf(::SosRepositoryImpl) bind SosRepository::class
     singleOf(::GateRepositoryImpl) bind GateRepository::class
+    singleOf(::PostDraftStore)
 }
 
 val viewModelModule = module {

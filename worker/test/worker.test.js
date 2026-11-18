@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { buildPush, flatList, estateNameLowerUpdates, falseAlarmsCostSiren, pollReminders, tooManyEmergencies } from "../src/index.js";
+import {
+  buildPush, flatList, estateNameLowerUpdates, falseAlarmsCostSiren, pollReminders, tooManyEmergencies, tooManyUploads, UPLOAD_LIMIT_PER_HOUR,
+} from "../src/index.js";
 import { sosSoundFor } from "../src/push.js";
 import { MAX_VIDEO_BYTES, oversizedVideoIds, signUpload } from "../src/cloudinary.js";
 import { decodeValue } from "../src/firestore.js";
@@ -190,6 +192,23 @@ test("an emergency alerts everyone else in the estate, on Android's emergency ch
   assert.equal(push.payload.deepLink, "localhive://post/sos1");
   assert.equal(push.payload.channel, "emergency");
   assert.equal(push.key, "emergency_sos1");
+});
+
+test("an emergency, and its all-clear, also reach the estate's guards, opening their gate screen", async () => {
+  const withGuard = fakeDb({ ...docs, "estates/E1/guards/guard": { userId: "guard", name: "Musa" } });
+  const sos = await buildPush(withGuard, "member", { type: "emergency", postId: "sos1" });
+  assert.deepEqual(sos.also, [{ recipients: ["guard"], payload: { ...sos.payload, deepLink: "localhive://gate" } }]);
+  assert.equal(sos.also[0].payload.channel, "emergency");
+  const safe = await buildPush(withGuard, "member", { type: "sos_safe", postId: "sos5" });
+  assert.deepEqual(safe.also[0].recipients, ["guard"]);
+  // No guards, nothing extra.
+  assert.deepEqual((await buildPush(db, "member", { type: "emergency", postId: "sos1" })).also, []);
+});
+
+test("the treasurer can announce, like an admin", async () => {
+  const treasurerDb = fakeDb({ ...docs, "posts/a3": { authorId: "third", estateId: "E1", category: "announcement", content: "Dues are due" } });
+  const push = await buildPush(treasurerDb, "third", { type: "announcement", postId: "a3" });
+  assert.deepEqual(push.recipients.sort(), ["admin", "blocker", "member"]);
 });
 
 test("emergencies only go out fresh, from their author, in the author's estate", async () => {
@@ -627,4 +646,26 @@ test("flat levy reminders skip paid flats and reach members who haven't picked o
 test("flat lists read like a receipt", () => {
   assert.equal(flatList([{ buildingName: "No. 12", flat: 3 }, { buildingName: "No. 12", flat: 1 }]), "No. 12 · Flats 1, 3");
   assert.equal(flatList([{ buildingName: "No. 12", flat: 2 }]), "No. 12 · Flat 2");
+});
+
+test("uploads are capped per person per hour, and the count starts again the next hour", async () => {
+  const counts = {};
+  const db = { bump: async (path) => (counts[path] = (counts[path] || 0) + 1) };
+  const hour = 60 * 60 * 1000;
+  const now = 1000 * hour;
+  for (let i = 0; i < UPLOAD_LIMIT_PER_HOUR; i++) assert.equal(await tooManyUploads(db, "ada", now), false);
+  assert.equal(await tooManyUploads(db, "ada", now), true);
+  // Someone else, or the next hour, isn't affected.
+  assert.equal(await tooManyUploads(db, "bo", now), false);
+  assert.equal(await tooManyUploads(db, "ada", now + hour), false);
+});
+
+test("the invite page sends iPhones to the App Store and can open the app at the code", async () => {
+  const response = publicResponse(new Request("https://x.dev/join/abc234"), {
+    ANDROID_PACKAGE: "com.eleazar.localhive", IOS_APP_STORE_URL: "https://apps.apple.com/app/id6832065326",
+  });
+  const html = await response.text();
+  assert.match(html, /apps\.apple\.com\/app\/id6832065326/);
+  assert.match(html, /localhive:\/\/join\/ABC234/);
+  assert.doesNotMatch(html, /coming soon/);
 });

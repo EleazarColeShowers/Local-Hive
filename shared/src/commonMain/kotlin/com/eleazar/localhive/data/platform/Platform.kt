@@ -1,9 +1,18 @@
 package com.eleazar.localhive.data.platform
 
 import io.ktor.utils.io.ByteReadChannel
+import kotlinx.coroutines.flow.StateFlow
 
 /** Logs something worth knowing that the user isn't told about. */
 expect fun logWarning(tag: String, message: String, error: Throwable? = null)
+
+/**
+ * Whether the phone can reach the internet right now. On Android it's only true once the network
+ * has been checked to work, so a connection with no data left counts as offline.
+ */
+interface Connectivity {
+    val isOnline: StateFlow<Boolean>
+}
 
 /** Small preferences that live on this device only. */
 interface KeyValueStore {

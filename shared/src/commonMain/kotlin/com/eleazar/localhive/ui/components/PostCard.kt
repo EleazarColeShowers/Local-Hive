@@ -1,5 +1,13 @@
 package com.eleazar.localhive.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.foundation.text.KeyboardOptions
@@ -62,6 +70,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.eleazar.localhive.domain.model.EmergencyType
+import com.eleazar.localhive.domain.model.IncidentStatus
 import com.eleazar.localhive.domain.model.Post
 import com.eleazar.localhive.domain.model.PostCategory
 import com.eleazar.localhive.ui.platform.rememberPlatformActions
@@ -89,8 +98,12 @@ fun PostCard(
     modifier: Modifier = Modifier,
     /** The author is currently an admin of the estate. */
     authorIsAdmin: Boolean = false,
+    /** The estate's treasurer, badged as such when they aren't also an admin. */
+    authorIsTreasurer: Boolean = false,
     /** Shown at the top of the feed rather than in date order. */
     pinned: Boolean = false,
+    /** In a list: leaves out who resolved an emergency, which the post itself still shows. */
+    compact: Boolean = false,
     /** Play a video post here; otherwise it shows a still that opens the post via [onClick]. */
     playVideo: Boolean = false,
     /** Opens a member tagged in the post. */
@@ -115,14 +128,22 @@ fun PostCard(
     val canCopy = post.content.isNotBlank()
 
     val isLiked = currentUserId in post.likedBy
+    // Liking makes the heart pop, with a light tick on the phone.
+    val heartScale = remember { Animatable(1f) }
+    val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
     val category = PostCategory.fromKey(post.category)
     val isAnnouncement = category == PostCategory.ANNOUNCEMENT
     val isEmergency = category == PostCategory.EMERGENCY
+    // Only an emergency still going on is washed red; once it's over it reads like any other post.
+    val isLiveEmergency = isEmergency && !post.falseAlarm && post.incidentStatus != IncidentStatus.RESOLVED.key
     val alertRed = readable(AlertRed)
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val honey = if (dark) MaterialTheme.colorScheme.secondary else HoneyInk
     val content = MaterialTheme.colorScheme.onSurface
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    // Red only while it's happening; a past emergency's label goes grey.
+    val emergencyTint = if (isLiveEmergency) alertRed else muted
 
     Column(
         modifier = modifier
@@ -130,17 +151,17 @@ fun PostCard(
             // The faintest honey wash, so an announcement is findable without shouting.
             .background(
                 when {
-                    isEmergency -> alertRed.copy(alpha = if (dark) 0.12f else 0.06f)
+                    isLiveEmergency -> alertRed.copy(alpha = if (dark) 0.12f else 0.06f)
                     isAnnouncement -> honey.copy(alpha = if (dark) 0.08f else 0.05f)
                     else -> Color.Transparent
                 }
             )
             .clickable(onClick = onClick)
-            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 6.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 2.dp)
     ) {
         if (isAnnouncement) {
             // Lined up like the rest of the post: icon over the avatar, words over the text.
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
                 Box(modifier = Modifier.width(AvatarSize), contentAlignment = Alignment.CenterEnd) {
                     Icon(
                         if (pinned) Icons.Filled.PushPin else PostCategory.ANNOUNCEMENT.icon,
@@ -160,17 +181,17 @@ fun PostCard(
         }
 
         if (isEmergency) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
                 Box(modifier = Modifier.width(AvatarSize), contentAlignment = Alignment.CenterEnd) {
                     Icon(
                         EmergencyType.fromKey(post.emergencyType)?.icon ?: PostCategory.EMERGENCY.icon,
                         contentDescription = null,
-                        tint = alertRed,
+                        tint = emergencyTint,
                         modifier = Modifier.size(15.dp)
                     )
                 }
                 Spacer(Modifier.width(AvatarGap))
-                Text(post.emergencyTitle, color = alertRed, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text(post.emergencyTitle, color = emergencyTint, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -191,9 +212,9 @@ fun PostCard(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false)
                         )
-                        if (authorIsAdmin) {
+                        if (authorIsAdmin || authorIsTreasurer) {
                             Spacer(Modifier.width(6.dp))
-                            RoleBadge()
+                            RoleBadge(treasurer = !authorIsAdmin)
                         }
                         val time = relativeTime(post.createdAt)
                         if (time.isNotEmpty()) {
@@ -251,7 +272,7 @@ fun PostCard(
                     CategoryTag(category, modifier = Modifier.padding(top = 2.dp))
                 }
                 if (category?.isIncident == true) {
-                    IncidentSummary(post, modifier = Modifier.padding(top = 4.dp))
+                    IncidentSummary(post, showHistory = !compact, modifier = Modifier.padding(top = 4.dp))
                 }
 
                 if (post.content.isNotBlank()) {
@@ -264,7 +285,7 @@ fun PostCard(
                         mentions = post.mentions,
                         onMentionClick = onMentionClick,
                         selectable = selectableText,
-                        modifier = Modifier.padding(top = 6.dp)
+                        modifier = Modifier.padding(top = 2.dp)
                     )
                 }
 
@@ -299,8 +320,8 @@ fun PostCard(
 
                 // Pulled in by the action's own padding so the icons sit on the text's left edge.
                 Row(
-                    modifier = Modifier.padding(top = 4.dp).offset(x = -ActionPadding),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.offset(x = -ActionPadding),
+                    horizontalArrangement = Arrangement.spacedBy(28.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     PostAction(
@@ -308,7 +329,17 @@ fun PostCard(
                         count = post.likeCount,
                         tint = if (isLiked) LikedRed else muted,
                         contentDescription = if (isLiked) "Unlike" else "Like",
-                        onClick = onLike
+                        iconScale = heartScale.value,
+                        onClick = {
+                            if (!isLiked) {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                scope.launch {
+                                    heartScale.snapTo(0.6f)
+                                    heartScale.animateTo(1f, spring(dampingRatio = 0.35f, stiffness = Spring.StiffnessMedium))
+                                }
+                            }
+                            onLike()
+                        }
                     )
                     PostAction(
                         icon = Icons.Outlined.ChatBubbleOutline,
@@ -410,17 +441,24 @@ private fun PostAction(
     count: Int,
     tint: Color,
     contentDescription: String,
+    iconScale: Float = 1f,
     onClick: () -> Unit
 ) {
     Surface(onClick = onClick, shape = RoundedCornerShape(50), color = Color.Transparent) {
         Row(
-            modifier = Modifier.heightIn(min = 40.dp).padding(horizontal = ActionPadding),
+            modifier = Modifier.heightIn(min = 38.dp).padding(horizontal = ActionPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(19.dp))
+            Icon(
+                icon,
+                contentDescription = contentDescription,
+                tint = tint,
+                modifier = Modifier.size(19.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale }
+            )
             if (count > 0) {
-                Spacer(Modifier.width(5.dp))
-                Text(text = "$count", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.width(6.dp))
+                // Coloured with the icon, so a liked post's count turns red with its heart.
+                Text(text = "$count", fontSize = 13.sp, color = tint)
             }
         }
     }

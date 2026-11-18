@@ -73,8 +73,47 @@ service cloud.firestore {
       return false;
     }
 
+    // Posts and comments need a short gap between them (postingLimits below), so a script can't
+    // flood an estate. 1.07 doesn't stamp the gap, so switch this on once everyone has 1.08.
+    function postingLimitsOn() {
+      return false;
+    }
+
+    function postingLimitPath() {
+      return /databases/$(database)/documents/postingLimits/$(uid());
+    }
+
+    // This post or comment is the one the caller just stamped as their latest, at this moment.
+    // Naming it by id means a batch can't carry a pile of posts on one stamp.
+    function stampedFor(field, idField, docId) {
+      return !postingLimitsOn()
+             || (existsAfter(postingLimitPath())
+                 && getAfter(postingLimitPath()).data.get(field, null) == request.time
+                 && getAfter(postingLimitPath()).data.get(idField, '') == docId);
+    }
+
     function noEmail() {
       return !strictProfiles() || !('email' in request.resource.data);
+    }
+
+    // When each person last posted and commented, kept by the app beside the post or comment
+    // itself. A new stamp must be the server's time now and come long enough after the last one:
+    // 20 seconds between posts, 3 between comments.
+    match /postingLimits/{userId} {
+      function spacedOut(field, seconds) {
+        let before = resource == null ? null : resource.data.get(field, null);
+        let after = request.resource.data.get(field, null);
+        return after == before
+               || (after == request.time
+                   && (before == null || request.time > before + duration.value(seconds, 's')));
+      }
+
+      allow read: if isSignedIn() && uid() == userId;
+      allow create, update: if isSignedIn()
+                            && uid() == userId
+                            && request.resource.data.keys().hasOnly(['lastPostAt', 'lastPostId', 'lastCommentAt', 'lastCommentId'])
+                            && spacedOut('lastPostAt', 20)
+                            && spacedOut('lastCommentAt', 3);
     }
 
     match /users/{userId} {
@@ -923,12 +962,15 @@ service cloud.firestore {
     }
 
     match /posts/{postId} {
-      // Posts are for the estate they were made in.
-      allow read: if isMemberOf(resource.data.estateId);
-      // Announcements carry an admin's authority, so only admins may post or keep one.
+      // Posts are for the estate they were made in. The estate's guards also see its emergencies,
+      // so they can go and help, but nothing else on the feed.
+      allow read: if isMemberOf(resource.data.estateId)
+                  || (resource.data.get('category', '') == 'emergency' && isGuardOf(resource.data.estateId));
+      // Announcements carry the estate's authority, so only admins and the treasurer may post or keep one.
       function categoryAllowed() {
         return request.resource.data.get('category', '') != 'announcement'
-               || isEstateAdmin(request.resource.data.estateId);
+               || isEstateAdmin(request.resource.data.estateId)
+               || isTreasurerOf(request.resource.data.estateId);
       }
 
       function isIncident(category) {
@@ -1004,7 +1046,9 @@ service cloud.firestore {
                     && incidentValid()
                     && contentValid()
                     && request.resource.data.get('falseAlarm', false) == false
-                    && (request.resource.data.get('category', '') != 'emergency' || sosAllowed(request.resource.data.estateId));
+                    && (request.resource.data.get('category', '') != 'emergency' || sosAllowed(request.resource.data.estateId))
+                    // An SOS never waits on the gap between posts.
+                    && (request.resource.data.get('category', '') == 'emergency' || stampedFor('lastPostAt', 'lastPostId', postId));
       allow update: if isSignedIn() && (
         (resource.data.authorId == uid()
           && request.resource.data.authorId == resource.data.authorId
@@ -1038,9 +1082,9 @@ service cloud.firestore {
                  && (request.resource.data.commentCount == resource.data.get('commentCount', 0) + 1
                      || request.resource.data.commentCount == resource.data.get('commentCount', 0) - 1))
            ))
-        // A neighbour says they're on their way to an emergency: they add themselves, by name,
-        // and touch nobody else's entry.
-        || (isMemberOf(resource.data.estateId)
+        // A neighbour or one of the estate's guards says they're on their way to an emergency: they
+        // add themselves, by name, and touch nobody else's entry.
+        || ((isMemberOf(resource.data.estateId) || isGuardOf(resource.data.estateId))
             && resource.data.get('category', '') == 'emergency'
             && changedKeys().hasOnly(['responders'])
             && request.resource.data.responders.diff(resource.data.get('responders', {})).affectedKeys().hasOnly([uid()])
@@ -1062,7 +1106,8 @@ service cloud.firestore {
                       && request.resource.data.authorId == uid()
                       && isMemberOf(postEstate())
                       && request.resource.data.content is string
-                      && request.resource.data.content.size() <= 1000;
+                      && request.resource.data.content.size() <= 1000
+                      && stampedFor('lastCommentAt', 'lastCommentId', commentId);
         // Its author rewrites the text, for 30 minutes after writing it.
         allow update: if isSignedIn()
                       && resource.data.authorId == uid()

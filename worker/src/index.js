@@ -69,6 +69,21 @@ export default {
 };
 
 /**
+ * How many photos and videos one person can upload in an hour. Far more than anyone posting
+ * normally needs, but it stops a script filling the Cloudinary account.
+ */
+export const UPLOAD_LIMIT_PER_HOUR = 30;
+
+/**
+ * Counts this upload against the caller's hour and says whether it goes over the limit. One
+ * counter document per person per hour, in rateLimits/, which the rules keep closed to the app.
+ */
+export async function tooManyUploads(db, uid, now = Date.now()) {
+  const hour = Math.floor(now / (60 * 60 * 1000));
+  return (await db.bump(`rateLimits/upload_${uid}_${hour}`, "count")) > UPLOAD_LIMIT_PER_HOUR;
+}
+
+/**
  * Estate search runs on nameLower, so an estate without it can't be found. Estates from before
  * it existed, or created by an older app, get it here. Matches what the app and rules write.
  */
@@ -142,6 +157,10 @@ async function uploadSignature(env, uid, { kind }) {
   if (!folder) throw new HttpError(400, "Unknown upload kind");
   if (!env.CLOUDINARY_CLOUD_NAME || !env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) {
     throw new Error("Cloudinary isn't configured");
+  }
+  const db = new Firestore(env.FIREBASE_PROJECT_ID, await serviceAccessToken(env.FIREBASE_SERVICE_ACCOUNT));
+  if (await tooManyUploads(db, uid)) {
+    throw new HttpError(429, "You've uploaded a lot in the last hour. Try again a little later.");
   }
   return signUpload({
     cloudName: env.CLOUDINARY_CLOUD_NAME,
@@ -249,8 +268,14 @@ async function notify(env, uid, body) {
 
   if (push.rewrite) await db.commit([{ update: push.rewrite.path, fields: push.rewrite.fields }]);
   if (push.inbox) await leaveInInbox(db, push.key, push.recipients, push.inbox);
-  const sent = await sendToUsers(db, env, push.recipients, push.payload);
+  let sent = await sendToUsers(db, env, push.recipients, push.payload);
   console.log(`push ${push.key}: ${sent}/${push.recipients.length} delivered`);
+  // Some pushes also go to people outside the estate (its guards) with a payload of their own.
+  for (const extra of push.also || []) {
+    const more = await sendToUsers(db, env, extra.recipients, extra.payload);
+    console.log(`push ${push.key} (also): ${more}/${extra.recipients.length} delivered`);
+    sent += more;
+  }
   return { sent };
 }
 
@@ -325,7 +350,7 @@ export async function buildPush(db, uid, body) {
       if (!post || post.category !== "announcement") throw new HttpError(404, "No such announcement");
       if (post.authorId !== uid) throw new HttpError(403, "Not your announcement");
       const estate = await db.get(`estates/${post.estateId}`);
-      if (!estate || !(estate.adminIds || []).includes(uid)) throw new HttpError(403, "Only admins can announce");
+      if (!estate || !canAnnounce(estate, uid)) throw new HttpError(403, "Only admins and the treasurer can announce");
       const members = await db.idsWhere("users", "estateId", post.estateId);
       return {
         key: `announcement_${postId}`,
@@ -350,21 +375,26 @@ export async function buildPush(db, uid, body) {
       const standing = await db.get(`estates/${post.estateId}/sosMembers/${uid}`);
       if (standing?.disabled === true) throw new HttpError(403, "An admin has turned off SOS alerts for you.");
       const sirenRemoved = await falseAlarmsCostSiren(db, post.estateId, uid, standing);
-      const members = await db.idsWhere("users", "estateId", post.estateId);
+      const [members, guards] = await Promise.all([
+        db.idsWhere("users", "estateId", post.estateId),
+        guardIds(db, post.estateId),
+      ]);
       const type = EMERGENCY_TYPES[post.emergencyType];
       const where = post.location ? ` at ${post.location}` : "";
+      const payload = {
+        title: `🚨 ${type ? `${type} emergency` : "Emergency"}${where}`,
+        body: `${post.authorName || "A neighbour"} needs help${post.content ? `: ${post.content}` : "."}`,
+        deepLink: `localhive://post/${body.postId}`,
+        tag: `emergency-${body.postId}`,
+        channel: "emergency",
+        // Each person's own settings can make it quieter still (see sosSoundFor).
+        maxSound: sirenRemoved ? "sound" : "siren",
+      };
       return {
         key: `emergency_${body.postId}`,
         recipients: members.filter((id) => id !== uid),
-        payload: {
-          title: `🚨 ${type ? `${type} emergency` : "Emergency"}${where}`,
-          body: `${post.authorName || "A neighbour"} needs help${post.content ? `: ${post.content}` : "."}`,
-          deepLink: `localhive://post/${body.postId}`,
-          tag: `emergency-${body.postId}`,
-          channel: "emergency",
-          // Each person's own settings can make it quieter still (see sosSoundFor).
-          maxSound: sirenRemoved ? "sound" : "siren",
-        },
+        payload,
+        also: forGuards(guards, uid, payload),
       };
     }
 
@@ -465,14 +495,17 @@ export async function buildPush(db, uid, body) {
       const { post } = await emergencyFor(db, body.postId);
       const name = (post.responders || {})[uid];
       if (!name || post.authorId === uid) throw new HttpError(403, "Not responding to this alert");
-      const responder = await db.get(`users/${uid}`);
-      if (responder?.estateId !== post.estateId) throw new HttpError(403, "Not in this estate");
+      const [responder, guard] = await Promise.all([
+        db.get(`users/${uid}`),
+        db.get(`estates/${post.estateId}/guards/${uid}`),
+      ]);
+      if (responder?.estateId !== post.estateId && !guard) throw new HttpError(403, "Not in this estate");
       if (post.incidentStatus === "resolved") throw new HttpError(409, "Already resolved");
       return {
         key: `sos_responding_${body.postId}_${uid}`,
         recipients: [post.authorId],
         payload: {
-          title: `🏃 ${name} is coming to help`,
+          title: `🏃 ${guard ? `${name} (security)` : name} is coming to help`,
           body: "They saw your emergency alert and are on their way.",
           deepLink: `localhive://post/${body.postId}`,
           tag: `emergency-${body.postId}`,
@@ -484,17 +517,22 @@ export async function buildPush(db, uid, body) {
       const { post } = await emergencyFor(db, body.postId);
       if (post.authorId !== uid) throw new HttpError(403, "Not your alert");
       if (post.incidentStatus !== "resolved") throw new HttpError(409, "Not resolved");
-      const members = await db.idsWhere("users", "estateId", post.estateId);
+      const [members, guards] = await Promise.all([
+        db.idsWhere("users", "estateId", post.estateId),
+        guardIds(db, post.estateId),
+      ]);
       const type = EMERGENCY_TYPES[post.emergencyType];
+      const payload = {
+        title: `✅ ${post.authorName || "Your neighbour"} is safe now`,
+        body: `The ${type ? `${type.toLowerCase()} ` : ""}emergency${post.location ? ` at ${post.location}` : ""} is over.`,
+        deepLink: `localhive://post/${body.postId}`,
+        tag: `emergency-${body.postId}`,
+      };
       return {
         key: `sos_safe_${body.postId}`,
         recipients: members.filter((id) => id !== uid),
-        payload: {
-          title: `✅ ${post.authorName || "Your neighbour"} is safe now`,
-          body: `The ${type ? `${type.toLowerCase()} ` : ""}emergency${post.location ? ` at ${post.location}` : ""} is over.`,
-          deepLink: `localhive://post/${body.postId}`,
-          tag: `emergency-${body.postId}`,
-        },
+        payload,
+        also: forGuards(guards, uid, payload),
       };
     }
 
@@ -506,17 +544,22 @@ export async function buildPush(db, uid, body) {
       if (post.authorId !== uid && !(estate?.adminIds || []).includes(uid)) {
         throw new HttpError(403, "Only the sender or an admin can call it a false alarm");
       }
-      const members = await db.idsWhere("users", "estateId", post.estateId);
+      const [members, guards] = await Promise.all([
+        db.idsWhere("users", "estateId", post.estateId),
+        guardIds(db, post.estateId),
+      ]);
       const type = EMERGENCY_TYPES[post.emergencyType];
+      const payload = {
+        title: "✅ False alarm",
+        body: `The ${type ? `${type.toLowerCase()} ` : ""}alert from ${post.authorName || "a neighbour"} was a false alarm. No help is needed.`,
+        deepLink: `localhive://post/${body.postId}`,
+        tag: `emergency-${body.postId}`,
+      };
       return {
         key: `sos_false_alarm_${body.postId}`,
         recipients: members.filter((id) => id !== uid),
-        payload: {
-          title: "✅ False alarm",
-          body: `The ${type ? `${type.toLowerCase()} ` : ""}alert from ${post.authorName || "a neighbour"} was a false alarm. No help is needed.`,
-          deepLink: `localhive://post/${body.postId}`,
-          tag: `emergency-${body.postId}`,
-        },
+        payload,
+        also: forGuards(guards, uid, payload),
       };
     }
 
@@ -758,6 +801,25 @@ export async function falseAlarmsCostSiren(db, estateId, uid, standing, now = Da
 /** A "light is back" report older than this is too stale to push. */
 const LIGHT_BACK_MAX_AGE_MS = 10 * 60 * 1000;
 const LIGHT_BACK_INTERVAL_MS = 60 * 60 * 1000;
+
+/** Admins and the treasurer speak for the estate, so either can post an announcement. Matches the rules. */
+export function canAnnounce(estate, uid) {
+  return (estate.adminIds || []).includes(uid) || (!!estate.treasurerId && estate.treasurerId === uid);
+}
+
+/** The uids of the estate's security guards. */
+async function guardIds(db, estateId) {
+  return (await db.query("guards", [], { parent: `estates/${estateId}` })).map(({ path }) => path.split("/").pop());
+}
+
+/**
+ * The same push for the estate's guards. They can't open the post (they aren't members), so the
+ * tap opens the gate screen, which shows the open emergency.
+ */
+function forGuards(guards, uid, payload) {
+  const recipients = guards.filter((id) => id !== uid);
+  return recipients.length ? [{ recipients, payload: { ...payload, deepLink: "localhive://gate" } }] : [];
+}
 
 async function emergencyFor(db, postId) {
   if (!isId(postId)) throw new HttpError(400, "Bad post reference");

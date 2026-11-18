@@ -7,6 +7,7 @@ import com.eleazar.localhive.domain.GateRepository
 import com.eleazar.localhive.domain.UserRepository
 import com.eleazar.localhive.domain.model.GuardPost
 import com.eleazar.localhive.domain.model.PASS_CODE_LENGTH
+import com.eleazar.localhive.domain.model.Post
 import com.eleazar.localhive.domain.model.User
 import com.eleazar.localhive.domain.model.VisitorPass
 import com.eleazar.localhive.domain.model.isValidCode
@@ -40,9 +41,14 @@ sealed interface GatePhase {
 data class GateUiState(
     val phase: GatePhase = GatePhase.Loading,
     val guardName: String = "",
+    val guardId: String = "",
     val lookup: PassLookup = PassLookup.Idle,
     /** Visitors checked in and not yet out. */
     val inside: List<VisitorPass> = emptyList(),
+    /** SOS alerts from residents that are still going on, newest first. */
+    val emergencies: List<Post> = emptyList(),
+    /** The emergency the guard just said they're heading to, until it's saved. */
+    val respondingTo: String? = null,
     /** The pass being checked in or out, so its button doesn't take a second tap. */
     val busyCode: String? = null,
     val message: String? = null,
@@ -53,6 +59,9 @@ data class GateUiState(
     val signedOn: Boolean = false,
     // Leaving, by signing out or giving up the post.
     val signedOut: Boolean = false,
+    // Deleting the account, which guards can do from the gate since they never see Settings.
+    val isDeletingAccount: Boolean = false,
+    val deleteAccountError: String? = null,
     val leftPost: Boolean = false
 )
 
@@ -86,7 +95,7 @@ class GateViewModel(
                 return@launch
             }
             user = me
-            _uiState.update { it.copy(guardName = guardName(me)) }
+            _uiState.update { it.copy(guardName = guardName(me), guardId = me.id) }
             val post = gateRepository.findGuardPost(me).getOrElse { e ->
                 _uiState.update { it.copy(phase = GatePhase.Failed(e.friendlyMessage())) }
                 dutyJob = null
@@ -103,10 +112,17 @@ class GateViewModel(
                     .collect { inside -> _uiState.update { it.copy(inside = inside) } }
             }
             launch {
+                gateRepository.observeLiveEmergencies(post.estateId)
+                    .catch { }
+                    .collect { live -> _uiState.update { it.copy(emergencies = live) } }
+            }
+            launch {
                 // An admin removing the guard takes the gate away at once.
                 gateRepository.observeStillGuard(post.estateId, userId)
                     .catch { }
-                    .collect { still -> if (!still) _uiState.update { it.copy(phase = GatePhase.NotGuard, inside = emptyList()) } }
+                    .collect { still ->
+                        if (!still) _uiState.update { it.copy(phase = GatePhase.NotGuard, inside = emptyList(), emergencies = emptyList()) }
+                    }
             }
         }
     }
@@ -167,6 +183,22 @@ class GateViewModel(
         }
     }
 
+    /** The guard is heading to [emergency]; the resident who raised it is told. */
+    fun respond(emergency: Post) {
+        val me = user ?: return
+        if (_uiState.value.respondingTo != null || me.id in emergency.responders) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(respondingTo = emergency.id, error = null) }
+            gateRepository.respondToEmergency(emergency.id, me.id, guardName(me)).fold(
+                onSuccess = {
+                    val who = emergency.authorName.ifBlank { "The resident" }
+                    _uiState.update { it.copy(respondingTo = null, message = "$who has been told you're on the way") }
+                },
+                onFailure = { e -> _uiState.update { it.copy(respondingTo = null, error = e.friendlyMessage()) } }
+            )
+        }
+    }
+
     fun consumeMessage() = _uiState.update { it.copy(message = null) }
 
     /** Signs on as a guard with the code an admin gave them. */
@@ -205,6 +237,27 @@ class GateViewModel(
             _uiState.update { it.copy(leftPost = true) }
         }
     }
+
+    /** Deletes the guard's account for good (the server also takes them off the gate), then leaves like a sign-out. */
+    fun deleteAccount(password: String) {
+        if (_uiState.value.isDeletingAccount) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDeletingAccount = true, deleteAccountError = null) }
+            authRepository.deleteAccount(password).fold(
+                onSuccess = {
+                    dutyJob?.cancel()
+                    _uiState.update { it.copy(isDeletingAccount = false, signedOut = true) }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(isDeletingAccount = false, deleteAccountError = e.friendlyMessage("Couldn't delete your account. Try again."))
+                    }
+                }
+            )
+        }
+    }
+
+    fun clearDeleteAccountError() = _uiState.update { it.copy(deleteAccountError = null) }
 
     fun signOut() {
         viewModelScope.launch {

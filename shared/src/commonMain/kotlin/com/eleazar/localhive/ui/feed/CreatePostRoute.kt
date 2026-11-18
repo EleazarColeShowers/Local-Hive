@@ -1,5 +1,9 @@
 package com.eleazar.localhive.ui.feed
 
+import com.eleazar.localhive.data.repository.PostDraft
+import com.eleazar.localhive.data.repository.PostDraftStore
+import com.eleazar.localhive.domain.AuthRepository
+import org.koin.compose.koinInject
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,6 +28,11 @@ fun CreatePostRoute(
     val inbox = LocalShareInbox.current
     // Taken once; after that the saved state below carries it across rotation.
     val share = remember { inbox?.take() }
+    val drafts: PostDraftStore = koinInject()
+    val auth: AuthRepository = koinInject()
+    val userId = remember { auth.getCurrentUserId() }
+    // Something shared into the app starts a fresh post; otherwise pick up an unfinished one.
+    val draft = remember { if (share == null) userId?.let(drafts::load) else null }
     var mediaUri by rememberSaveable { mutableStateOf(share?.media) }
     var isVideo by rememberSaveable { mutableStateOf(share?.isVideo == true) }
 
@@ -37,6 +46,7 @@ fun CreatePostRoute(
 
     LaunchedEffect(uiState.postCreated) {
         if (uiState.postCreated) {
+            userId?.let(drafts::clear)
             viewModel.consumePostCreated()
             onNavigateBack()
         }
@@ -46,7 +56,12 @@ fun CreatePostRoute(
         uiState = uiState,
         pickedMedia = if (isVideo) videoFrame else mediaUri,
         pickedIsVideo = isVideo && mediaUri != null,
-        initialContent = share?.text.orEmpty(),
+        initialContent = share?.text ?: draft?.text.orEmpty(),
+        initialCategoryKey = draft?.categoryKey,
+        initialLocation = draft?.location.orEmpty(),
+        restoredDraft = draft != null,
+        onDraftChanged = userId?.let { id -> { text, categoryKey, location -> drafts.save(id, PostDraft(text, categoryKey, location)) } },
+        onDiscardDraft = { userId?.let(drafts::clear) },
         onPickMedia = pickMedia,
         onRemoveMedia = {
             mediaUri = null

@@ -133,7 +133,7 @@ fun FalseAlarmChip(modifier: Modifier = Modifier) {
 
 /** A security report or emergency's location and status, shown under its category. */
 @Composable
-fun IncidentSummary(post: Post, modifier: Modifier = Modifier) {
+fun IncidentSummary(post: Post, modifier: Modifier = Modifier, showHistory: Boolean = true) {
     val status = IncidentStatus.fromKey(post.incidentStatus) ?: return
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(modifier = modifier) {
@@ -166,7 +166,7 @@ fun IncidentSummary(post: Post, modifier: Modifier = Modifier) {
                 color = muted,
                 modifier = Modifier.padding(top = 2.dp)
             )
-        } else if (post.statusUpdatedByName.isNotBlank() && status != IncidentStatus.OPEN) {
+        } else if (showHistory && post.statusUpdatedByName.isNotBlank() && status != IncidentStatus.OPEN) {
             val time = relativeTime(post.statusUpdatedAt)
             Text(
                 "Marked ${status.label.lowercase()} by ${post.statusUpdatedByName}" + if (time.isNotEmpty()) " · $time" else "",

@@ -1,5 +1,7 @@
 package com.eleazar.localhive.di
 
+import com.eleazar.localhive.data.platform.Connectivity
+import com.eleazar.localhive.data.platform.IosConnectivity
 import com.eleazar.localhive.data.platform.IosMediaReader
 import com.eleazar.localhive.data.platform.KeyValueStore
 import com.eleazar.localhive.data.platform.MediaReader
@@ -10,4 +12,5 @@ import org.koin.dsl.module
 actual val platformModule: Module = module {
     single<MediaReader> { IosMediaReader() }
     single<KeyValueStore> { UserDefaultsStore() }
+    single<Connectivity> { IosConnectivity() }
 }

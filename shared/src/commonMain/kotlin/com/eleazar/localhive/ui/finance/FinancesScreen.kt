@@ -1,5 +1,6 @@
 package com.eleazar.localhive.ui.finance
 
+import com.eleazar.localhive.ui.components.CardSkeletons
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -189,9 +190,7 @@ fun FinancesScreen(
             }
             PullToRefreshBox(isRefreshing = uiState.isRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
                 when {
-                    uiState.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
+                    uiState.isLoading -> CardSkeletons(Modifier.fillMaxSize())
                     tab == 0 -> LevyList(uiState, onLevyClick)
                     else -> ExpenseList(uiState, onExpenseClick = { openExpense = it })
                 }

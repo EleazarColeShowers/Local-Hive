@@ -104,7 +104,7 @@ exports.onMessageCreated = onDocumentCreated(
   }
 );
 
-/** An admin's announcement reaches every member of the estate, not just whoever opens the feed. */
+/** An admin's or the treasurer's announcement reaches every member of the estate, not just whoever opens the feed. */
 exports.onAnnouncementCreated = onDocumentCreated(
   "posts/{postId}",
   async (event) => {
@@ -114,7 +114,9 @@ exports.onAnnouncementCreated = onDocumentCreated(
     // The rules already refuse announcements from non-admins; this guards against
     // anything written around them (e.g. the console) blasting the whole estate.
     const estate = await db.collection("estates").doc(post.estateId).get();
-    if (!estate.exists || !(estate.get("adminIds") || []).includes(post.authorId)) return;
+    const canAnnounce = (estate.get("adminIds") || []).includes(post.authorId)
+      || (!!estate.get("treasurerId") && estate.get("treasurerId") === post.authorId);
+    if (!estate.exists || !canAnnounce) return;
 
     const members = await db.collection("users").where("estateId", "==", post.estateId).get();
     const recipients = members.docs.map((doc) => doc.id).filter((id) => id !== post.authorId);

@@ -1,5 +1,8 @@
 package com.eleazar.localhive.ui.navigation
 
+import com.eleazar.localhive.data.platform.Connectivity
+import org.koin.compose.koinInject
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -69,8 +72,12 @@ fun MainTabsHost(
     val reselects = remember { MutableSharedFlow<String>(extraBufferCapacity = 1) }
     val currentRoute = backStackEntry?.destination?.route
 
+    val connectivity: Connectivity = koinInject()
+    val online by connectivity.isOnline.collectAsStateWithLifecycle()
+
     MainScreen(
         tabs = tabs,
+        offline = !online,
         currentRoute = currentRoute,
         unreadNotifications = unreadNotifications,
         colors = colors,

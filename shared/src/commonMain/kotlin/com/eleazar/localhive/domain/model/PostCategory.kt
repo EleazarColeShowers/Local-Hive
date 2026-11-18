@@ -8,7 +8,7 @@ enum class PostCategory(
     /** Offered as a chip in the composer; emergencies are raised from the SOS screen instead. */
     val inComposer: Boolean = true
 ) {
-    /** Estate-wide message from an admin, pinned and styled to stand out. */
+    /** Estate-wide message from an admin or the treasurer, pinned and styled to stand out. */
     ANNOUNCEMENT("announcement", "Announcement", adminOnly = true),
     NOTICE("notice", "Notice"),
     QUESTION("question", "Question"),

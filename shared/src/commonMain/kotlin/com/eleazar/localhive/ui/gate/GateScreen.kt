@@ -1,5 +1,7 @@
 package com.eleazar.localhive.ui.gate
 
+import com.eleazar.localhive.ui.settings.DeleteAccountDialog
+import com.eleazar.localhive.ui.components.LeaveRole
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,7 +54,19 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.outlined.Emergency
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.graphics.Color
+import com.eleazar.localhive.domain.model.EmergencyType
 import com.eleazar.localhive.domain.model.GUARD_CODE_LENGTH
+import com.eleazar.localhive.domain.model.Post
+import com.eleazar.localhive.ui.components.emergencyTitle
+import com.eleazar.localhive.ui.components.icon
+import com.eleazar.localhive.ui.components.respondersLine
+import com.eleazar.localhive.ui.theme.AlertRed
+import com.eleazar.localhive.ui.util.relativeTime
 import com.eleazar.localhive.domain.model.PASS_CODE_LENGTH
 import com.eleazar.localhive.domain.model.PassStage
 import com.eleazar.localhive.domain.model.VisitorPass
@@ -79,12 +93,16 @@ fun GateScreen(
     onClearLookup: () -> Unit,
     onCheckIn: (VisitorPass) -> Unit,
     onCheckOut: (VisitorPass) -> Unit,
+    onRespond: (Post) -> Unit,
     onMessageShown: () -> Unit,
     onRetry: () -> Unit,
     onLeavePost: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    onDeleteAccount: (password: String) -> Unit = {},
+    onDeleteAccountDismissed: () -> Unit = {}
 ) {
     val snackbar = remember { SnackbarHostState() }
+    var confirmDelete by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var confirmLeave by remember { mutableStateOf(false) }
     val post = (uiState.phase as? GatePhase.OnDuty)?.post
@@ -122,6 +140,10 @@ fun GateScreen(
                                 )
                             }
                             DropdownMenuItem(text = { Text("Sign out") }, onClick = { menuOpen = false; onSignOut() })
+                            DropdownMenuItem(
+                                text = { Text("Delete account", color = MaterialTheme.colorScheme.error) },
+                                onClick = { menuOpen = false; confirmDelete = true }
+                            )
                         }
                     }
                 },
@@ -151,10 +173,23 @@ fun GateScreen(
                     onLookUp = onLookUp,
                     onClearLookup = onClearLookup,
                     onCheckIn = onCheckIn,
-                    onCheckOut = onCheckOut
+                    onCheckOut = onCheckOut,
+                    onRespond = onRespond
                 )
             }
         }
+    }
+
+    if (confirmDelete) {
+        DeleteAccountDialog(
+            estateName = post?.estateName,
+            leaveRole = LeaveRole.MEMBER,
+            isDeleting = uiState.isDeletingAccount,
+            error = uiState.deleteAccountError,
+            onDelete = onDeleteAccount,
+            onDismiss = { confirmDelete = false; onDeleteAccountDismissed() },
+            onPasswordChanged = onDeleteAccountDismissed
+        )
     }
 
     if (confirmLeave && post != null) {
@@ -174,7 +209,8 @@ private fun OnDutyContent(
     onLookUp: (code: String) -> Unit,
     onClearLookup: () -> Unit,
     onCheckIn: (VisitorPass) -> Unit,
-    onCheckOut: (VisitorPass) -> Unit
+    onCheckOut: (VisitorPass) -> Unit,
+    onRespond: (Post) -> Unit
 ) {
     var code by remember { mutableStateOf("") }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -185,6 +221,15 @@ private fun OnDutyContent(
         contentPadding = PaddingValues(start = ScreenGutter, end = ScreenGutter, top = 4.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // An SOS comes before everything else at the gate.
+        items(uiState.emergencies, key = { "sos-${it.id}" }) { emergency ->
+            GateEmergency(
+                post = emergency,
+                guardId = uiState.guardId,
+                busy = uiState.respondingTo == emergency.id,
+                onRespond = { onRespond(emergency) }
+            )
+        }
         item(key = "check") {
             Card {
                 Text("Check a visitor's code", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
@@ -324,6 +369,64 @@ private fun FoundPass(
     }
 }
 
+/** A resident's SOS, as the guard sees it: what, where, who, and a button to say they're coming. */
+@Composable
+private fun GateEmergency(post: Post, guardId: String, busy: Boolean, onRespond: () -> Unit) {
+    val coming = guardId.isNotBlank() && guardId in post.responders
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = AlertRed,
+        contentColor = Color.White,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    EmergencyType.fromKey(post.emergencyType)?.icon ?: Icons.Outlined.Emergency,
+                    contentDescription = null,
+                    modifier = Modifier.size(26.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(post.emergencyTitle, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.weight(1f))
+                Text(relativeTime(post.createdAt), fontSize = 13.sp, color = Color.White.copy(alpha = 0.85f))
+            }
+            Spacer(Modifier.height(8.dp))
+            if (post.location.isNotBlank()) {
+                Text(post.location, fontWeight = FontWeight.SemiBold, fontSize = 20.sp)
+            }
+            Text(
+                "${post.authorName.ifBlank { "A resident" }} needs help" + if (post.content.isNotBlank()) ": ${post.content}" else ".",
+                fontSize = 15.sp
+            )
+            respondersLine(post.responders)?.let {
+                Spacer(Modifier.height(4.dp))
+                Text(it, fontSize = 13.sp, color = Color.White.copy(alpha = 0.85f))
+            }
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = onRespond,
+                enabled = !coming && !busy,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.White,
+                    contentColor = AlertRed,
+                    disabledContainerColor = Color.White.copy(alpha = 0.25f),
+                    disabledContentColor = Color.White
+                ),
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+            ) {
+                Text(
+                    when {
+                        coming -> "You're on the way"
+                        busy -> "Telling them…"
+                        else -> "I'm on my way"
+                    },
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
 private fun visiting(pass: VisitorPass): String =
     "Visiting ${pass.residentName.ifBlank { "a resident" }}" +
         if (pass.residentAddress.isNotBlank()) ", ${pass.residentAddress}" else ""
@@ -366,8 +469,8 @@ fun GuardSignOnScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Text(
-                "Security guards don't join the estate. You'll only see the gate: checking visitors' codes, " +
-                    "and who is inside. The estate's admin gives you a one-time guard code.",
+                "Security guards don't join the estate. You'll see the gate (checking visitors' codes, and who is " +
+                    "inside) and residents' SOS alerts. The estate's admin gives you a one-time guard code.",
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
