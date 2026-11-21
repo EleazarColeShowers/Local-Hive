@@ -11,11 +11,9 @@ import com.eleazar.localhive.domain.StorageRepository
 import com.eleazar.localhive.domain.UploadedVideo
 import com.eleazar.localhive.domain.VideoUploadStage
 import com.eleazar.localhive.domain.UserRepository
-import com.eleazar.localhive.domain.model.AppNotification
 import com.eleazar.localhive.domain.model.Comment
 import com.eleazar.localhive.domain.model.EmergencyType
 import com.eleazar.localhive.domain.model.IncidentStatus
-import com.eleazar.localhive.domain.model.NotificationType
 import com.eleazar.localhive.domain.model.Post
 import com.eleazar.localhive.domain.model.PostCategory
 import com.eleazar.localhive.domain.model.User
@@ -54,6 +52,7 @@ class FeedViewModel(
     /** Authors whose posts and comments the user has chosen not to see. */
     private var blockedIds: Set<String> = emptySet()
     private var allMembers: List<User> = emptyList()
+    private val notifier = FeedNotifier(notificationRepository, viewModelScope)
 
     init {
         loadCurrentUser()
@@ -218,12 +217,7 @@ class FeedViewModel(
         _uiState.update { it.copy(refreshError = null) }
     }
 
-    private fun mergePosts(): List<Post> {
-        val merged = LinkedHashMap<String, Post>()
-        livePosts.forEach { merged[it.id] = it }
-        olderPosts.forEach { merged.getOrPut(it.id) { it } }
-        return merged.values.filter { it.authorId !in blockedIds }.sortedByDescending { it.createdAt }
-    }
+    private fun mergePosts(): List<Post> = mergeFeed(livePosts, olderPosts, blockedIds)
 
     private fun visibleComments(): List<Comment> = allComments.filter { it.authorId !in blockedIds }
 
@@ -383,23 +377,7 @@ class FeedViewModel(
     }
 
     private fun notifyRemoved(post: Post, reason: String) {
-        viewModelScope.launch {
-            val excerpt = post.content.trim().take(80).let { if (post.content.trim().length > 80) "$it…" else it }
-            notificationRepository.createNotification(
-                AppNotification(
-                    recipientId = post.authorId,
-                    type = NotificationType.POST_REMOVED,
-                    title = "An admin removed your post",
-                    message = when {
-                        reason.isNotBlank() -> "Reason: ${reason.trim()}"
-                        excerpt.isNotBlank() -> "\"$excerpt\""
-                        else -> "It no longer appears in the feed."
-                    },
-                    estateId = post.estateId,
-                    relatedUserId = _uiState.value.currentUserId
-                )
-            )
-        }
+        notifier.postRemoved(post, reason, adminId = _uiState.value.currentUserId)
     }
 
     /** "I'm coming": shows straight away, and tells the person who raised the alert. */
@@ -571,37 +549,16 @@ class FeedViewModel(
         }
     }
 
-    /**
-     * Tells the post's author about a new comment, and for a reply, the author of the comment it
-     * answers. Anyone tagged in it already hears through their mention, so isn't told twice.
-     */
     private fun notifyCommented(comment: Comment, commentId: String, estateId: String) {
         val state = _uiState.value
         val me = state.currentUserId ?: return
-        val name = state.currentUserName ?: "A neighbour"
         val post = state.selectedPost?.takeIf { it.id == comment.postId } ?: state.posts.find { it.id == comment.postId }
-        val parentAuthor = comment.parentId?.let { parent -> allComments.find { it.id == parent }?.authorId }
-        val recipients = buildMap {
-            parentAuthor?.let { put(it, "$name replied to your comment") }
-            // The post's author hears about every comment on it, a reply included.
-            post?.authorId?.let { if (!containsKey(it)) put(it, "$name commented on your post") }
-        }.filterKeys { it != me && it !in comment.mentions }
-        recipients.forEach { (recipientId, title) ->
-            viewModelScope.launch {
-                notificationRepository.createNotification(
-                    AppNotification(
-                        recipientId = recipientId,
-                        type = NotificationType.COMMENT,
-                        title = title,
-                        message = comment.content.take(140).ifBlank { "📷 Photo" },
-                        estateId = estateId,
-                        relatedUserId = me,
-                        postId = comment.postId,
-                        commentId = commentId
-                    )
-                )
-            }
-        }
+        notifier.commented(
+            comment, commentId, estateId, me,
+            myName = state.currentUserName ?: "A neighbour",
+            postAuthorId = post?.authorId,
+            parentAuthorId = comment.parentId?.let { parent -> allComments.find { it.id == parent }?.authorId }
+        )
     }
 
     /**
@@ -615,10 +572,6 @@ class FeedViewModel(
         }
     }
 
-    /**
-     * Tells each tagged member, in the app and by push. Best-effort, after the post or comment is
-     * saved: one notification failing to send shouldn't undo it or block the others.
-     */
     private fun notifyMentioned(
         userIds: Collection<String>,
         estateId: String,
@@ -628,24 +581,7 @@ class FeedViewModel(
     ) {
         val state = _uiState.value
         val me = state.currentUserId ?: return
-        val name = state.currentUserName ?: "A neighbour"
-        val title = if (commentId == null) "$name tagged you in a post" else "$name tagged you in a comment"
-        userIds.filter { it != me }.forEach { recipientId ->
-            viewModelScope.launch {
-                notificationRepository.createNotification(
-                    AppNotification(
-                        recipientId = recipientId,
-                        type = NotificationType.MENTION,
-                        title = title,
-                        message = content.take(140),
-                        estateId = estateId,
-                        relatedUserId = me,
-                        postId = postId,
-                        commentId = commentId
-                    )
-                )
-            }
-        }
+        notifier.mentioned(userIds, me, state.currentUserName ?: "A neighbour", estateId, postId, commentId, content)
     }
 
     /** Flips the like on screen straight away, and puts it back if the write fails. */
