@@ -15,3 +15,11 @@ build/
 .kotlin/
 .DS_Store
 worker/node_modules/
+
+# Android Studio settings: each person's IDE writes its own.
+.idea/
+
+# Signed release bundles and APKs: build them locally, upload them to the stores, don't commit them.
+app/release/
+*.aab
+*.apk
