@@ -1101,12 +1101,20 @@ service cloud.firestore {
           return get(/databases/$(database)/documents/posts/$(postId)).data.estateId;
         }
 
+        // A photo sent with a comment is one the app uploaded to Cloudinary; it can't be changed later.
+        function validCommentImage() {
+          let url = request.resource.data.get('imageUrl', null);
+          return url == null
+                 || (url is string && url.size() <= 500 && url.matches('https://res[.]cloudinary[.]com/.*'));
+        }
+
         allow read: if isMemberOf(postEstate());
         allow create: if isSignedIn()
                       && request.resource.data.authorId == uid()
                       && isMemberOf(postEstate())
                       && request.resource.data.content is string
                       && request.resource.data.content.size() <= 1000
+                      && validCommentImage()
                       && stampedFor('lastCommentAt', 'lastCommentId', commentId);
         // Its author rewrites the text, for 30 minutes after writing it.
         allow update: if isSignedIn()

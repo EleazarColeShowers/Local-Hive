@@ -299,6 +299,7 @@ class PostRepositoryImpl(
         put("createdAt", createdAt)
         put("mentions", mentions)
         parentId?.let { put("parentId", it) }
+        imageUrl?.let { put("imageUrl", it) }
     }
 }
 

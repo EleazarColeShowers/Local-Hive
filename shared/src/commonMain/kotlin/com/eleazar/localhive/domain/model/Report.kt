@@ -60,7 +60,8 @@ data class Report(
 
         fun of(comment: Comment, postId: String, reason: ReportReason, details: String) = Report(
             subject = ReportSubject.COMMENT, reason = reason, details = details,
-            targetId = comment.id, postId = postId, targetUserId = comment.authorId, excerpt = comment.content
+            targetId = comment.id, postId = postId, targetUserId = comment.authorId,
+            excerpt = listOfNotNull(comment.content.takeIf { it.isNotBlank() }, comment.imageUrl).joinToString("\n")
         )
     }
 }

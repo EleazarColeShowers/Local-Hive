@@ -32,7 +32,9 @@ fun PostDetailRoute(
         uiState = uiState,
         onNavigateBack = onNavigateBack,
         onLike = viewModel::toggleLike,
-        onAddComment = { content, mentions, parentId -> viewModel.addComment(postId, content, mentions, parentId) },
+        onAddComment = { content, mentions, parentId, imageUri ->
+            viewModel.addComment(postId, content, mentions, parentId, imageUri)
+        },
         onUserClick = onOpenProfile,
         onUpdateStatus = { status -> viewModel.updateIncidentStatus(postId, status) },
         onEditPost = { onEditPost(postId) },

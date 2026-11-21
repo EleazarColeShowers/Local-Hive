@@ -505,16 +505,28 @@ class FeedViewModel(
         }
     }
 
-    /** Adds a comment to the post, or a reply under the comment [parentId] when given. */
+    /**
+     * Adds a comment to the post, or a reply under the comment [parentId] when given. A photo at
+     * [imageUri] is uploaded first, so the comment never points at a failed upload.
+     */
     fun addComment(
         postId: String,
         content: String,
         mentions: Map<String, String> = emptyMap(),
-        parentId: String? = null
+        parentId: String? = null,
+        imageUri: String? = null
     ) {
         val state = _uiState.value
         val userId = state.currentUserId ?: return
+        if (state.sendingComment) return
         viewModelScope.launch {
+            _uiState.update { it.copy(sendingComment = true) }
+            val imageUrl = imageUri?.let { uri ->
+                storageRepository.uploadPostImage(userId, uri).getOrElse { e ->
+                    _uiState.update { it.copy(sendingComment = false, error = e.friendlyMessage("Couldn't upload the photo")) }
+                    return@launch
+                }
+            }
             val comment = Comment(
                 postId = postId,
                 authorId = userId,
@@ -522,16 +534,20 @@ class FeedViewModel(
                 content = content,
                 createdAt = nowMillis(),
                 mentions = mentions,
-                parentId = parentId
+                parentId = parentId,
+                imageUrl = imageUrl
             )
             postRepository.addComment(comment)
                 .onSuccess { commentId ->
+                    _uiState.update { it.copy(sendingComment = false, commentsPosted = it.commentsPosted + 1) }
                     state.estateId?.let { estateId ->
                         notifyMentioned(mentions.keys, estateId, postId, commentId, content)
                         notifyCommented(comment, commentId, estateId)
                     }
                 }
-                .onFailure { e -> _uiState.update { it.copy(error = e.friendlyMessage("Couldn't post your comment")) } }
+                .onFailure { e ->
+                    _uiState.update { it.copy(sendingComment = false, error = e.friendlyMessage("Couldn't post your comment")) }
+                }
         }
     }
 
@@ -577,7 +593,7 @@ class FeedViewModel(
                         recipientId = recipientId,
                         type = NotificationType.COMMENT,
                         title = title,
-                        message = comment.content.take(140),
+                        message = comment.content.take(140).ifBlank { "📷 Photo" },
                         estateId = estateId,
                         relatedUserId = me,
                         postId = comment.postId,

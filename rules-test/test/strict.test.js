@@ -113,3 +113,22 @@ test("comments need their stamp too", async () => {
   batch.set(doc(db, "postingLimits/ada"), { lastCommentAt: serverTimestamp(), lastCommentId: "c1" }, { merge: true });
   await assertSucceeds(batch.commit());
 });
+
+// A comment as the app sends it, with its stamp, in one batch.
+function commentWithStamp(db, id, extra = {}) {
+  const batch = writeBatch(db);
+  batch.set(doc(db, `posts/p0/comments/${id}`), { authorId: "ada", postId: "p0", content: "", createdAt: Date.now(), ...extra });
+  batch.update(doc(db, "posts/p0"), { commentCount: increment(1) });
+  batch.set(doc(db, "postingLimits/ada"), { lastCommentAt: serverTimestamp(), lastCommentId: id }, { merge: true });
+  return batch.commit();
+}
+
+test("a comment can carry a Cloudinary photo, and nothing else", async () => {
+  const db = as("ada");
+  await assertFails(commentWithStamp(db, "elsewhere", { imageUrl: "https://example.com/x.jpg" }));
+  await assertFails(commentWithStamp(db, "notText", { imageUrl: 42 }));
+  await assertFails(commentWithStamp(db, "long", { imageUrl: "https://res.cloudinary.com/" + "x".repeat(500) }));
+  await assertSucceeds(commentWithStamp(db, "photo", {
+    imageUrl: "https://res.cloudinary.com/demo/image/upload/v1/postImages/ada/abc.jpg",
+  }));
+});

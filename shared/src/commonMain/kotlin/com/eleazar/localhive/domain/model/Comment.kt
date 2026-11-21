@@ -15,5 +15,7 @@ data class Comment(
      */
     val parentId: String? = null,
     /** When the author last changed the text, or 0 if they never have. */
-    val editedAt: Long = 0L
+    val editedAt: Long = 0L,
+    /** A photo sent with the comment, which may then have no text. It can't be changed afterwards. */
+    val imageUrl: String? = null
 )

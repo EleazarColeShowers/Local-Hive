@@ -33,6 +33,10 @@ data class FeedUiState(
     val selectedPost: Post? = null,
     val comments: List<Comment> = emptyList(),
     val isPosting: Boolean = false,
+    /** A comment's photo is uploading, so the composer holds on to it until it's sent. */
+    val sendingComment: Boolean = false,
+    /** Goes up each time a comment is saved, so the composer knows it can let go of its draft. */
+    val commentsPosted: Int = 0,
     /** 0–1 while a video is being prepared or uploaded; null when there's no upload to report. */
     val uploadProgress: Float? = null,
     /** The video is being shrunk on the phone, before its upload starts. */

@@ -33,6 +33,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
@@ -64,6 +65,12 @@ import com.eleazar.localhive.ui.util.relativeTime
 import com.eleazar.localhive.ui.util.nowMillis
 import com.eleazar.localhive.domain.model.isEditable
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
+import com.eleazar.localhive.ui.components.ImageViewer
+import com.eleazar.localhive.ui.platform.MediaKind
+import com.eleazar.localhive.ui.platform.rememberMediaPicker
 
 private const val MAX_COMMENT_LENGTH = 1000
 
@@ -73,8 +80,8 @@ fun PostDetailScreen(
     uiState: FeedUiState,
     onNavigateBack: () -> Unit,
     onLike: (postId: String) -> Unit,
-    /** Posts a comment, or a reply under the comment [parentId] when it's set. */
-    onAddComment: (content: String, mentions: Map<String, String>, parentId: String?) -> Unit,
+    /** Posts a comment, or a reply under the comment [parentId] when it's set, with the photo at [imageUri] if picked. */
+    onAddComment: (content: String, mentions: Map<String, String>, parentId: String?, imageUri: String?) -> Unit,
     onUserClick: (userId: String) -> Unit = {},
     onUpdateStatus: (IncidentStatus) -> Unit = {},
     onEditPost: () -> Unit = {},
@@ -102,6 +109,24 @@ fun PostDetailScreen(
     val composerFocus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+    // A photo to go with the next comment. Its draft is kept until the upload and save succeed,
+    // so a failed upload doesn't lose what the user wrote.
+    var photoUri by rememberSaveable { mutableStateOf<String?>(null) }
+    val pickPhoto = rememberMediaPicker(MediaKind.IMAGE) { photoUri = it.uri }
+    var awaitingSend by remember { mutableStateOf(false) }
+    var postedBeforeSend by remember { mutableStateOf(0) }
+    LaunchedEffect(awaitingSend, uiState.sendingComment, uiState.commentsPosted) {
+        if (awaitingSend && !uiState.sendingComment) {
+            if (uiState.commentsPosted > postedBeforeSend) {
+                draft = TextFieldValue()
+                picked = emptyMap()
+                photoUri = null
+                replyingTo = null
+            }
+            awaitingSend = false
+        }
+    }
+    val canSend = (commentText.isNotBlank() || (photoUri != null && editingComment == null)) && !uiState.sendingComment
     LaunchedEffect(replyingTo?.id, editingComment?.id) {
         if (replyingTo != null || editingComment != null) runCatching { composerFocus.requestFocus() }
     }
@@ -191,6 +216,37 @@ fun PostDetailScreen(
                         MAX_COMMENT_LENGTH,
                         Modifier.fillMaxWidth().padding(start = 16.dp, end = 76.dp, top = 6.dp)
                     )
+                    photoUri?.takeIf { editingComment == null }?.let { uri ->
+                        Box(modifier = Modifier.padding(start = 16.dp, top = 8.dp).size(84.dp)) {
+                            AsyncImage(
+                                model = uri,
+                                contentDescription = "Selected photo",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.matchParentSize().clip(RoundedCornerShape(12.dp))
+                            )
+                            if (uiState.sendingComment) {
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color.Black.copy(alpha = 0.45f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
+                                }
+                            } else {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color.Black.copy(alpha = 0.6f),
+                                    modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(24.dp)
+                                ) {
+                                    IconButton(onClick = { photoUri = null }) {
+                                        Icon(Icons.Filled.Close, contentDescription = "Remove photo", tint = Color.White, modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
                     if (mentionQuery != null && suggestions.isNotEmpty()) {
                         MentionSuggestionList(suggestions, onPick = { member ->
                             draft = insertMention(draft, mentionQuery, member)
@@ -204,6 +260,20 @@ fun PostDetailScreen(
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.Bottom
                     ) {
+                        // A comment's photo stays as it was posted, so there's none to add while editing.
+                        if (editingComment == null) {
+                            IconButton(
+                                onClick = pickPhoto,
+                                enabled = !uiState.sendingComment,
+                                modifier = Modifier.padding(bottom = 6.dp)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Image,
+                                    contentDescription = if (photoUri == null) "Add a photo" else "Change photo",
+                                    tint = accent
+                                )
+                            }
+                        }
                         TextField(
                             value = draft,
                             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
@@ -228,19 +298,25 @@ fun PostDetailScreen(
                                 keyboard?.hide()
                                 focusManager.clearFocus()
                                 val editing = editingComment
+                                val photo = photoUri
+                                // Replies all hang off the top-level comment, one level deep.
+                                val parentId = replyingTo?.let { it.parentId ?: it.id }
                                 if (commentText.isNotBlank() && editing != null) {
                                     onEditComment(editing.id, commentText.trim(), mentionsIn(commentText, picked))
                                     cancelEdit()
+                                } else if (photo != null) {
+                                    // Cleared once the photo is up and the comment saved.
+                                    postedBeforeSend = uiState.commentsPosted
+                                    awaitingSend = true
+                                    onAddComment(commentText.trim(), mentionsIn(commentText, picked), parentId, photo)
                                 } else if (commentText.isNotBlank()) {
-                                    // Replies all hang off the top-level comment, one level deep.
-                                    val parentId = replyingTo?.let { it.parentId ?: it.id }
-                                    onAddComment(commentText.trim(), mentionsIn(commentText, picked), parentId)
+                                    onAddComment(commentText.trim(), mentionsIn(commentText, picked), parentId, null)
                                     draft = TextFieldValue()
                                     picked = emptyMap()
                                     replyingTo = null
                                 }
                             },
-                            enabled = commentText.isNotBlank(),
+                            enabled = canSend,
                             shape = CircleShape,
                             modifier = Modifier.padding(bottom = 2.dp).size(52.dp),
                             colors = IconButtonDefaults.filledIconButtonColors(
@@ -401,6 +477,7 @@ private fun CommentRow(
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var reporting by remember { mutableStateOf(false) }
+    var viewingImage by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -445,17 +522,41 @@ private fun CommentRow(
                             )
                         }
                     }
-                    Spacer(Modifier.height(2.dp))
-                    LinkifiedText(
-                        comment.content,
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        linkColor = accent,
-                        mentions = comment.mentions,
-                        onMentionClick = onUserClick
-                    )
+                    if (comment.content.isNotBlank()) {
+                        Spacer(Modifier.height(2.dp))
+                        LinkifiedText(
+                            comment.content,
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            linkColor = accent,
+                            mentions = comment.mentions,
+                            onMentionClick = onUserClick
+                        )
+                    }
                 }
+            }
+            comment.imageUrl?.let { imageUrl ->
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = "Photo in comment",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .padding(top = 6.dp)
+                        .widthIn(max = 240.dp)
+                        .fillMaxWidth()
+                        .heightIn(max = 240.dp)
+                        .aspectRatio(4f / 3f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                        .combinedClickable(
+                            onClickLabel = "View photo",
+                            onLongClickLabel = "Comment options",
+                            onClick = { viewingImage = true },
+                            onLongClick = { menuOpen = true }
+                        )
+                )
+                if (viewingImage) ImageViewer(imageUrl, onDismiss = { viewingImage = false })
             }
             if (onReply != null) {
                 Text(
@@ -502,14 +603,16 @@ private fun CommentRow(
                         }
                     )
                 }
-                DropdownMenuItem(
-                    text = { Text("Copy") },
-                    leadingIcon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null) },
-                    onClick = {
-                        menuOpen = false
-                        platform.copyToClipboard("Comment", comment.content, "Copied")
-                    }
-                )
+                if (comment.content.isNotBlank()) {
+                    DropdownMenuItem(
+                        text = { Text("Copy") },
+                        leadingIcon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            platform.copyToClipboard("Comment", comment.content, "Copied")
+                        }
+                    )
+                }
                 if (onReport != null) {
                     DropdownMenuItem(
                         text = { Text("Report") },

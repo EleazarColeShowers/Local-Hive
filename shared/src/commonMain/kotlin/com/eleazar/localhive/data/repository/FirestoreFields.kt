@@ -104,7 +104,8 @@ internal fun DocumentSnapshot.toComment(): Comment = Comment(
     createdAt = long("createdAt") ?: 0L,
     mentions = stringMap("mentions").orEmpty(),
     parentId = string("parentId")?.takeIf { it.isNotBlank() },
-    editedAt = long("editedAt") ?: 0L
+    editedAt = long("editedAt") ?: 0L,
+    imageUrl = string("imageUrl")?.takeIf { it.isNotBlank() }
 )
 
 internal fun DocumentSnapshot.toMessage(): Message = Message(
