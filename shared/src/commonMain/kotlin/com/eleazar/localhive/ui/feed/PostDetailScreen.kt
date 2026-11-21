@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.*
@@ -22,17 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.eleazar.localhive.domain.model.IncidentStatus
 import com.eleazar.localhive.domain.model.PostCategory
-import androidx.compose.material.icons.automirrored.filled.DirectionsRun
-import androidx.compose.material.icons.filled.CheckCircle
-import com.eleazar.localhive.ui.components.readable
-import com.eleazar.localhive.ui.theme.AlertRed
-import com.eleazar.localhive.ui.theme.HiveGreen
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -40,13 +29,9 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.ui.draw.clip
 import com.eleazar.localhive.domain.model.Comment
-import com.eleazar.localhive.ui.components.Avatar
 import com.eleazar.localhive.ui.components.CharactersLeft
-import com.eleazar.localhive.ui.platform.rememberPlatformActions
-import com.eleazar.localhive.ui.components.LinkifiedText
 import com.eleazar.localhive.ui.components.MentionSuggestionList
 import com.eleazar.localhive.ui.components.activeMentionQuery
 import com.eleazar.localhive.ui.components.insertMention
@@ -55,20 +40,14 @@ import com.eleazar.localhive.ui.components.mentionSuggestions
 import com.eleazar.localhive.ui.components.mentionsIn
 import androidx.compose.ui.text.input.TextFieldValue
 import com.eleazar.localhive.ui.components.PostCard
-import androidx.compose.material.icons.outlined.Flag
 import com.eleazar.localhive.domain.model.Report
 import com.eleazar.localhive.domain.model.ReportReason
-import com.eleazar.localhive.ui.report.ReportDialog
-import com.eleazar.localhive.ui.components.RoleBadge
 import com.eleazar.localhive.ui.components.ScreenGutter
-import com.eleazar.localhive.ui.util.relativeTime
 import com.eleazar.localhive.ui.util.nowMillis
 import com.eleazar.localhive.domain.model.isEditable
-import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
-import com.eleazar.localhive.ui.components.ImageViewer
 import com.eleazar.localhive.ui.platform.MediaKind
 import com.eleazar.localhive.ui.platform.rememberMediaPicker
 
@@ -438,368 +417,6 @@ fun PostDetailScreen(
                     onReport = { reason: ReportReason, details: String ->
                         onReport(Report.of(comment, uiState.selectedPost?.id.orEmpty(), reason, details))
                     }.takeIf { me != null && comment.authorId != me }
-                )
-            }
-        }
-    }
-}
-
-private data class CommentLine(val comment: Comment, val isReply: Boolean)
-
-/** Each comment in order, followed by its replies, oldest first. */
-private fun commentThreads(comments: List<Comment>): List<CommentLine> {
-    val ids = comments.mapTo(HashSet()) { it.id }
-    val replies = comments.filter { it.parentId != null && it.parentId in ids }.groupBy { it.parentId }
-    return buildList {
-        comments.filter { it.parentId == null || it.parentId !in ids }.forEach { top ->
-            add(CommentLine(top, isReply = false))
-            replies[top.id].orEmpty().forEach { add(CommentLine(it, isReply = true)) }
-        }
-    }
-}
-
-/** One comment. Its menu button, or a long press, offers to copy or report it, and to delete it for those allowed to. */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun CommentRow(
-    comment: Comment,
-    isReply: Boolean,
-    onReply: (() -> Unit)?,
-    authorIsAdmin: Boolean,
-    canDelete: Boolean,
-    onUserClick: (userId: String) -> Unit,
-    onDelete: () -> Unit,
-    onEdit: (() -> Unit)? = null,
-    onReport: ((ReportReason, details: String) -> Unit)? = null
-) {
-    val accent = MaterialTheme.colorScheme.primary
-    val platform = rememberPlatformActions()
-    var menuOpen by remember { mutableStateOf(false) }
-    var confirmDelete by remember { mutableStateOf(false) }
-    var reporting by remember { mutableStateOf(false) }
-    var viewingImage by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            // Replies sit in under the comment they answer, lined up with its text.
-            .padding(start = if (isReply) ScreenGutter + 44.dp else ScreenGutter, end = ScreenGutter, top = if (isReply) 2.dp else 6.dp, bottom = 2.dp),
-        verticalAlignment = Alignment.Top
-    ) {
-        Avatar(imageUrl = null, name = comment.authorName, size = if (isReply) 26.dp else 34.dp)
-        Spacer(Modifier.width(10.dp))
-        // The bubble wraps its text; the space it leaves keeps the menu button at the right edge.
-        Column(modifier = Modifier.weight(1f)) {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .combinedClickable(
-                        onClickLabel = null,
-                        onLongClickLabel = "Comment options",
-                        onClick = {},
-                        onLongClick = { menuOpen = true }
-                    )
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            comment.authorName.ifBlank { "Neighbour" },
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        if (authorIsAdmin) {
-                            Spacer(Modifier.width(6.dp))
-                            RoleBadge()
-                        }
-                        val time = relativeTime(comment.createdAt)
-                        if (time.isNotEmpty()) {
-                            Text(
-                                "  ·  $time" + if (comment.editedAt > 0L) " · edited" else "",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                            )
-                        }
-                    }
-                    if (comment.content.isNotBlank()) {
-                        Spacer(Modifier.height(2.dp))
-                        LinkifiedText(
-                            comment.content,
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            linkColor = accent,
-                            mentions = comment.mentions,
-                            onMentionClick = onUserClick
-                        )
-                    }
-                }
-            }
-            comment.imageUrl?.let { imageUrl ->
-                AsyncImage(
-                    model = imageUrl,
-                    contentDescription = "Photo in comment",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .padding(top = 6.dp)
-                        .widthIn(max = 240.dp)
-                        .fillMaxWidth()
-                        .heightIn(max = 240.dp)
-                        .aspectRatio(4f / 3f)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .combinedClickable(
-                            onClickLabel = "View photo",
-                            onLongClickLabel = "Comment options",
-                            onClick = { viewingImage = true },
-                            onLongClick = { menuOpen = true }
-                        )
-                )
-                if (viewingImage) ImageViewer(imageUrl, onDismiss = { viewingImage = false })
-            }
-            if (onReply != null) {
-                Text(
-                    "Reply",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .padding(start = 4.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .clickable(onClick = onReply)
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
-                )
-            }
-        }
-        // A visible way in to the same menu as the long press, which people don't find on their own.
-        Box {
-            IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    Icons.Filled.MoreVert,
-                    contentDescription = "Comment options",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                if (onReply != null) {
-                    DropdownMenuItem(
-                        text = { Text("Reply") },
-                        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Reply, contentDescription = null) },
-                        onClick = {
-                            menuOpen = false
-                            onReply()
-                        }
-                    )
-                }
-                if (onEdit != null) {
-                    DropdownMenuItem(
-                        text = { Text("Edit") },
-                        leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
-                        onClick = {
-                            menuOpen = false
-                            onEdit()
-                        }
-                    )
-                }
-                if (comment.content.isNotBlank()) {
-                    DropdownMenuItem(
-                        text = { Text("Copy") },
-                        leadingIcon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null) },
-                        onClick = {
-                            menuOpen = false
-                            platform.copyToClipboard("Comment", comment.content, "Copied")
-                        }
-                    )
-                }
-                if (onReport != null) {
-                    DropdownMenuItem(
-                        text = { Text("Report") },
-                        leadingIcon = { Icon(Icons.Outlined.Flag, contentDescription = null) },
-                        onClick = {
-                            menuOpen = false
-                            reporting = true
-                        }
-                    )
-                }
-                if (canDelete) {
-                    DropdownMenuItem(
-                        text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                        leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                        onClick = {
-                            menuOpen = false
-                            confirmDelete = true
-                        }
-                    )
-                }
-            }
-        }
-    }
-    if (reporting && onReport != null) {
-        ReportDialog(title = "Report comment", onSubmit = onReport, onDismiss = { reporting = false })
-    }
-    if (confirmDelete) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text("Delete this comment?") },
-            text = { Text("It'll be removed for everyone. This can't be undone.") },
-            confirmButton = {
-                TextButton(onClick = { confirmDelete = false; onDelete() }) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
-                }
-            },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } }
-        )
-    }
-}
-
-@Composable
-private fun IncidentStatusPicker(current: IncidentStatus?, onPick: (IncidentStatus) -> Unit) {
-    Column(modifier = Modifier.padding(horizontal = ScreenGutter, vertical = 12.dp)) {
-        Text(
-            "Update status",
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            IncidentStatus.entries.forEach { status ->
-                FilterChip(
-                    selected = status == current,
-                    onClick = { if (status != current) onPick(status) },
-                    label = { Text(status.label) }
-                )
-            }
-        }
-    }
-}
-
-/** Marks an emergency a false alarm, after saying what that means, or (for admins) takes it back. */
-@Composable
-private fun FalseAlarmAction(
-    marked: Boolean,
-    isMine: Boolean,
-    authorName: String,
-    onMark: () -> Unit,
-    onUndo: () -> Unit
-) {
-    var confirming by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenGutter, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            if (marked) "Marked as a false alarm" else "Wasn't a real emergency?",
-            fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f)
-        )
-        TextButton(onClick = { confirming = true }) {
-            Text(
-                if (marked) "Undo" else "Mark as false alarm",
-                color = if (marked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-    }
-    if (confirming) {
-        val (title, body) = when {
-            marked -> "Not a false alarm?" to
-                "The false-alarm mark comes off, and it stops counting against $authorName."
-            isMine -> "Mark your alert as a false alarm?" to
-                "It closes, everyone is told no help is needed, and it shows as a false alarm. " +
-                "Two false alarms in 30 days and your alerts go out without the siren."
-            else -> "Mark this as a false alarm?" to
-                "It closes, everyone is told no help is needed, and it shows as a false alarm. " +
-                "Two false alarms in 30 days and $authorName's alerts go out without the siren."
-        }
-        AlertDialog(
-            onDismissRequest = { confirming = false },
-            title = { Text(title) },
-            text = { Text(body) },
-            confirmButton = {
-                TextButton(onClick = { confirming = false; if (marked) onUndo() else onMark() }) {
-                    Text(
-                        if (marked) "Undo" else "Mark false alarm",
-                        color = if (marked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            },
-            dismissButton = { TextButton(onClick = { confirming = false }) { Text("Cancel") } }
-        )
-    }
-}
-
-/**
- * The two answers an SOS needs: neighbours saying they're on their way, and the person who
- * raised it saying they're safe.
- */
-@Composable
-private fun SosFollowUp(
-    isMine: Boolean,
-    authorName: String,
-    responding: Boolean,
-    onRespond: () -> Unit,
-    onMarkSafe: () -> Unit
-) {
-    Column(modifier = Modifier.padding(horizontal = ScreenGutter, vertical = 12.dp)) {
-        when {
-            isMine -> {
-                Button(
-                    onClick = onMarkSafe,
-                    shape = RoundedCornerShape(50),
-                    colors = ButtonDefaults.buttonColors(containerColor = HiveGreen, contentColor = Color.White),
-                    modifier = Modifier.fillMaxWidth().height(52.dp)
-                ) {
-                    Icon(Icons.Filled.CheckCircle, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("I'm safe now", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                }
-                Text(
-                    "Closes the alert and lets everyone know you're OK.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 6.dp)
-                )
-            }
-            responding -> {
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = HiveGreen.copy(alpha = 0.12f),
-                    modifier = Modifier.fillMaxWidth().height(52.dp)
-                ) {
-                    Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.AutoMirrored.Filled.DirectionsRun, contentDescription = null, tint = readable(HiveGreen))
-                        Spacer(Modifier.width(8.dp))
-                        Text("You're on your way", fontWeight = FontWeight.Bold, color = readable(HiveGreen))
-                    }
-                }
-                Text(
-                    "$authorName knows you're coming.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 6.dp)
-                )
-            }
-            else -> {
-                Button(
-                    onClick = onRespond,
-                    shape = RoundedCornerShape(50),
-                    colors = ButtonDefaults.buttonColors(containerColor = AlertRed, contentColor = Color.White),
-                    modifier = Modifier.fillMaxWidth().height(52.dp)
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.DirectionsRun, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("I'm coming to help", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                }
-                Text(
-                    "$authorName will be told you're on your way.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 6.dp)
                 )
             }
         }
