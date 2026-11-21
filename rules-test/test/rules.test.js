@@ -373,3 +373,13 @@ test("a profile photo must be the app's own, but an old one left as it is still 
   await assertSucceeds(updateDoc(doc(as("chi"), "users/chi"), { bio: "Hello" }));
 });
 
+test("a push token is private to its owner", async () => {
+  const token = { token: "fcm-token", updatedAt: Date.now() };
+  await assertSucceeds(setDoc(doc(as("ada"), "pushTokens/ada"), token));
+  await assertSucceeds(getDoc(doc(as("ada"), "pushTokens/ada")));
+  await assertFails(getDoc(doc(as("bayo"), "pushTokens/ada")));
+  await assertFails(setDoc(doc(as("bayo"), "pushTokens/ada"), token));
+  await assertFails(setDoc(doc(as("ada"), "pushTokens/ada"), { ...token, extra: true }));
+  await assertFails(deleteDoc(doc(as("bayo"), "pushTokens/ada")));
+  await assertSucceeds(deleteDoc(doc(as("ada"), "pushTokens/ada")));
+});

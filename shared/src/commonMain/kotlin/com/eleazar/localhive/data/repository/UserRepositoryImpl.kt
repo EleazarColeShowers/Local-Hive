@@ -7,7 +7,6 @@ import com.eleazar.localhive.domain.model.SosSound
 import com.eleazar.localhive.domain.model.User
 import com.eleazar.localhive.ui.util.nowMillis
 import dev.gitlive.firebase.firestore.Direction
-import dev.gitlive.firebase.firestore.FieldValue
 import dev.gitlive.firebase.firestore.FirebaseFirestore
 import dev.gitlive.firebase.firestore.Source
 import kotlinx.coroutines.flow.Flow
@@ -86,7 +85,8 @@ class UserRepositoryImpl(
     }
 
     override suspend fun updateFcmToken(userId: String, token: String): Result<Unit> = runCatching {
-        firestore.users().document(userId).set(mapOf("fcmToken" to token), merge = true)
+        firestore.pushTokens().document(userId).set(mapOf("token" to token, "updatedAt" to nowMillis()))
+        firestore.removeProfileToken(userId)
     }
 
     override suspend fun setLightAlerts(userId: String, enabled: Boolean): Result<Unit> = runCatching {
@@ -106,7 +106,8 @@ class UserRepositoryImpl(
     }
 
     override suspend fun clearFcmToken(userId: String): Result<Unit> = runCatching {
-        firestore.users().document(userId).update("fcmToken" to FieldValue.delete)
+        firestore.pushTokens().document(userId).delete()
+        firestore.removeProfileToken(userId)
     }
 
     override fun observeBlockedUsers(userId: String): Flow<List<BlockedUser>> =

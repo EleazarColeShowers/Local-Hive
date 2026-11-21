@@ -7,8 +7,8 @@ import dev.gitlive.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.delay
 
 /**
- * Keeps this device's FCM token on the signed-in user's profile, which is where the Worker looks
- * when it pushes. With push notifications switched off in Settings the token is taken off instead:
+ * Keeps this device's FCM token in pushTokens/{uid}, which is where the Worker looks when it
+ * pushes. With push notifications switched off in Settings the token is taken off instead:
  * iOS draws a push itself, so the app can't drop it on arrival the way Android does.
  */
 class PushTokenSync(

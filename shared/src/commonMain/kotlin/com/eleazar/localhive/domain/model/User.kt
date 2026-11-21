@@ -11,7 +11,6 @@ data class User(
     val address: String? = null,
     val occupation: String? = null,
     val phone: String? = null,
-    val fcmToken: String? = null,
     /** Wants a push when a neighbour reports the light is back. */
     val lightAlerts: Boolean = false,
     /** A push for every new post in the estate. Off unless the user turns it on. */

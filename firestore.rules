@@ -176,6 +176,18 @@ service cloud.firestore {
       }
     }
 
+    // Each user's device token for pushes. Only they can see it; the push Worker reads it with
+    // admin access. Apps before 1.09 still keep it on the profile (fcmToken). Once config/app's
+    // minVersion is 1.09, refuse fcmToken on profiles and delete the ones left.
+    match /pushTokens/{userId} {
+      allow read, delete: if isSignedIn() && uid() == userId;
+      allow create, update: if isSignedIn() && uid() == userId
+                            && request.resource.data.keys().hasOnly(['token', 'updatedAt'])
+                            && request.resource.data.token is string
+                            && request.resource.data.token.size() > 0
+                            && request.resource.data.token.size() <= 4096;
+    }
+
     match /estates/{estateId} {
       // Public so people can find an estate to request; invite codes live elsewhere.
       allow read: if isSignedIn();

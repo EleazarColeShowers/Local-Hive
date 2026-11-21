@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import {
   buildPush, flatList, estateNameLowerUpdates, falseAlarmsCostSiren, pollReminders, tooManyEmergencies, tooManyUploads, UPLOAD_LIMIT_PER_HOUR,
 } from "../src/index.js";
-import { sosSoundFor } from "../src/push.js";
+import { pushTokenOf, sosSoundFor } from "../src/push.js";
 import { MAX_VIDEO_BYTES, oversizedVideoIds, signUpload } from "../src/cloudinary.js";
 import { decodeValue } from "../src/firestore.js";
 import { appIntentUrl, inviteCodeIn, playStoreUrl, publicResponse } from "../src/links.js";
@@ -669,3 +669,16 @@ test("the invite page sends iPhones to the App Store and can open the app at the
   assert.match(html, /localhive:\/\/join\/ABC234/);
   assert.doesNotMatch(html, /coming soon/);
 });
+
+test("a push token is read from pushTokens first, then from an old app's profile", () => {
+  const docs = {
+    "users/new": { fcmToken: "stale" },
+    "pushTokens/new": { token: "fresh" },
+    "users/old": { fcmToken: "legacy" },
+    "users/none": {},
+  };
+  assert.equal(pushTokenOf(docs, "new"), "fresh");
+  assert.equal(pushTokenOf(docs, "old"), "legacy");
+  assert.equal(pushTokenOf(docs, "none"), null);
+});
+

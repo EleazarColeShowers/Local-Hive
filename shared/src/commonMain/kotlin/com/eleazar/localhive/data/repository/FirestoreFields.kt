@@ -7,6 +7,7 @@ import com.eleazar.localhive.domain.model.Post
 import com.eleazar.localhive.domain.model.SosSound
 import com.eleazar.localhive.domain.model.User
 import dev.gitlive.firebase.firestore.DocumentSnapshot
+import dev.gitlive.firebase.firestore.FieldValue
 import dev.gitlive.firebase.firestore.FirebaseFirestore
 
 /*
@@ -34,6 +35,17 @@ private inline fun <T> DocumentSnapshot.read(field: String, reader: DocumentSnap
 
 internal fun FirebaseFirestore.users() = collection("users")
 
+/** Each user's device token for pushes, which only they (and the push Worker) can read. */
+internal fun FirebaseFirestore.pushTokens() = collection("pushTokens")
+
+/**
+ * Takes this device's token off the user's profile, where apps before 1.09 kept it and every
+ * neighbour could read it. Best-effort: the profile may not exist yet on a fresh sign-up.
+ */
+internal suspend fun FirebaseFirestore.removeProfileToken(userId: String) {
+    runCatching { users().document(userId).update("fcmToken" to FieldValue.delete) }
+}
+
 internal fun DocumentSnapshot.toUser(): User = User(
     id = id,
     email = string("email"),
@@ -45,7 +57,6 @@ internal fun DocumentSnapshot.toUser(): User = User(
     address = string("address"),
     occupation = string("occupation"),
     phone = string("phone"),
-    fcmToken = string("fcmToken"),
     lightAlerts = boolean("lightAlerts") ?: false,
     newPostAlerts = boolean("newPostAlerts") ?: false,
     sosSound = SosSound.fromKey(string("sosSound")),

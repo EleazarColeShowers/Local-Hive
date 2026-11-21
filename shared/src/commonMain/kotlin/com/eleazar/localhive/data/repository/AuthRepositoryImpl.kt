@@ -8,7 +8,6 @@ import dev.gitlive.firebase.auth.EmailAuthProvider
 import dev.gitlive.firebase.auth.FirebaseAuth
 import dev.gitlive.firebase.auth.FirebaseAuthInvalidCredentialsException
 import dev.gitlive.firebase.auth.FirebaseUser
-import dev.gitlive.firebase.firestore.FieldValue
 import dev.gitlive.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -64,7 +63,8 @@ class AuthRepositoryImpl(
         firebaseAuth.currentUser?.uid?.let { uid ->
             withTimeoutOrNull(5_000) {
                 runCatching {
-                    firestore.users().document(uid).update("fcmToken" to FieldValue.delete)
+                    firestore.pushTokens().document(uid).delete()
+                    firestore.removeProfileToken(uid)
                 }
             }
         }

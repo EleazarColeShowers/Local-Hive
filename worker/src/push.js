@@ -46,9 +46,10 @@ export async function sendToUsers(db, env, userIds, { title, body, deepLink, tag
   const recipients = [...new Set(userIds)].filter(Boolean);
   if (recipients.length === 0) return 0;
 
-  const profiles = await db.getAll(recipients.map((id) => `users/${id}`));
+  // Profiles for each person's sound settings, and their tokens, in one read.
+  const docs = await db.getAll(recipients.flatMap((id) => [`users/${id}`, `pushTokens/${id}`]));
   const targets = recipients
-    .map((id) => ({ id, profile: profiles[`users/${id}`], token: profiles[`users/${id}`]?.fcmToken }))
+    .map((id) => ({ id, profile: docs[`users/${id}`], token: pushTokenOf(docs, id) }))
     .filter((t) => t.token);
   if (targets.length === 0) return 0;
 
@@ -94,11 +95,26 @@ export async function sendToUsers(db, env, userIds, { title, body, deepLink, tag
       const error = await response.json().catch(() => ({}));
       const code = error?.error?.details?.find((d) => d.errorCode)?.errorCode || error?.error?.status;
       console.log("FCM send failed", id, response.status, code, error?.error?.message);
-      if (DEAD_TOKEN_ERRORS.has(code)) await db.deleteField(`users/${id}`, "fcmToken");
+      if (DEAD_TOKEN_ERRORS.has(code)) await forgetToken(db, id);
       return false;
     })
   );
   return results.filter(Boolean).length;
+}
+
+/**
+ * The user's device token. It lives in pushTokens/{uid}, which only they can read. Apps before
+ * 1.09 still keep it on the profile, where neighbours can see it, and clear only that copy when
+ * someone logs out or turns pushes off, so the profile copy is used until they update.
+ */
+export function pushTokenOf(docs, id) {
+  return docs[`pushTokens/${id}`]?.token || docs[`users/${id}`]?.fcmToken || null;
+}
+
+/** Drops a token FCM says is dead, from both places it may be kept. */
+async function forgetToken(db, id) {
+  await db.commit([{ delete: `pushTokens/${id}` }]).catch(() => {});
+  await db.deleteField(`users/${id}`, "fcmToken");
 }
 
 /**

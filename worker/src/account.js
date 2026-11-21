@@ -66,6 +66,7 @@ export async function deleteAccount(db, uid, { deleteAuthUser, deleteMedia = asy
   for (const b of blocks) remove(b.path);
   // When they last posted and commented. Deleting a missing document is fine.
   remove(`postingLimits/${uid}`);
+  remove(`pushTokens/${uid}`);
 
   // A guard's place at the gate, and a resident's visitor passes in their estate.
   if (user?.guardEstateId) remove(`estates/${user.guardEstateId}/guards/${uid}`);
