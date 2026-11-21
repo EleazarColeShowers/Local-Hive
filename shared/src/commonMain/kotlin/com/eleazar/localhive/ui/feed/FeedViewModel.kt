@@ -21,6 +21,10 @@ import com.eleazar.localhive.domain.model.isEditable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Job
+import com.eleazar.localhive.ui.directory.DIRECTORY_FULL_LOAD_MAX
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -32,6 +36,9 @@ private const val POST_PAGE_SIZE = 20L
 private const val REFRESH_TIMEOUT_MS = 15_000L
 /** Long enough for the pull indicator to register that a refresh happened. */
 private const val MIN_REFRESH_MS = 400L
+
+private const val MENTION_SEARCH_LIMIT = 8
+private const val MENTION_SEARCH_DEBOUNCE_MILLIS = 250L
 
 class FeedViewModel(
     private val postRepository: PostRepository,
@@ -52,6 +59,9 @@ class FeedViewModel(
     /** Authors whose posts and comments the user has chosen not to see. */
     private var blockedIds: Set<String> = emptySet()
     private var allMembers: List<User> = emptyList()
+    /** Set when the estate is too big to load its members whole; tagging searches it instead. */
+    private var bigEstateId: String? = null
+    private var mentionSearchJob: Job? = null
     private val notifier = FeedNotifier(notificationRepository, viewModelScope)
 
     init {
@@ -109,14 +119,38 @@ class FeedViewModel(
         }
     }
 
+    /**
+     * Who can be tagged. A small estate comes from the directory's saved copy, so opening the app
+     * doesn't read every profile. A big one isn't loaded at all: [searchMentions] looks names up
+     * as they're typed.
+     */
     private fun loadMembers(estateId: String) {
         viewModelScope.launch {
-            userRepository.getEstateMembers(estateId)
+            val size = estateRepository.observeEstate(estateId).filterNotNull().first().memberCount
+            if (size > DIRECTORY_FULL_LOAD_MAX) {
+                bigEstateId = estateId
+                return@launch
+            }
+            userRepository.observeDirectory(estateId)
                 .catch { /* Tagging just offers no suggestions; posting still works. */ }
                 .collect { members ->
                     allMembers = members
                     _uiState.update { it.copy(members = taggableMembers()) }
                 }
+        }
+    }
+
+    /** Big estates: what's typed after an `@` changed, so fetch the members it could mean. */
+    fun searchMentions(query: String) {
+        val estateId = bigEstateId ?: return
+        mentionSearchJob?.cancel()
+        if (query.isBlank()) return
+        mentionSearchJob = viewModelScope.launch {
+            delay(MENTION_SEARCH_DEBOUNCE_MILLIS)
+            userRepository.searchDirectory(estateId, query, MENTION_SEARCH_LIMIT).onSuccess { found ->
+                allMembers = found
+                _uiState.update { it.copy(members = taggableMembers()) }
+            }
         }
     }
 

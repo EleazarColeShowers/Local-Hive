@@ -73,12 +73,15 @@ fun PostDetailScreen(
     /** Saves the user's changes to their own comment. */
     onEditComment: (commentId: String, content: String, mentions: Map<String, String>) -> Unit = { _, _, _ -> },
     onReport: (Report) -> Unit = {},
+    onMentionQuery: (query: String) -> Unit = {},
 ) {
     var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
     val commentText = draft.text
     var picked by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
     val mentionQuery = activeMentionQuery(draft)
     val suggestions = mentionQuery?.let { mentionSuggestions(uiState.members, it.query) }.orEmpty()
+    // Big estates look names up on the server; small ones already have everyone.
+    LaunchedEffect(mentionQuery?.query) { mentionQuery?.let { onMentionQuery(it.query) } }
     val accent = MaterialTheme.colorScheme.primary
     var replyingTo by remember { mutableStateOf<Comment?>(null) }
     // The user's own comment being changed in the composer, instead of a new one being written.
@@ -128,12 +131,14 @@ fun PostDetailScreen(
     fun startReply(comment: Comment) {
         if (editingComment != null) cancelEdit()
         replyingTo = comment
-        val member = uiState.members.firstOrNull { it.id == comment.authorId && it.id != uiState.currentUserId }
-        val name = member?.mentionName?.takeIf { it.isNotEmpty() } ?: return
+        if (comment.authorId == uiState.currentUserId) return
+        val member = uiState.members.firstOrNull { it.id == comment.authorId }
+        // In a big estate the author may not be loaded; the comment carries their name.
+        val name = (member?.mentionName ?: comment.authorName.trim()).takeIf { it.isNotEmpty() } ?: return
         if ("@$name" !in draft.text) {
             val text = "@$name " + draft.text.trimStart()
             draft = TextFieldValue(text, TextRange(text.length))
-            picked = picked + (member.id to name)
+            picked = picked + (comment.authorId to name)
         }
     }
 

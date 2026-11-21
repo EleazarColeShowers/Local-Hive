@@ -82,6 +82,7 @@ fun CreatePostScreen(
     /** Saves the unfinished post as it's written; null where there's nothing to keep, as when editing. */
     onDraftChanged: ((text: String, categoryKey: String?, location: String) -> Unit)? = null,
     onDiscardDraft: () -> Unit = {},
+    onMentionQuery: (query: String) -> Unit = {},
 ) {
     var field by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         val start = initialContent.take(MAX_POST_LENGTH)
@@ -92,6 +93,8 @@ fun CreatePostScreen(
     var picked by rememberSaveable { mutableStateOf(initialMentions) }
     val mentionQuery = activeMentionQuery(field)
     val suggestions = mentionQuery?.let { mentionSuggestions(uiState.members, it.query) }.orEmpty()
+    // Big estates look names up on the server; small ones already have everyone.
+    LaunchedEffect(mentionQuery?.query) { mentionQuery?.let { onMentionQuery(it.query) } }
     // Saved by key: a plain string survives process death on every platform.
     var categoryKey by rememberSaveable { mutableStateOf(initialCategoryKey) }
     val category = PostCategory.fromKey(categoryKey)

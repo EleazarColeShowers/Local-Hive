@@ -48,6 +48,7 @@ fun EditPostRoute(
             onRemoveMedia = {},
             onPost = { content, _, mentions, location -> viewModel.editPost(postId, content, mentions, location) },
             onNavigateBack = onNavigateBack,
+            onMentionQuery = viewModel::searchMentions,
             initialContent = post.content,
             editing = true,
             initialCategoryKey = post.category.ifBlank { null },

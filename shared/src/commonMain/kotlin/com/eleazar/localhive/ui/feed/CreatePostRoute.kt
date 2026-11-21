@@ -70,6 +70,7 @@ fun CreatePostRoute(
         onPost = { content, category, mentions, location ->
             viewModel.createPost(content, mediaUri, isVideo, category, mentions, location)
         },
-        onNavigateBack = onNavigateBack
+        onNavigateBack = onNavigateBack,
+        onMentionQuery = viewModel::searchMentions
     )
 }

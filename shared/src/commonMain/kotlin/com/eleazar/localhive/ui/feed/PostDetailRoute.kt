@@ -36,6 +36,7 @@ fun PostDetailRoute(
             viewModel.addComment(postId, content, mentions, parentId, imageUri)
         },
         onUserClick = onOpenProfile,
+        onMentionQuery = viewModel::searchMentions,
         onUpdateStatus = { status -> viewModel.updateIncidentStatus(postId, status) },
         onEditPost = { onEditPost(postId) },
         onDeletePost = { reason -> viewModel.deletePost(postId, reason) },
