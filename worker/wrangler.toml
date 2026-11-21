@@ -20,7 +20,7 @@ FIREBASE_PROJECT_NUMBER = "1044932675647"
 # people in with it.
 FIREBASE_WEB_API_KEY = "AIzaSyBzlLfAgZrPvBlpnDMGePFGBENMcqCql3U"
 # Set to "true" once every installed app sends App Check tokens; then other callers are refused.
-APP_CHECK_REQUIRED = "false"
+APP_CHECK_REQUIRED = "true"
 # Who welcome emails come from. The domain must be verified in Resend.
 EMAIL_FROM = "LocalHive <hello@CHANGE-ME.com>"
 # Invite links (src/links.js). The fingerprints are the signing certificates Android trusts to

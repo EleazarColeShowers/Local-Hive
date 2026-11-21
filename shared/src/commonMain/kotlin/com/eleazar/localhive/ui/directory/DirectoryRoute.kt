@@ -17,6 +17,7 @@ fun DirectoryRoute(
         uiState = uiState,
         onSearch = viewModel::search,
         onRefresh = viewModel::refresh,
+        onLoadMore = viewModel::loadMore,
         onUserClick = onUserClick,
         onMessageUser = onMessageUser
     )

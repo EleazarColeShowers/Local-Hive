@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import {
   buildPush, flatList, estateNameLowerUpdates, falseAlarmsCostSiren, pollReminders, tooManyEmergencies, tooManyUploads, UPLOAD_LIMIT_PER_HOUR,
 } from "../src/index.js";
-import { pushTokenOf, sosSoundFor } from "../src/push.js";
+import { MAX_DEVICES_PER_PERSON, pushTokensOf, sosSoundFor } from "../src/push.js";
 import { MAX_VIDEO_BYTES, oversizedVideoIds, signUpload } from "../src/cloudinary.js";
 import { decodeValue } from "../src/firestore.js";
 import { appIntentUrl, inviteCodeIn, playStoreUrl, publicResponse } from "../src/links.js";
@@ -18,13 +18,22 @@ function fakeDb(docs) {
         .filter(([p, d]) => p.startsWith(`${collection}/`) && p.split("/").length === 2 && d[field] === value)
         .map(([p]) => p.split("/")[1]),
     getAll: async (paths) => Object.fromEntries(paths.filter((p) => docs[p]).map((p) => [p, docs[p]])),
-    // Only what the worker uses: every document directly under `parent/collection`, with EQUAL filters.
-    query: async (collection, where = [], { parent = "" } = {}) => {
+    // Only what the worker uses: every document directly under `parent/collection` (or, with
+    // `group`, in any collection of that name), with EQUAL and range filters.
+    query: async (collection, where = [], { parent = "", group = false } = {}) => {
       const prefix = parent ? `${parent}/${collection}/` : `${collection}/`;
       const depth = prefix.split("/").length;
+      const inScope = (p) => group
+        ? p.split("/").length % 2 === 0 && p.split("/").at(-2) === collection
+        : p.startsWith(prefix) && p.split("/").length === depth;
+      const ops = {
+        EQUAL: (a, b) => a === b,
+        GREATER_THAN: (a, b) => typeof a === "number" && a > b,
+        LESS_THAN_OR_EQUAL: (a, b) => typeof a === "number" && a <= b,
+      };
       return Object.entries(docs)
-        .filter(([p]) => p.startsWith(prefix) && p.split("/").length === depth)
-        .filter(([, d]) => where.every(([field, op, value]) => op === "EQUAL" && d[field] === value))
+        .filter(([p]) => inScope(p))
+        .filter(([, d]) => where.every(([field, op, value]) => ops[op](d[field], value)))
         .map(([path, data]) => ({ path, data }));
     },
   };
@@ -356,12 +365,18 @@ test("poll reminders go to non-voters, once a poll is half a day old and within 
     "estates/E1/polls/shut": { question: "Done", createdAt: now - 48 * hour, closesAt: now + 5 * hour, closed: true },
     "estates/E1/polls/open": { question: "Forever", createdAt: now - 48 * hour, closesAt: 0, closed: false },
     "estates/E1/pollVotes/due_member": { pollId: "due", userId: "member", option: 0 },
+    "estates/E1/polls/gone": { question: "Past", createdAt: now - 48 * hour, closesAt: now - hour, closed: false },
+    "estates/E1/polls/sent": { question: "Reminded", createdAt: now - 48 * hour, closesAt: now + 3 * hour, closed: false },
+    "pushes/poll_reminder_sent": { by: "cron", at: now - hour },
+    "users/u9": { estateId: "E9" },
+    "estates/E9/polls/elsewhere": { question: "Other estate", createdAt: now - 48 * hour, closesAt: now + 2 * hour, closed: false },
   });
   const reminders = await pollReminders(reminderDb, now);
-  assert.equal(reminders.length, 1);
-  assert.equal(reminders[0].key, "poll_reminder_due");
-  assert.deepEqual(reminders[0].recipients.sort(), ["admin", "third"]);
-  assert.equal(reminders[0].payload.body, "Raise the levy?");
+  assert.deepEqual(reminders.map((r) => r.key).sort(), ["poll_reminder_due", "poll_reminder_elsewhere"]);
+  const due = reminders.find((r) => r.key === "poll_reminder_due");
+  assert.deepEqual(due.recipients.sort(), ["admin", "third"]);
+  assert.equal(due.payload.body, "Raise the levy?");
+  assert.deepEqual(reminders.find((r) => r.key === "poll_reminder_elsewhere").recipients, ["u9"]);
 });
 
 test("a fourth SOS in half an hour is refused", async () => {
@@ -670,15 +685,20 @@ test("the invite page sends iPhones to the App Store and can open the app at the
   assert.doesNotMatch(html, /coming soon/);
 });
 
-test("a push token is read from pushTokens first, then from an old app's profile", () => {
+test("pushes go to each of a person's devices, newest first, plus tokens kept by older apps", () => {
   const docs = {
-    "users/new": { fcmToken: "stale" },
-    "pushTokens/new": { token: "fresh" },
+    "users/multi": {},
+    "pushTokens/multi": { tokens: { phone: 200, tablet: 300, "old:phone-1": 100 } },
+    "users/mixed": { fcmToken: "legacy" },
+    "pushTokens/mixed": { token: "single", tokens: { single: 50, other: 60 } },
     "users/old": { fcmToken: "legacy" },
     "users/none": {},
+    "pushTokens/many": { tokens: Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`t${i}`, i])) },
   };
-  assert.equal(pushTokenOf(docs, "new"), "fresh");
-  assert.equal(pushTokenOf(docs, "old"), "legacy");
-  assert.equal(pushTokenOf(docs, "none"), null);
+  assert.deepEqual(pushTokensOf(docs, "multi"), ["tablet", "phone", "old:phone-1"]);
+  assert.deepEqual(pushTokensOf(docs, "mixed"), ["other", "single", "legacy"]);
+  assert.deepEqual(pushTokensOf(docs, "old"), ["legacy"]);
+  assert.deepEqual(pushTokensOf(docs, "none"), []);
+  assert.equal(pushTokensOf(docs, "many").length, MAX_DEVICES_PER_PERSON);
+  assert.equal(pushTokensOf(docs, "many")[0], "t11");
 });
-

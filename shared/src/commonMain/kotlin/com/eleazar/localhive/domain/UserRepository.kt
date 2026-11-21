@@ -20,6 +20,17 @@ interface UserRepository {
      * stale is fine for browsing neighbours, and it saves reading the whole estate on every visit.
      */
     fun observeDirectory(estateId: String, forceRefresh: Boolean = false): Flow<List<User>>
+    /**
+     * Up to [limit] members after [afterId], in id order, for an estate too big to load whole.
+     * Pass the last id of one page to get the next.
+     */
+    suspend fun directoryPage(estateId: String, afterId: String?, limit: Int): Result<List<User>>
+    /**
+     * Up to [limit] members whose name starts with [prefix], ignoring case. Only finds profiles
+     * that carry nameLower, which apps from 1.09 write and functions/scripts/fill-name-lower.js
+     * adds to older ones.
+     */
+    suspend fun searchDirectory(estateId: String, prefix: String, limit: Int): Result<List<User>>
     suspend fun updateUser(user: User): Result<Unit>
     suspend fun updateFcmToken(userId: String, token: String): Result<Unit>
     /** Whether the user gets a push when a neighbour reports the light is back. */

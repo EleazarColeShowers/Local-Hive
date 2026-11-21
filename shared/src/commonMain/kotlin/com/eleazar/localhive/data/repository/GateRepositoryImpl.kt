@@ -206,6 +206,8 @@ class GateRepositoryImpl(
         firestore.collection("posts")
             .where { "estateId" equalTo estateId }
             .where { "category" equalTo PostCategory.EMERGENCY.key }
+            // Only the last day's, rather than every emergency the estate has ever had.
+            .where { "createdAt" greaterThan nowMillis() - EMERGENCY_WINDOW_MILLIS }
             .snapshots
             .map { snapshot ->
                 val now = nowMillis()

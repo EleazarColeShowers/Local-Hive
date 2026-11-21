@@ -4,6 +4,7 @@ import com.eleazar.localhive.ui.components.RowSkeletons
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -28,11 +29,28 @@ fun DirectoryScreen(
     uiState: DirectoryUiState,
     onSearch: (query: String) -> Unit,
     onRefresh: () -> Unit = {},
+    onLoadMore: () -> Unit = {},
     onUserClick: (String) -> Unit,
     onMessageUser: (String) -> Unit,
 ) {
     val accent = MaterialTheme.colorScheme.primary
-    val neighbourCount = uiState.members.count { it.id != uiState.currentUserId }
+    // A big estate only has some members loaded, so it counts from the estate itself.
+    val neighbourCount = if (uiState.paged) {
+        (uiState.memberCount - 1).coerceAtLeast(0)
+    } else {
+        uiState.members.count { it.id != uiState.currentUserId }
+    }
+    val listState = rememberLazyListState()
+    // Big estates: fetch the next page while there are still a few rows left to scroll.
+    val nearEnd by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            (info.visibleItemsInfo.lastOrNull()?.index ?: 0) >= info.totalItemsCount - 10
+        }
+    }
+    LaunchedEffect(nearEnd, uiState.canLoadMore, uiState.members.size) {
+        if (nearEnd && uiState.canLoadMore) onLoadMore()
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         ScreenHeader(
@@ -80,6 +98,10 @@ fun DirectoryScreen(
         ) {
             when {
                 uiState.isLoading -> RowSkeletons(Modifier.fillMaxSize())
+                uiState.filteredMembers.isEmpty() && uiState.isSearching -> Box(
+                    Modifier.fillMaxSize().padding(top = 32.dp),
+                    contentAlignment = Alignment.TopCenter
+                ) { CircularProgressIndicator(color = accent) }
                 uiState.filteredMembers.isEmpty() && uiState.searchQuery.isBlank() -> EmptyState(
                     icon = Icons.Outlined.Groups,
                     title = "No neighbours yet",
@@ -91,7 +113,7 @@ fun DirectoryScreen(
                     message = "Nobody matches \"${uiState.searchQuery}\". Try a different name."
                 )
                 else -> {
-                    LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
+                    LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 16.dp)) {
                         // Admins first, so residents can see who runs the estate.
                         val ordered = uiState.filteredMembers.sortedBy { it.id !in uiState.adminIds }
                         itemsIndexed(ordered, key = { _, user -> user.id }) { index, user ->
@@ -108,6 +130,13 @@ fun DirectoryScreen(
                                 onMessageClick = { onMessageUser(user.id) },
                                 isAdmin = user.id in uiState.adminIds
                             )
+                        }
+                        if (uiState.isLoadingMore || (uiState.isSearching && uiState.filteredMembers.isNotEmpty())) {
+                            item(key = "loading") {
+                                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(color = accent, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                }
+                            }
                         }
                     }
                 }

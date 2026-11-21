@@ -59,9 +59,10 @@ class NotificationRepositoryImpl(
             .where { "recipientId" equalTo userId }
             .where { "isRead" equalTo false }
             .get()
-        val batch = firestore.batch()
-        snapshot.documents.forEach { batch.update(it.reference, "isRead" to true) }
-        batch.commit()
+        // A batch takes at most 500 writes, and someone back after a while can have more unread.
+        snapshot.documents.chunked(BATCH_LIMIT).forEach { chunk ->
+            firestore.batch().apply { chunk.forEach { update(it.reference, "isRead" to true) } }.commit()
+        }
     }
 
     override suspend fun deleteNotification(notificationId: String): Result<Unit> = runCatching {

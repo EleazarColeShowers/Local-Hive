@@ -1,6 +1,7 @@
 package com.eleazar.localhive.data.repository
 
 import com.eleazar.localhive.domain.SosRepository
+import com.eleazar.localhive.domain.model.FALSE_ALARM_WINDOW_MILLIS
 import com.eleazar.localhive.domain.model.SosStanding
 import com.eleazar.localhive.ui.util.nowMillis
 import dev.gitlive.firebase.firestore.DocumentSnapshot
@@ -22,7 +23,10 @@ class SosRepositoryImpl(private val firestore: FirebaseFirestore) : SosRepositor
     override fun observeStanding(estateId: String, userId: String): Flow<SosStanding> =
         combine(
             settings(estateId).document(userId).snapshots,
-            falseAlarms(estateId).where { "userId" equalTo userId }.snapshots
+            falseAlarms(estateId)
+                .where { "userId" equalTo userId }
+                .where { "at" greaterThan nowMillis() - FALSE_ALARM_WINDOW_MILLIS }
+                .snapshots
         ) { setting, alarms ->
             standing(setting.takeIf { it.exists }, alarms.documents.mapNotNull { it.long("at") })
         }
@@ -30,7 +34,8 @@ class SosRepositoryImpl(private val firestore: FirebaseFirestore) : SosRepositor
     override fun observeStandings(estateId: String): Flow<Map<String, SosStanding>> =
         combine(
             settings(estateId).snapshots.map { snapshot -> snapshot.documents.associateBy { it.id } },
-            falseAlarms(estateId).snapshots.map { snapshot ->
+            // Only the ones that still count against anyone, not the estate's whole history.
+            falseAlarms(estateId).where { "at" greaterThan nowMillis() - FALSE_ALARM_WINDOW_MILLIS }.snapshots.map { snapshot ->
                 snapshot.documents.groupBy({ it.string("userId").orEmpty() }, { it.long("at") ?: 0L })
             }
         ) { settingsById, alarmsById ->

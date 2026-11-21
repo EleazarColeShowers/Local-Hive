@@ -65,10 +65,11 @@ fun LocalHiveApp(
         overlay()
         // Over everything, once the estate's data has moved on past what this version understands.
         if (isOutdated(installed, config.minVersion)) {
-            val storeUrl = if (isIos) config.iosUrl else config.androidUrl.ifBlank { PLAY_STORE_URL }
+            val storeUrl = if (isIos) config.iosUrl.ifBlank { APP_STORE_URL } else config.androidUrl.ifBlank { PLAY_STORE_URL }
             UpdateRequiredScreen(installed = installed, storeUrl = storeUrl)
         }
     }
 }
 
 private const val PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.eleazar.localhive"
+private const val APP_STORE_URL = "https://apps.apple.com/app/id6832065326"

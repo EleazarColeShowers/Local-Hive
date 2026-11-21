@@ -2,6 +2,7 @@
 // Each test starts from the same small estate, seeded with the rules switched off.
 import { test, before, beforeEach, after } from "node:test";
 import { readFileSync } from "node:fs";
+import assert from "node:assert/strict";
 import { assertFails, assertSucceeds, initializeTestEnvironment } from "@firebase/rules-unit-testing";
 import {
   arrayRemove, arrayUnion, deleteDoc, doc, getDoc, getDocs, collection, query, where, increment, setDoc, updateDoc, writeBatch,
@@ -382,4 +383,18 @@ test("a push token is private to its owner", async () => {
   await assertFails(setDoc(doc(as("ada"), "pushTokens/ada"), { ...token, extra: true }));
   await assertFails(deleteDoc(doc(as("bayo"), "pushTokens/ada")));
   await assertSucceeds(deleteDoc(doc(as("ada"), "pushTokens/ada")));
+});
+
+test("each device keeps its own push token, up to ten", async () => {
+  const at = Date.now();
+  await assertSucceeds(setDoc(doc(as("ada"), "pushTokens/ada"), { tokens: { phone: at }, updatedAt: at }));
+  await assertSucceeds(setDoc(doc(as("ada"), "pushTokens/ada"), { tokens: { tablet: at } }, { merge: true }));
+  const tokens = (await getDoc(doc(as("ada"), "pushTokens/ada"))).data().tokens;
+  assert.deepEqual(Object.keys(tokens).sort(), ["phone", "tablet"]);
+  // A test build from before the map still writes its single token.
+  await assertSucceeds(setDoc(doc(as("ada"), "pushTokens/ada"), { token: "old", updatedAt: at }, { merge: true }));
+  const eleven = Object.fromEntries(Array.from({ length: 11 }, (_, i) => [`t${i}`, at]));
+  await assertFails(setDoc(doc(as("ada"), "pushTokens/ada"), { tokens: eleven }));
+  await assertFails(setDoc(doc(as("ada"), "pushTokens/ada"), { tokens: "phone" }));
+  await assertFails(setDoc(doc(as("bayo"), "pushTokens/ada"), { tokens: { mine: at } }, { merge: true }));
 });

@@ -162,9 +162,37 @@ export class Firestore {
     throw new Error(`Firestore createOnce ${path}: ${response.status} ${status}`);
   }
 
-  /** Removes [field] from the document at [path]. */
+  /**
+   * Creates each of [docs] (`{ path, fields }`) that doesn't exist yet, 500 to a request, and
+   * leaves the ones that do. Unlike commit, one already being there doesn't stop the rest.
+   * Returns how many were created.
+   */
+  async createAllOnce(docs) {
+    let created = 0;
+    for (let i = 0; i < docs.length; i += 500) {
+      const response = await fetch(`${this.base}:batchWrite`, {
+        method: "POST",
+        headers: this.headers,
+        body: JSON.stringify({
+          writes: docs.slice(i, i + 500).map(({ path, fields }) => ({
+            update: { name: `${this.root}/${path}`, fields: encodeFields(fields) },
+            currentDocument: { exists: false },
+          })),
+        }),
+      });
+      if (!response.ok) throw new Error(`Firestore batchWrite: ${response.status} ${await response.text()}`);
+      // Status code 0 is OK; 9 (FAILED_PRECONDITION) and 6 (ALREADY_EXISTS) mean it was there already.
+      const statuses = (await response.json()).status || [];
+      const failed = statuses.filter((s) => s.code && s.code !== 9 && s.code !== 6);
+      if (failed.length > 0) throw new Error(`Firestore batchWrite: ${failed.length} failed, e.g. ${failed[0].message}`);
+      created += statuses.filter((s) => !s.code).length;
+    }
+    return created;
+  }
+
+  /** Removes [field] (a dotted path, e.g. "tokens.abc") from the document at [path]. */
   async deleteField(path, field) {
-    await fetch(`${this.base}/${path}?updateMask.fieldPaths=${encodeURIComponent(field)}&currentDocument.exists=true`, {
+    await fetch(`${this.base}/${path}?updateMask.fieldPaths=${encodeURIComponent(quotePath(field))}&currentDocument.exists=true`, {
       method: "PATCH",
       headers: this.headers,
       body: JSON.stringify({ fields: {} }),

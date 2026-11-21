@@ -11,6 +11,9 @@ import dev.gitlive.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
+/** How many polls the list shows, newest first. */
+private const val POLLS_SHOWN = 50
+
 class PollRepositoryImpl(
     private val firestore: FirebaseFirestore,
     private val api: LocalHiveApi
@@ -22,9 +25,11 @@ class PollRepositoryImpl(
     // only their own votes while the tallies on the poll stay public.
     private fun votes(estateId: String) = estate(estateId).collection("pollVotes")
 
+    // The newest only: open polls are always recent, and an estate's history grows for years.
     override fun observePolls(estateId: String): Flow<List<Poll>> =
         polls(estateId)
             .orderBy("createdAt", Direction.DESCENDING)
+            .limit(POLLS_SHOWN)
             .snapshots
             .map { snapshot -> snapshot.documents.map { it.toPoll() } }
 

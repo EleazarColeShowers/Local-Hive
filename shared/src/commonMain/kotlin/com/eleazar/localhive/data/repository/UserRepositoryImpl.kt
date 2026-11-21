@@ -7,6 +7,7 @@ import com.eleazar.localhive.domain.model.SosSound
 import com.eleazar.localhive.domain.model.User
 import com.eleazar.localhive.ui.util.nowMillis
 import dev.gitlive.firebase.firestore.Direction
+import dev.gitlive.firebase.firestore.FieldPath
 import dev.gitlive.firebase.firestore.FirebaseFirestore
 import dev.gitlive.firebase.firestore.Source
 import kotlinx.coroutines.flow.Flow
@@ -80,13 +81,35 @@ class UserRepositoryImpl(
         emit(fresh)
     }
 
+    override suspend fun directoryPage(estateId: String, afterId: String?, limit: Int): Result<List<User>> = runCatching {
+        val query = firestore.users()
+            .where { "estateId" equalTo estateId }
+            .orderBy(FieldPath.documentId)
+        (if (afterId != null) query.startAfter(afterId) else query)
+            .limit(limit)
+            .get()
+            .documents.map { it.toUser() }
+    }
+
+    override suspend fun searchDirectory(estateId: String, prefix: String, limit: Int): Result<List<User>> = runCatching {
+        val start = prefix.trim().lowercase()
+        if (start.isEmpty()) return@runCatching emptyList()
+        firestore.users()
+            .where { "estateId" equalTo estateId }
+            .where { "nameLower" greaterThanOrEqualTo start }
+            .where { "nameLower" lessThan start + "\uf8ff" }
+            .orderBy("nameLower")
+            .limit(limit)
+            .get()
+            .documents.map { it.toUser() }
+    }
+
     override suspend fun updateUser(user: User): Result<Unit> = runCatching {
         firestore.users().document(user.id).set(user.toNonNullMap(), merge = true)
     }
 
     override suspend fun updateFcmToken(userId: String, token: String): Result<Unit> = runCatching {
-        firestore.pushTokens().document(userId).set(mapOf("token" to token, "updatedAt" to nowMillis()))
-        firestore.removeProfileToken(userId)
+        firestore.saveDeviceToken(store, userId, token)
     }
 
     override suspend fun setLightAlerts(userId: String, enabled: Boolean): Result<Unit> = runCatching {
@@ -106,8 +129,7 @@ class UserRepositoryImpl(
     }
 
     override suspend fun clearFcmToken(userId: String): Result<Unit> = runCatching {
-        firestore.pushTokens().document(userId).delete()
-        firestore.removeProfileToken(userId)
+        firestore.removeDeviceToken(store, userId)
     }
 
     override fun observeBlockedUsers(userId: String): Flow<List<BlockedUser>> =

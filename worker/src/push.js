@@ -48,14 +48,16 @@ export async function sendToUsers(db, env, userIds, { title, body, deepLink, tag
 
   // Profiles for each person's sound settings, and their tokens, in one read.
   const docs = await db.getAll(recipients.flatMap((id) => [`users/${id}`, `pushTokens/${id}`]));
-  const targets = recipients
-    .map((id) => ({ id, profile: docs[`users/${id}`], token: pushTokenOf(docs, id) }))
-    .filter((t) => t.token);
-  if (targets.length === 0) return 0;
+  const people = recipients
+    .map((id) => ({ id, profile: docs[`users/${id}`], tokens: pushTokensOf(docs, id) }))
+    .filter((p) => p.tokens.length > 0);
+  if (people.length === 0) return 0;
 
-  const badges = targets.length <= BADGE_MAX_RECIPIENTS
-    ? Object.fromEntries(await Promise.all(targets.map(async ({ id }) => [id, await unreadCount(db, id).catch(() => null)])))
+  const badges = people.length <= BADGE_MAX_RECIPIENTS
+    ? Object.fromEntries(await Promise.all(people.map(async ({ id }) => [id, await unreadCount(db, id).catch(() => null)])))
     : {};
+  // One send per device: someone with a phone and a tablet gets it on both.
+  const targets = people.flatMap(({ id, profile, tokens }) => tokens.map((token) => ({ id, profile, token })));
 
   const accessToken = await serviceAccessToken(env.FIREBASE_SERVICE_ACCOUNT);
   const url = `https://fcm.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/messages:send`;
@@ -95,26 +97,39 @@ export async function sendToUsers(db, env, userIds, { title, body, deepLink, tag
       const error = await response.json().catch(() => ({}));
       const code = error?.error?.details?.find((d) => d.errorCode)?.errorCode || error?.error?.status;
       console.log("FCM send failed", id, response.status, code, error?.error?.message);
-      if (DEAD_TOKEN_ERRORS.has(code)) await forgetToken(db, id);
+      if (DEAD_TOKEN_ERRORS.has(code)) await forgetToken(db, docs, id, token);
       return false;
     })
   );
-  return results.filter(Boolean).length;
+  // How many people it reached on at least one device.
+  return new Set(targets.filter((_, i) => results[i]).map((t) => t.id)).size;
 }
+
+/** At most this many devices get each push, newest first (the rules allow no more in `tokens`). */
+export const MAX_DEVICES_PER_PERSON = 10;
 
 /**
- * The user's device token. It lives in pushTokens/{uid}, which only they can read. Apps before
- * 1.09 still keep it on the profile, where neighbours can see it, and clear only that copy when
- * someone logs out or turns pushes off, so the profile copy is used until they update.
+ * The user's device tokens. From 1.09 each device keeps its own entry in the `tokens` map on
+ * pushTokens/{uid}, which only they can read. Apps before that keep it on the profile, where
+ * neighbours can see it, and test builds kept a single `token` on pushTokens; those are used
+ * too until everyone has updated.
  */
-export function pushTokenOf(docs, id) {
-  return docs[`pushTokens/${id}`]?.token || docs[`users/${id}`]?.fcmToken || null;
+export function pushTokensOf(docs, id) {
+  const doc = docs[`pushTokens/${id}`];
+  const devices = Object.entries(doc?.tokens || {})
+    .filter(([token]) => token)
+    .sort(([, a], [, b]) => Number(b) - Number(a))
+    .map(([token]) => token);
+  const legacy = [doc?.token, docs[`users/${id}`]?.fcmToken].filter((t) => typeof t === "string" && t);
+  return [...new Set([...devices, ...legacy])].slice(0, MAX_DEVICES_PER_PERSON);
 }
 
-/** Drops a token FCM says is dead, from both places it may be kept. */
-async function forgetToken(db, id) {
-  await db.commit([{ delete: `pushTokens/${id}` }]).catch(() => {});
-  await db.deleteField(`users/${id}`, "fcmToken");
+/** Drops a token FCM says is dead from wherever it's kept, leaving the person's other devices. */
+async function forgetToken(db, docs, id, token) {
+  const doc = docs[`pushTokens/${id}`];
+  if (doc?.tokens && token in doc.tokens) await db.deleteField(`pushTokens/${id}`, `tokens.${token}`).catch(() => {});
+  if (doc?.token === token) await db.deleteField(`pushTokens/${id}`, "token").catch(() => {});
+  if (docs[`users/${id}`]?.fcmToken === token) await db.deleteField(`users/${id}`, "fcmToken").catch(() => {});
 }
 
 /**

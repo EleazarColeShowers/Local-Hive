@@ -33,6 +33,9 @@ internal fun DocumentSnapshot.longMap(field: String): Map<String, Long>? = read(
 private inline fun <T> DocumentSnapshot.read(field: String, reader: DocumentSnapshot.(String) -> T?): T? =
     if (!contains(field)) null else runCatching { reader(field) }.getOrNull()
 
+/** Firestore's cap on writes in one batch. */
+internal const val BATCH_LIMIT = 500
+
 internal fun FirebaseFirestore.users() = collection("users")
 
 /** Each user's device token for pushes, which only they (and the push Worker) can read. */
@@ -64,6 +67,9 @@ internal fun DocumentSnapshot.toUser(): User = User(
     guardEstateId = string("guardEstateId")
 )
 
+/** The name the directory searches by: what neighbours see, lowercased. */
+internal fun User.nameLower(): String? = (displayName?.takeIf { it.isNotBlank() } ?: username)?.trim()?.lowercase()
+
 /**
  * Only the fields that are set, for merge writes that mustn't blank anything out. Never the
  * email: neighbours can read profiles, and the sign-in account already has it.
@@ -71,6 +77,7 @@ internal fun DocumentSnapshot.toUser(): User = User(
 internal fun User.toNonNullMap(): Map<String, Any> = buildMap {
     displayName?.let { put("displayName", it) }
     username?.let { put("username", it) }
+    nameLower()?.let { put("nameLower", it) }
     profileImageUrl?.let { put("profileImageUrl", it) }
     bio?.let { put("bio", it) }
     estateId?.let { put("estateId", it) }

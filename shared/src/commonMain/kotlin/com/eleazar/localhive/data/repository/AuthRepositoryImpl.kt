@@ -1,5 +1,6 @@
 package com.eleazar.localhive.data.repository
 
+import com.eleazar.localhive.data.platform.KeyValueStore
 import com.eleazar.localhive.data.remote.ApiException
 import com.eleazar.localhive.data.remote.LocalHiveApi
 import com.eleazar.localhive.domain.AuthRepository
@@ -14,7 +15,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 class AuthRepositoryImpl(
     private val firebaseAuth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
-    private val api: LocalHiveApi
+    private val api: LocalHiveApi,
+    private val store: KeyValueStore
 ) : AuthRepository {
 
     override suspend fun signup(email: String, username: String, password: String): Result<User> {
@@ -62,10 +64,8 @@ class AuthRepositoryImpl(
         // Must happen while still signed in; offline, it gives up rather than hold up logging out.
         firebaseAuth.currentUser?.uid?.let { uid ->
             withTimeoutOrNull(5_000) {
-                runCatching {
-                    firestore.pushTokens().document(uid).delete()
-                    firestore.removeProfileToken(uid)
-                }
+                // Only this device: the account's other phones keep getting pushes.
+                runCatching { firestore.removeDeviceToken(store, uid) }
             }
         }
         firebaseAuth.signOut()
@@ -121,6 +121,7 @@ class AuthRepositoryImpl(
     private fun User.toFullMap(): Map<String, Any?> = mapOf(
         "displayName" to displayName,
         "username" to username,
+        "nameLower" to nameLower(),
         "profileImageUrl" to profileImageUrl,
         "bio" to bio,
         "estateId" to estateId,

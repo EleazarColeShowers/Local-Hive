@@ -52,6 +52,8 @@ class FakeUserRepository(private val users: Map<String, User>) : UserRepository 
         flowOf(users.values.filter { it.estateId == estateId })
     override fun observeDirectory(estateId: String, forceRefresh: Boolean) = getEstateMembers(estateId)
     override fun observeBlockedUsers(userId: String): Flow<List<BlockedUser>> = blocked
+    override suspend fun directoryPage(estateId: String, afterId: String?, limit: Int): Result<List<User>> = notUsed()
+    override suspend fun searchDirectory(estateId: String, prefix: String, limit: Int): Result<List<User>> = notUsed()
     override suspend fun updateUser(user: User): Result<Unit> = notUsed()
     override suspend fun updateFcmToken(userId: String, token: String): Result<Unit> = notUsed()
     override suspend fun setLightAlerts(userId: String, enabled: Boolean): Result<Unit> = notUsed()

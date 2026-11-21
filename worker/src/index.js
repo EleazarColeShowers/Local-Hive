@@ -119,35 +119,41 @@ const REMINDER_MIN_AGE_MS = 12 * 60 * 60 * 1000;
  * members who haven't voted yet.
  */
 export async function pollReminders(db, now) {
+  // Only polls closing within the day, across every estate, so the hourly run costs the same
+  // however many estates and old polls there are. Open-ended polls store closesAt 0 and drop out.
+  const closing = await db.query("polls", [
+    ["closesAt", "GREATER_THAN", now],
+    ["closesAt", "LESS_THAN_OR_EQUAL", now + REMINDER_WINDOW_MS],
+  ], { group: true });
+  const due = closing.filter(({ path, data }) =>
+    /^estates\/[^/]+\/polls\/[^/]+$/.test(path)
+    && data.closed !== true
+    && now - Number(data.createdAt || 0) >= REMINDER_MIN_AGE_MS
+  );
+  if (due.length === 0) return [];
+
+  // A poll stays in the window for a day after its reminder went, so skip the ones already sent.
+  const sent = await db.getAll(due.map(({ path }) => `pushes/poll_reminder_${path.split("/").pop()}`));
+  const members = {};
   const reminders = [];
-  for (const { path: estatePath } of await db.query("estates")) {
-    const estateId = estatePath.split("/").pop();
-    const polls = await db.query("polls", [], { parent: estatePath });
-    const due = polls.filter(({ data }) =>
-      data.closed !== true
-      && Number(data.closesAt) > now
-      && Number(data.closesAt) - now <= REMINDER_WINDOW_MS
-      && now - Number(data.createdAt || 0) >= REMINDER_MIN_AGE_MS
-    );
-    if (due.length === 0) continue;
-    const members = await db.idsWhere("users", "estateId", estateId);
-    for (const { path, data } of due) {
-      const pollId = path.split("/").pop();
-      const votes = await db.query("pollVotes", [["pollId", "EQUAL", pollId]], { parent: estatePath });
-      const voted = new Set(votes.map((v) => v.data.userId));
-      const recipients = members.filter((id) => !voted.has(id));
-      if (recipients.length === 0) continue;
-      reminders.push({
-        key: `poll_reminder_${pollId}`,
-        recipients,
-        payload: {
-          title: "🗳️ Last chance to vote",
-          body: data.question || "A poll in your estate closes soon",
-          deepLink: "localhive://polls",
-          tag: `poll-${pollId}`,
-        },
-      });
-    }
+  for (const { path, data } of due) {
+    const [, estateId, , pollId] = path.split("/");
+    if (sent[`pushes/poll_reminder_${pollId}`]) continue;
+    members[estateId] ??= await db.idsWhere("users", "estateId", estateId);
+    const votes = await db.query("pollVotes", [["pollId", "EQUAL", pollId]], { parent: `estates/${estateId}` });
+    const voted = new Set(votes.map((v) => v.data.userId));
+    const recipients = members[estateId].filter((id) => !voted.has(id));
+    if (recipients.length === 0) continue;
+    reminders.push({
+      key: `poll_reminder_${pollId}`,
+      recipients,
+      payload: {
+        title: "🗳️ Last chance to vote",
+        body: data.question || "A poll in your estate closes soon",
+        deepLink: "localhive://polls",
+        tag: `poll-${pollId}`,
+      },
+    });
   }
   return reminders;
 }
@@ -282,12 +288,14 @@ async function notify(env, uid, body) {
 /** One notification document per recipient, for notices the app can't raise itself. */
 async function leaveInInbox(db, key, recipients, { type, title, message, estateId, senderId, levyId }) {
   const createdAt = Date.now();
-  await Promise.all(recipients.map((recipientId) =>
-    db.createOnce(`notifications/${key}_${recipientId}`, {
+  // In batches rather than a request each, so a big estate stays inside the Worker's request limit.
+  await db.createAllOnce(recipients.map((recipientId) => ({
+    path: `notifications/${key}_${recipientId}`,
+    fields: {
       recipientId, senderId, type, title, message, estateId, createdAt, isRead: false, verified: true,
       ...(levyId ? { levyId } : {}),
-    })
-  ));
+    },
+  })));
 }
 
 /** Works out who to notify and with what, or returns null when there's nothing to send. */

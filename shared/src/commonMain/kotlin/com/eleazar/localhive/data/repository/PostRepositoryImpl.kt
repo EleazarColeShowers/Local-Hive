@@ -21,8 +21,8 @@ import kotlinx.coroutines.flow.map
 private const val POST_GAP_MILLIS = 20_000L
 private const val COMMENT_GAP_MILLIS = 3_000L
 
-/** Firestore's cap on writes in one batch. */
-private const val BATCH_LIMIT = 500
+/** How many comments a post shows, the newest. */
+private const val COMMENTS_SHOWN = 200
 
 class PostRepositoryImpl(
     private val firestore: FirebaseFirestore,
@@ -151,11 +151,13 @@ class PostRepositoryImpl(
         }.commit()
     }
 
+    // The newest few hundred, oldest first, so a very busy post doesn't load every comment.
     override fun getComments(postId: String): Flow<List<Comment>> =
         posts.document(postId).collection("comments")
-            .orderBy("createdAt", Direction.ASCENDING)
+            .orderBy("createdAt", Direction.DESCENDING)
+            .limit(COMMENTS_SHOWN)
             .snapshots
-            .map { snapshot -> snapshot.documents.map { it.toComment() } }
+            .map { snapshot -> snapshot.documents.map { it.toComment() }.reversed() }
 
     override suspend fun addComment(comment: Comment): Result<String> = runCatching {
         check(nowMillis() - lastCommentAt >= COMMENT_GAP_MILLIS) { "Wait a moment before commenting again." }

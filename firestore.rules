@@ -176,16 +176,27 @@ service cloud.firestore {
       }
     }
 
-    // Each user's device token for pushes. Only they can see it; the push Worker reads it with
-    // admin access. Apps before 1.09 still keep it on the profile (fcmToken). Once config/app's
-    // minVersion is 1.09, refuse fcmToken on profiles and delete the ones left.
+    // Each user's device tokens for pushes. Only they can see them; the push Worker reads them
+    // with admin access. Every device keeps its own entry in `tokens` (token -> when it was last
+    // seen), so a phone and a tablet both get pushes. `token` is the single one that test builds
+    // before 1.09 wrote here. Apps before 1.09 keep theirs on the profile (fcmToken); once
+    // config/app's minVersion is 1.09, refuse `token` here and fcmToken on profiles, and delete
+    // the ones left.
     match /pushTokens/{userId} {
+      function legacyTokenOk() {
+        let t = request.resource.data.get('token', null);
+        return t == null || (t is string && t.size() > 0 && t.size() <= 4096);
+      }
+      function tokensOk() {
+        let t = request.resource.data.get('tokens', null);
+        return t == null || (t is map && t.size() <= 10);
+      }
+
       allow read, delete: if isSignedIn() && uid() == userId;
       allow create, update: if isSignedIn() && uid() == userId
-                            && request.resource.data.keys().hasOnly(['token', 'updatedAt'])
-                            && request.resource.data.token is string
-                            && request.resource.data.token.size() > 0
-                            && request.resource.data.token.size() <= 4096;
+                            && request.resource.data.keys().hasOnly(['token', 'tokens', 'updatedAt'])
+                            && legacyTokenOk()
+                            && tokensOk();
     }
 
     match /estates/{estateId} {
