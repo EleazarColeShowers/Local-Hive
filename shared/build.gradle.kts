@@ -101,6 +101,8 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            // Runs ViewModel coroutines on a test clock.
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
             implementation("io.coil-kt.coil3:coil-network-ktor3:3.0.4")
         }
     }
