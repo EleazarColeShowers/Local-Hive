@@ -153,6 +153,12 @@ fun ProfileSetUpScreen(
                 icon = Icons.Default.Phone,
                 keyboardType = KeyboardType.Phone
             )
+            Text(
+                text = "Your address and phone number are shown on your profile to members of your estate.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+            )
 
             Spacer(Modifier.height(16.dp))
 
