@@ -123,12 +123,13 @@ function commentWithStamp(db, id, extra = {}) {
   return batch.commit();
 }
 
-test("a comment can carry a Cloudinary photo, and nothing else", async () => {
+test("a comment can carry a photo from the app's own Cloudinary account, and nothing else", async () => {
   const db = as("ada");
   await assertFails(commentWithStamp(db, "elsewhere", { imageUrl: "https://example.com/x.jpg" }));
+  await assertFails(commentWithStamp(db, "otherAccount", { imageUrl: "https://res.cloudinary.com/demo/image/upload/x.jpg" }));
   await assertFails(commentWithStamp(db, "notText", { imageUrl: 42 }));
-  await assertFails(commentWithStamp(db, "long", { imageUrl: "https://res.cloudinary.com/" + "x".repeat(500) }));
+  await assertFails(commentWithStamp(db, "long", { imageUrl: "https://res.cloudinary.com/bsgju3dx/" + "x".repeat(1000) }));
   await assertSucceeds(commentWithStamp(db, "photo", {
-    imageUrl: "https://res.cloudinary.com/demo/image/upload/v1/postImages/ada/abc.jpg",
+    imageUrl: "https://res.cloudinary.com/bsgju3dx/image/upload/v1/localhive/postImages/ada/abc.jpg",
   }));
 });

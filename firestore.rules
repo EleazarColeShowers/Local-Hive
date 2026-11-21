@@ -26,6 +26,22 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(uid())).data.get('estateId', null);
     }
 
+    // A photo or video the app uploaded: in LocalHive's own Cloudinary account, or the project's
+    // Firebase Storage bucket, which the earliest builds used.
+    function isAppMediaUrl(url) {
+      return url is string && url.size() <= 1000
+             && (url.matches('https://res[.]cloudinary[.]com/bsgju3dx/.*')
+                 || url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/localhive-4a645[.].*'));
+    }
+
+    // [field] is missing, empty, left as it was, or one of the app's own uploads. A modified app
+    // can't show the estate a link to somewhere else, such as a tracking pixel.
+    function mediaOk(field) {
+      let url = request.resource.data.get(field, null);
+      return url == null || url == '' || isAppMediaUrl(url)
+             || (resource != null && resource.data.get(field, null) == url);
+    }
+
     function isMemberOf(estateId) {
       return isSignedIn() && estateId != null && myEstateId() == estateId;
     }
@@ -127,9 +143,10 @@ service cloud.firestore {
       // New accounts start outside any estate and must join one through the flow below.
       allow create: if isSignedIn() && uid() == userId
                     && request.resource.data.get('estateId', null) == null
-                    && noEmail();
+                    && noEmail()
+                    && mediaOk('profileImageUrl');
       allow update: if isSignedIn() && (
-        (uid() == userId && noEmail() && (
+        (uid() == userId && noEmail() && mediaOk('profileImageUrl') && (
           !('estateId' in changedKeys())
           // Leaving.
           || request.resource.data.get('estateId', null) == null
@@ -319,12 +336,14 @@ service cloud.firestore {
                                     && request.resource.data.amount == levy().amount
                                     && request.resource.data.keys().hasOnly(
                                          ['userId', 'userName', 'levyId', 'amount', 'status', 'proofUrl', 'submittedAt'])
+                                    && mediaOk('proofUrl')
                                     && (resource == null || resource.data.status != 'paid'))
                                 // The treasurer confirms, rejects or records a cash payment. Taking
                                 // back a confirmed payment needs a reason, which goes in the log.
                                 || (isTreasurerOf(estateId)
                                     && request.resource.data.userId == userId
                                     && request.resource.data.status in ['pending', 'paid', 'rejected']
+                                    && mediaOk('proofUrl')
                                     && (resource == null
                                         || resource.data.status != 'paid'
                                         || request.resource.data.status == 'paid'
@@ -479,8 +498,7 @@ service cloud.firestore {
                         && request.resource.data.flats.size() >= 1
                         && request.resource.data.flats.size() <= 200
                         && request.resource.data.amount == flatLevy().amount * request.resource.data.flats.size()
-                        && request.resource.data.proofUrl is string
-                        && request.resource.data.proofUrl.size() <= 1000
+                        && isAppMediaUrl(request.resource.data.proofUrl)
                         && isFresh(request.resource.data.submittedAt);
           allow update, delete: if false;
         }
@@ -493,6 +511,7 @@ service cloud.firestore {
         allow create: if isTreasurerOf(estateId)
                       && request.resource.data.amount is int
                       && request.resource.data.amount > 0
+                      && mediaOk('receiptUrl')
                       && isFresh(request.resource.data.createdAt)
                       && (!strictFinance() || logged('expense_' + expenseId + '_added'));
         allow update: if false;
@@ -889,6 +908,7 @@ service cloud.firestore {
         return data.userId == uid()
                && data.estateId is string
                && requestId == data.estateId + '_' + uid()
+               && mediaOk('userPhotoUrl')
                && ((data.status == 'pending' && mode != 'code')
                    || (data.status == 'approved'
                        && mode != 'request'
@@ -1033,6 +1053,10 @@ service cloud.firestore {
                    && data.statusUpdatedBy == uid());
       }
 
+      function postMediaOk() {
+        return mediaOk('imageUrl') && mediaOk('videoUrl') && mediaOk('videoThumbnailUrl') && mediaOk('authorImageUrl');
+      }
+
       // The composer stops at 2,000 characters (MAX_POST_LENGTH in CreatePostScreen).
       function contentValid() {
         return request.resource.data.get('content', '') is string
@@ -1045,6 +1069,7 @@ service cloud.firestore {
                     && categoryAllowed()
                     && incidentValid()
                     && contentValid()
+                    && postMediaOk()
                     && request.resource.data.get('falseAlarm', false) == false
                     && (request.resource.data.get('category', '') != 'emergency' || sosAllowed(request.resource.data.estateId))
                     // An SOS never waits on the gap between posts.
@@ -1054,6 +1079,7 @@ service cloud.firestore {
           && request.resource.data.authorId == resource.data.authorId
           && request.resource.data.estateId == resource.data.estateId
           && contentValid()
+          && postMediaOk()
           && request.resource.data.get('createdAt', 0) == resource.data.get('createdAt', 0)
           && (!changedKeys().hasAny(['content', 'mentions', 'location', 'editedAt']) || withinEditWindow())
           && (request.resource.data.get('category', '') == resource.data.get('category', '') || categoryAllowed())
@@ -1101,20 +1127,15 @@ service cloud.firestore {
           return get(/databases/$(database)/documents/posts/$(postId)).data.estateId;
         }
 
-        // A photo sent with a comment is one the app uploaded to Cloudinary; it can't be changed later.
-        function validCommentImage() {
-          let url = request.resource.data.get('imageUrl', null);
-          return url == null
-                 || (url is string && url.size() <= 500 && url.matches('https://res[.]cloudinary[.]com/.*'));
-        }
-
         allow read: if isMemberOf(postEstate());
         allow create: if isSignedIn()
                       && request.resource.data.authorId == uid()
                       && isMemberOf(postEstate())
                       && request.resource.data.content is string
                       && request.resource.data.content.size() <= 1000
-                      && validCommentImage()
+                      // A comment's photo is one the app uploaded; the edit rule below keeps it as it was.
+                      && mediaOk('imageUrl')
+                      && mediaOk('authorImageUrl')
                       && stampedFor('lastCommentAt', 'lastCommentId', commentId);
         // Its author rewrites the text, for 30 minutes after writing it.
         allow update: if isSignedIn()

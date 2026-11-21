@@ -9,6 +9,8 @@ import {
 
 let env;
 const HOUR = 60 * 60 * 1000;
+// A photo in LocalHive's own Cloudinary account, as the app uploads it.
+const PHOTO = "https://res.cloudinary.com/bsgju3dx/image/upload/v1/localhive/postImages/ada/abc.jpg";
 
 before(async () => {
   env = await initializeTestEnvironment({
@@ -147,7 +149,7 @@ test("taking back a confirmed payment needs a reason", async () => {
 
 test("residents send proof for the levy's amount (as 1.06 does it), and nothing less", async () => {
   const ref = doc(as("ada"), "estates/E1/levies/L1/payments/ada");
-  const proof = { userId: "ada", userName: "Ada", levyId: "L1", status: "pending", proofUrl: "https://x", submittedAt: Date.now() };
+  const proof = { userId: "ada", userName: "Ada", levyId: "L1", status: "pending", proofUrl: PHOTO, submittedAt: Date.now() };
   await assertFails(setDoc(ref, { ...proof, amount: 1 }));
   await assertSucceeds(setDoc(ref, { ...proof, amount: 5000 }));
 });
@@ -211,7 +213,7 @@ function sendProof(db, flats, { building = "B12", amountPerFlat = 2000, group = 
   const batch = writeBatch(db);
   batch.set(doc(db, `estates/E1/flatLevies/F1/proofs/${group}`), {
     payerId: "ada", payerName: "Ada", buildingId: building, flats: flats.map((f) => `${building}_${f}`),
-    amount: amountPerFlat * flats.length, proofUrl: "https://x", submittedAt: now,
+    amount: amountPerFlat * flats.length, proofUrl: PHOTO, submittedAt: now,
   });
   for (const flat of flats) {
     batch.set(doc(db, `estates/E1/flatLevies/F1/flats/${building}_${flat}`), {
@@ -345,3 +347,29 @@ test("a guard sees the estate's emergencies, and only those, and can say they're
   // Not a guard there: still nothing.
   await assertFails(getDoc(doc(as("kicked"), "posts/sos1")));
 });
+
+test("photos and videos must be the app's own uploads", async () => {
+  const db = as("ada");
+  const post = (extra) => ({ authorId: "ada", estateId: "E1", content: "Look", createdAt: Date.now(), ...extra });
+  await assertSucceeds(setDoc(doc(db, "posts/own"), post({ imageUrl: PHOTO, authorImageUrl: PHOTO })));
+  await assertFails(setDoc(doc(db, "posts/pixel"), post({ imageUrl: "https://tracker.example/pixel.gif" })));
+  await assertFails(setDoc(doc(db, "posts/otherCloud"), post({ imageUrl: "https://res.cloudinary.com/someone-else/image/upload/x.jpg" })));
+  await assertFails(setDoc(doc(db, "posts/video"), post({ videoUrl: "http://res.cloudinary.com/bsgju3dx/video/upload/x.mp4" })));
+  await assertFails(setDoc(doc(db, "posts/thumb"), post({ videoThumbnailUrl: "https://evil.example/x.jpg" })));
+  // Editing the text of a post keeps its photo.
+  await assertSucceeds(updateDoc(doc(db, "posts/own"), { content: "Look again", mentions: {}, editedAt: Date.now() }));
+  await assertFails(updateDoc(doc(db, "posts/own"), { imageUrl: "https://tracker.example/pixel.gif" }));
+});
+
+test("a profile photo must be the app's own, but an old one left as it is still saves", async () => {
+  await assertSucceeds(updateDoc(doc(as("ada"), "users/ada"), { profileImageUrl: PHOTO }));
+  await assertFails(updateDoc(doc(as("ada"), "users/ada"), { profileImageUrl: "https://tracker.example/me.jpg" }));
+  await assertSucceeds(updateDoc(doc(as("bayo"), "users/bayo"), {
+    profileImageUrl: "https://firebasestorage.googleapis.com/v0/b/localhive-4a645.appspot.com/o/profileImages%2Fbayo.jpg",
+  }));
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await updateDoc(doc(ctx.firestore(), "users/chi"), { profileImageUrl: "https://legacy.example/chi.jpg" });
+  });
+  await assertSucceeds(updateDoc(doc(as("chi"), "users/chi"), { bio: "Hello" }));
+});
+
